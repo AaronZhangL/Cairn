@@ -1,0 +1,38 @@
+:root {
+  --page: #f4f1ec;
+  --panel: #fbf9f6;
+  --card: #ffffff;
+  --ink: #1c1917;
+  --dim: #78716c;
+  --line: #e2ddd5;
+  --accent: #b45309;
+  --soft: #fdf0dc;
+  --done: #4d7c0f;
+  --lock: #c8c2b8;
+  /* The slide surface is dark in both themes: a deck reads as a stage, not a document. */
+  --stage: #26231d;
+  --stage-ink: #f7f3ea;
+  --stage-dim: #a8a096;
+  --stage-accent: #e0a458;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --page: #16140f;
+    --panel: #1b1914;
+    --card: #211f19;
+    --ink: #f0ece4;
+    --dim: #a49c92;
+    --line: #332f28;
+    --accent: #e09b3d;
+    --soft: #382913;
+    --done: #8fb339;
+    --lock: #4a4640;
+  }
+}
+
+:root[data-theme='dark'] {
+  --page: #16140f; --panel: #1b1914; --card: #211f19; --ink: #f0ece4;
+  --dim: #a49c92; --line: #332f28; --accent: #e09b3d; --soft: #382913;
+  --done: #8fb339; --lock: #4a4640;
+}

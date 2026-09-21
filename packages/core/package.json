@@ -1,0 +1,16 @@
+{
+  "name": "@vibe/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./types": "./src/types.ts",
+    "./parse": "./src/parse/index.ts",
+    "./llm": "./src/llm/index.ts",
+    "./pipeline/*": "./src/pipeline/*.ts",
+    "./store/*": "./src/store/*.ts"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}

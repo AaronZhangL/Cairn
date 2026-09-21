@@ -1,0 +1,174 @@
+# Vibe Reading
+
+Turn an ebook you already own into a path you can walk to the end.
+
+The path is a sequence of stations grouped into stages. Each station is a short deck of
+generated slides with narrated audio, backed by the book's real text and traceable to the
+chapters it came from. You pick how long the whole walk should take — 10 minutes, 30, an hour,
+two — and the station count and coverage follow from that.
+
+Slides are data, not video. The same station renders as a player and as plain text.
+
+## This is a personal tool
+
+**One user, one machine, nothing published.** No accounts, no telemetry, no server, no sharing.
+The owner feeds it books they already have and walks the generated path themselves.
+
+That decision removes a great deal: there is no completion-rate experiment, no keyless reader
+for strangers, no CORS constraint on provider choice, and no distribution of derived content.
+It also removes the need for a competitive moat — this tool does not have to beat DeepTutor or
+NotebookLM, it only has to suit how its owner wants to read.
+
+What it does *not* remove: the honest self-test. With no metric, the only signal is whether the
+owner reaches for it again on a second book. Build so that answer can be yes.
+
+**[`docs/SPEC.md`](docs/SPEC.md) is the current product definition.** Read it before changing
+scope. [`docs/PRD-v0.md`](docs/PRD-v0.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) are
+kept as decision records — their reasoning (why the WeChat Reading API was dropped, why no MP4,
+why no image generation) still holds, but their product framing does not.
+
+## Layout
+
+```
+packages/
+  core/          Domain types, parsing, pipeline, LLM clients, storage — no framework imports
+    parse/       epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+    llm/         Provider interface + implementations
+    pipeline/    job.ts (resumable state machine), map/classify/reduce/slides stages
+    store/       Local persistence (file-backed JobStore)
+  ui/            Shared React components and design tokens; slide layout renderers
+apps/
+  desktop/       Electrobun shell — the only app. Authoring and playback in one window.
+```
+
+The desktop shell is not deferred: `codex exec` and `edge-tts` both need a local process, and
+with no web deployment there is nothing to gain from a browser build.
+
+## Invariants
+
+These are load-bearing. Breaking one silently undoes a decision that took real work to reach.
+
+1. **Nothing leaves the machine except by explicit request.** No upload, no telemetry, no
+   publishing. Two outbound paths exist and no others: the LLM call, and a Tavily web search
+   that only runs when the user has answered "yes, go look it up" (`pipeline/ask-outside.ts`).
+   Book content is never sent to the search API — only the user's question.
+
+2. **The reading budget is the constraint; the node count is the result.** The user picks a
+   budget (10 min / 30 min / 1 h / 2 h) and `budget.ts` derives station count and coverage from
+   it. A tighter budget drops whole stations rather than making each one shallower — a station
+   that cannot make one thing clear is worth nothing.
+
+3. **Book-sourced and web-sourced statements are rendered separately, never blended.** The
+   reader has not read the book; a merged paragraph makes the two indistinguishable. This is the
+   whole point of the outside-search feature, and a generic chat component will flatten it if
+   allowed to.
+
+4. **Structure comes from the real text, never from the model's pretraining memory.** Node count
+   and ordering derive from the table of contents plus the per-chapter summaries produced by the
+   map stage. Memory-derived structure fails silently on long-tail books, and a fabricated
+   station looks exactly like a real one.
+
+5. **Every node carries `sourceChapters`.** Cheapest possible hedge against hallucination: any
+   claim can be traced back to the text it came from.
+
+6. **The pipeline reads the full text exactly once.** Map produces per-chapter notes; every
+   downstream stage reads the notes, not the book. Re-reading the book per stage multiplies
+   cost by 5x for no gain.
+
+7. **Long-running work goes through `runJob`.** Near a hundred LLM calls per book. Results
+   persist per task, concurrency is capped, failures are isolated and retried with backoff, and
+   an interrupted run resumes from where it stopped.
+
+## Out of scope
+
+PDF parsing · MP4 rendering · image generation · spaced repetition · user accounts · telemetry ·
+any server component at all.
+
+Novels are **in** scope. They were previously deferred only because mixing them with knowledge
+books would have blurred the completion-rate experiment. With no experiment, the narrative
+layouts (`timeline`, `relation`, `world`) can be built whenever they are wanted. Catching up on
+a long serial at the 10-minute budget is a first-class use case.
+
+RAG and MCP are deliberately absent. RAG answers "find the relevant passage", which this
+pipeline does not ask — it sweeps every chapter exactly once in a fixed order. MCP would let the
+model fetch outside material, which directly breaks the invariant that structure comes only from
+the book's real text.
+
+## Commands
+
+```bash
+bun install
+bun test                  # all packages
+bun test packages/core    # one package
+bun run typecheck         # tsc --noEmit, strict
+```
+
+## Conventions
+
+- TypeScript strict, `noUncheckedIndexedAccess` on. No `any`, no non-null assertions on
+  external data.
+- Immutable data. Functions return new objects; `readonly` on domain types.
+- Small focused files. Extract rather than grow past ~400 lines.
+- Errors are explicit and typed (`ParseError` carries a `code` so the UI can show something a
+  human understands). Never swallow an error.
+- Tests mirror source paths: `src/parse/chunk.ts` → `tests/parse/chunk.test.ts`.
+- Comments explain *why*, especially where a simpler approach was rejected for a reason that is
+  not obvious from the code.
+- **Code is written in English** — comments, doc comments, identifiers, test names.
+- **Product-facing strings are Chinese** — `ParseError` messages, UI copy, and the LLM prompts
+  that generate Chinese content. An English UI is a later iteration, not now.
+- **Follow `karpathy-guidelines`**: state assumptions before coding, write the minimum that
+  solves the problem, keep changes surgical, and define a verifiable success check per step.
+- Word counting treats CJK per character and Latin per word.
+
+## Status
+
+- **Done** — the whole pipeline: `parse` / `chunk` / `map` / `classify` / `reduce` /
+  `budget` / `slides` / `tts` / `build`, plus `ask` and `ask-outside`. 163 tests, four
+  clean typechecks.
+- **Done** — `packages/ui`: six slide layouts and the three panes.
+- **Done** — `apps/desktop`: Electrobun shell, RPC bridge, Tavily search, and a
+  `Vibe Reading-dev.app` that builds and runs.
+- **Verified end to end** on Pro Git zh (13.9 MB EPUB, 201k words, 86 chapters):
+  at the 10-minute budget, 4 stations / 1 stage / 13 minutes of real narrated audio;
+  at 1 hour, 18 stations / 5 stages / 70 minutes. Zero fabricated chapter references.
+- **Next** — pick a book, walk it, and fix what annoys you.
+
+## Running it
+
+```bash
+bun install
+cd apps/desktop
+
+bun run dev     # Vite only: the three panes with the bundled sample, no model
+bun run start   # the real desktop app, with codex-backed question answering
+bun run package # a distributable .app
+```
+
+`bun run start` needs `codex` on PATH and, for outside-the-book search,
+`TAVILY_API_KEY` in the environment. `bun run dev` needs neither and says so in
+the answer pane rather than faking a reply.
+
+Generating a path for a new book is not yet wired to a UI; the pipeline is driven
+from scripts while the shape of that flow is still settling.
+
+### Chosen dependencies
+
+| Need | Choice |
+| --- | --- |
+| Web search | Tavily |
+| Narration voice | `zh-CN-YunjianNeural` via edge-tts |
+| Desktop shell | Electrobun, built directly (no web-first step) |
+| Chat surface | assistant-ui — its shell only; message bodies are ours, because answers are structured objects (`Answer`, `OutsideAnswer`) rather than markdown streams |
+
+### A note on the LLM provider
+
+Generation runs through the locally installed `codex exec` CLI as a subprocess, so there is no
+API spend. For a personal tool on the owner's own machine this is simply using a tool they
+already have.
+
+One cost to keep in mind: each `codex exec` call carries roughly 18k tokens of agent harness
+overhead, several times the chapter text itself. This is why the map stage batches chapters
+(`DEFAULT_BATCH_SIZE`) instead of sending one call per chapter. A plain HTTP provider would have
+a few hundred tokens of overhead and could drop the batch size to 1 for cleaner per-chapter
+summaries — keep everything behind `LlmProvider` so that swap stays a one-file change.

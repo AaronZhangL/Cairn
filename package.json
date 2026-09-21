@@ -1,0 +1,17 @@
+{
+  "name": "vibe-reading",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json",
+    "add-book": "bun scripts/add-book.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

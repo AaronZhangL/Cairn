@@ -1,0 +1,25 @@
+{
+  "name": "@vibe/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "electrobun prepare && vite build && electrobun dev",
+    "package": "electrobun prepare && vite build && electrobun build --env=stable"
+  },
+  "dependencies": {
+    "@vibe/core": "workspace:*",
+    "@vibe/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "electrobun": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0",
+    "@types/bun": "latest"
+  }
+}

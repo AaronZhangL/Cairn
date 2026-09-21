@@ -1,0 +1,91 @@
+.slide-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: var(--stage);
+  color: var(--stage-ink);
+  border-radius: 12px;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+/* Everything scales with the stage width so one deck reads the same at any size. */
+.s {
+  height: 100%;
+  padding: 6cqw 7cqw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2.2cqw;
+}
+
+.s-kicker { font-size: 1.7cqw; letter-spacing: .14em; color: var(--stage-accent); font-weight: 700; }
+.s-h1 { font-size: 6.2cqw; font-weight: 800; line-height: 1.16; letter-spacing: -.025em; }
+.s-h2 { font-size: 3.4cqw; font-weight: 700; letter-spacing: -.015em; }
+.s-sub { font-size: 2.3cqw; color: var(--stage-dim); line-height: 1.6; }
+.s-note { font-size: 1.7cqw; color: var(--stage-dim); }
+
+.s-points { list-style: none; display: flex; flex-direction: column; gap: 2.6cqw; }
+.s-points li { display: flex; gap: 2cqw; align-items: baseline; font-size: 3cqw; line-height: 1.45; font-weight: 600; }
+.s-points em { font-style: normal; color: var(--stage-accent); font-weight: 800; font-size: 2cqw; }
+
+.s-numbers { display: flex; gap: 6cqw; justify-content: center; align-items: flex-end; }
+.s-num { text-align: center; }
+.s-num-v { font-size: 6cqw; font-weight: 800; color: var(--stage-accent); line-height: 1; }
+.s-num-l { font-size: 1.9cqw; color: var(--stage-dim); margin-top: 1.4cqw; line-height: 1.4; }
+
+.s-quote-wrap { justify-content: center; }
+.s-quote { font-size: 3.4cqw; font-weight: 600; line-height: 1.55; letter-spacing: -.01em; }
+.s-cite { font-size: 1.8cqw; color: var(--stage-dim); }
+
+.s-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; }
+.s-pane-t { font-size: 2.4cqw; font-weight: 700; color: var(--stage-accent); margin-bottom: 1.6cqw; }
+.s-pane ul { list-style: none; display: flex; flex-direction: column; gap: 1.2cqw; }
+.s-pane li { font-size: 2cqw; line-height: 1.5; color: var(--stage-ink); }
+
+.s-flow { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 1.6cqw; }
+.s-flow li { display: flex; align-items: center; gap: 1.6cqw; }
+.s-step {
+  font-size: 2.1cqw; font-weight: 600; padding: 1.2cqw 2cqw;
+  border: 1px solid #ffffff26; border-radius: 8px; background: #ffffff0d;
+}
+.s-arrow { color: var(--stage-accent); font-size: 2.4cqw; }
+
+/* ---- caption ---- */
+
+/* Inside the frame, like a video subtitle: bottom-anchored, centred, two lines
+   at most. The band is fixed so a one-line cue and a two-line cue sit at the
+   same height instead of jumping. */
+.slide-caption {
+  position: absolute;
+  left: 8cqw;
+  right: 8cqw;
+  bottom: 2.6cqw;
+  min-height: 7.6cqw;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: auto;
+}
+.slide-caption p {
+  font-size: 2.35cqw;
+  line-height: 1.5;
+  font-weight: 600;
+  text-align: center;
+  color: var(--stage-ink);
+  /* A dark pill rather than a stroke: the stage is dark but slide type can run
+     under the caption, and a shadow alone is not enough to separate them. */
+  background: #0f0d0abf;
+  border-radius: 0.8cqw;
+  padding: 0.9cqw 1.6cqw;
+  backdrop-filter: blur(3px);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  animation: cue-in .18s ease-out;
+}
+@keyframes cue-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; } }
+
+/* Reserve the caption band so a full-height slide never runs under the line. */
+.slide-stage.captioned .s { padding-bottom: 15cqw; }
