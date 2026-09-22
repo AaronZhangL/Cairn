@@ -13,6 +13,7 @@ import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
 import type { Answer } from '@cairn/core/pipeline/ask';
 import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
+import { isRecap } from '@cairn/core/pipeline/recap';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { tavily } from './tavily';
 import { library } from './library';
@@ -77,8 +78,11 @@ export const handlers = {
     const node = nodes.find((n) => n.id === params.nodeId);
     if (!node) throw new Error(`未知站点 ${params.nodeId}`);
 
-    // A highlighted passage already points at its chapters — nothing to search for
-    if (params.selection) {
+    // A highlighted passage already points at its chapters — nothing to search for.
+    // Except on the recap station, whose sources are the whole book: loading them
+    // all would put every chapter into one prompt. There the highlight rides along
+    // with the question and the locator picks the chapters.
+    if (params.selection && !isRecap(node)) {
       const chapters = (await Promise.all(
         node.sourceChapters.map((i) => loadChapter(params.bookId, i)),
       )).filter((c) => c !== undefined);
@@ -89,7 +93,9 @@ export const handlers = {
     }
 
     return askBook({
-      question: params.question,
+      question: params.selection
+        ? `读者划中的原文：「${params.selection}」\n\n问题：${params.question}`
+        : params.question,
       locator: noteIndexLocator(await loadNotes(params.bookId), provider),
       loadChapter: (idx) => loadChapter(params.bookId, idx),
     }, provider);

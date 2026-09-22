@@ -9,8 +9,9 @@
  * and only the latter should be shown.
  */
 import type { LlmProvider } from '../llm/types';
-import type { ChapterNote, NodeDeck, Path, PathNode } from '../types';
+import type { ChapterNote, DraftDeck, NodeDeck, Path, PathNode } from '../types';
 import { type JobOptions, type JobResult, type JobStore, runJob } from './job';
+import { isRecap, makeRecapDeck } from './recap';
 import { makeDeck } from './slides';
 import { deckAudioPath, synthesize } from './tts';
 
@@ -36,7 +37,9 @@ export async function buildDecks(
 
   const job = await runJob(
     path.nodes.map((node) => ({ id: node.id, input: node })),
-    async (node) => buildOne(node, byChapter, audioDir, provider, options),
+    async (node) => (isRecap(node)
+      ? buildRecap(node, path, audioDir, provider, options)
+      : buildOne(node, byChapter, audioDir, provider, options)),
     store,
     { ...options, concurrency: options.concurrency ?? provider.suggestedConcurrency },
   );
@@ -69,6 +72,28 @@ async function buildOne(
   }
 
   const draft = await makeDeck(node, notes, provider, options.signal);
+  return speak(draft, node, audioDir, options);
+}
+
+/** The closing station recaps the path, so its material is the other stations, not the book. */
+async function buildRecap(
+  node: PathNode,
+  path: Path,
+  audioDir: string,
+  provider: LlmProvider,
+  options: BuildOptions,
+): Promise<NodeDeck> {
+  const stations = path.nodes.filter((n) => !isRecap(n));
+  const draft = await makeRecapDeck(node, stations, path.title, provider, options.signal);
+  return speak(draft, node, audioDir, options);
+}
+
+function speak(
+  draft: DraftDeck,
+  node: PathNode,
+  audioDir: string,
+  options: BuildOptions,
+): Promise<NodeDeck> {
   return synthesize(draft, deckAudioPath(audioDir, node.id), {
     voice: options.voice,
     signal: options.signal,

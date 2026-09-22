@@ -11,6 +11,7 @@ import { parseBook } from '@cairn/core/parse';
 import { mapChapters } from '@cairn/core/pipeline/map';
 import { classifyBook } from '@cairn/core/pipeline/classify';
 import { reduceToPath } from '@cairn/core/pipeline/reduce';
+import { withRecap } from '@cairn/core/pipeline/recap';
 import { buildDecks, withRealDuration } from '@cairn/core/pipeline/build';
 import { BUDGETS, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
 import { ensureEdgeTts } from '@cairn/core/pipeline/tts';
@@ -70,7 +71,9 @@ export async function generate(
   const cls = await classifyBook(book.title, notes, provider);
 
   onProgress({ stage: 'reduce', done: 0, total: 1, note: cls.type });
-  const reduced = await reduceToPath(notes, cls.type, book.totalWords, provider, { budget });
+  // The closing station is appended here rather than inside reduce: reduce is
+  // judged against the budget, and a station it did not choose would fight that.
+  const reduced = withRecap(await reduceToPath(notes, cls.type, book.totalWords, provider, { budget }));
 
   const path: Path = {
     bookId: id, title: book.title, type: cls.type,
