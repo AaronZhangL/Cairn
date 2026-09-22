@@ -1,4 +1,5 @@
-export { SlideView } from './slides/SlideView';
+export { SlideView, type SlideChrome } from './slides/SlideView';
+export { Icon } from './slides/Icon';
 export { StagePane } from './panes/StagePane';
 export { DeckPane } from './panes/DeckPane';
 export { AskPane, type Turn } from './panes/AskPane';

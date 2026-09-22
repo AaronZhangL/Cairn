@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./types": "./src/types.ts",
+    "./icons": "./src/icons.ts",
     "./parse": "./src/parse/index.ts",
     "./llm": "./src/llm/index.ts",
     "./pipeline/*": "./src/pipeline/*.ts",

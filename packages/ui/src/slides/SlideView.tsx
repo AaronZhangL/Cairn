@@ -1,93 +1,57 @@
 import type { ReactElement } from 'react';
 import type { Slide } from '@cairn/core/types';
+import { Chrome, type SlideChrome } from './Chrome';
+import { Compare } from './layouts/Compare';
+import { Flow } from './layouts/Flow';
+import { NumberSlide } from './layouts/NumberSlide';
+import { Points } from './layouts/Points';
+import { Quote } from './layouts/Quote';
+import { Title } from './layouts/Title';
 import './slide.css';
 
 /**
- * Renders one slide. Every layout is type and simple shapes — no images.
+ * Renders one slide. Every layout is type, stroked shapes and glyphs from the
+ * local set — no images, no generation.
+ *
+ * `progress` is how far the narration has moved through this slide's own span,
+ * in [0, 1]; layouts that build use it to reveal in step with the voice. It
+ * defaults to 1 so a static render — a test, a still, the text view — shows the
+ * finished slide rather than its first beat.
+ *
  * The union is exhaustive; an unknown layout is a programming error, not a
- * runtime case to paper over, so it renders nothing rather than a fallback
- * that would hide the bug.
+ * runtime case to paper over, so it renders nothing rather than a fallback that
+ * would hide the bug.
  */
-export function SlideView({ slide }: { slide: Slide }): ReactElement | null {
+export function SlideView({
+  slide, chrome, progress = 1,
+}: {
+  slide: Slide;
+  chrome?: SlideChrome;
+  progress?: number;
+}): ReactElement | null {
+  return (
+    <>
+      {chrome && <Chrome {...chrome} />}
+      {body(slide, progress, chrome?.stationNo)}
+    </>
+  );
+}
+
+function body(slide: Slide, progress: number, stationNo?: number): ReactElement | null {
   switch (slide.layout) {
     case 'title':
-      return (
-        <div className="s s-title">
-          {slide.kicker && <div className="s-kicker">{slide.kicker}</div>}
-          <h1 className="s-h1">{slide.title}</h1>
-          {slide.subtitle && <p className="s-sub">{slide.subtitle}</p>}
-        </div>
-      );
-
+      return <Title {...slide} stationNo={stationNo} />;
     case 'points':
-      return (
-        <div className="s">
-          <h2 className="s-h2">{slide.heading}</h2>
-          <ul className="s-points">
-            {slide.points.map((p, i) => (
-              <li key={p}>
-                <em>{String(i + 1).padStart(2, '0')}</em>
-                <span>{p}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      );
-
+      return <Points {...slide} progress={progress} />;
     case 'number':
-      return (
-        <div className="s">
-          {slide.heading && <h2 className="s-h2">{slide.heading}</h2>}
-          <div className="s-numbers">
-            {slide.items.map((item) => (
-              <div className="s-num" key={item.label}>
-                <div className="s-num-v">{item.value}</div>
-                <div className="s-num-l">{item.label}</div>
-              </div>
-            ))}
-          </div>
-          {slide.note && <p className="s-note">{slide.note}</p>}
-        </div>
-      );
-
+      return <NumberSlide {...slide} />;
     case 'quote':
-      return (
-        <div className="s s-quote-wrap">
-          <blockquote className="s-quote">{slide.text}</blockquote>
-          {slide.cite && <div className="s-cite">{slide.cite}</div>}
-        </div>
-      );
-
+      return <Quote {...slide} />;
     case 'compare':
-      return (
-        <div className="s">
-          {slide.heading && <h2 className="s-h2">{slide.heading}</h2>}
-          <div className="s-compare">
-            {[slide.left, slide.right].map((pane) => (
-              <div className="s-pane" key={pane.title}>
-                <div className="s-pane-t">{pane.title}</div>
-                <ul>
-                  {pane.points.map((p) => <li key={p}>{p}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
+      return <Compare {...slide} progress={progress} />;
     case 'flow':
-      return (
-        <div className="s">
-          {slide.heading && <h2 className="s-h2">{slide.heading}</h2>}
-          <ol className="s-flow">
-            {slide.steps.map((step, i) => (
-              <li key={step}>
-                <span className="s-step">{step}</span>
-                {i < slide.steps.length - 1 && <span className="s-arrow">→</span>}
-              </li>
-            ))}
-          </ol>
-        </div>
-      );
+      return <Flow {...slide} progress={progress} />;
   }
 }
+
+export type { SlideChrome };

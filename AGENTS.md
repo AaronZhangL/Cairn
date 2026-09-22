@@ -132,7 +132,9 @@ bun run typecheck         # tsc --noEmit, strict
 - **Done** — the whole pipeline: `parse` / `chunk` / `map` / `classify` / `reduce` /
   `budget` / `slides` / `tts` / `build`, plus `ask` and `ask-outside`. 163 tests, four
   clean typechecks.
-- **Done** — `packages/ui`: six slide layouts and the three panes.
+- **Done** — `packages/ui`: six slide layouts and the three panes. Each layout carries a
+  graphic skeleton (proportional bars, node chains, quote watermark) and builds in step with
+  the narration; pictograms come from a fixed local glyph set, never from image generation.
 - **Done** — `apps/desktop`: Electrobun shell, RPC bridge, Tavily search, and a
   `Cairn-dev.app` that builds and runs.
 - **Verified end to end** on Pro Git zh (13.9 MB EPUB, 201k words, 86 chapters):

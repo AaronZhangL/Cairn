@@ -1,16 +1,49 @@
+/* The stage.
+
+   Everything inside scales with the stage width (cqw), so one deck reads the
+   same at any size — the window is resizable and the same slides are meant to
+   survive it. A flat fill made four consecutive slides look like one page, so
+   the surface has depth: two off-centre glows, a faint grid that fades out at
+   the edges, and a vignette to keep the corners from competing with type. */
 .slide-stage {
   position: relative;
   aspect-ratio: 16 / 9;
   width: 100%;
-  background: var(--stage);
+  background:
+    radial-gradient(120% 90% at 78% 8%, #3a342a 0%, transparent 58%),
+    radial-gradient(90% 70% at 8% 100%, #2f2a21 0%, transparent 60%),
+    linear-gradient(168deg, #2b2721 0%, #211e18 100%);
   color: var(--stage-ink);
   border-radius: 12px;
   overflow: hidden;
   container-type: inline-size;
 }
 
-/* Everything scales with the stage width so one deck reads the same at any size. */
+.slide-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .5;
+  background-image:
+    linear-gradient(#ffffff08 1px, transparent 1px),
+    linear-gradient(90deg, #ffffff08 1px, transparent 1px);
+  background-size: 4cqw 4cqw;
+  -webkit-mask-image: radial-gradient(75% 65% at 50% 45%, #000 0%, transparent 100%);
+          mask-image: radial-gradient(75% 65% at 50% 45%, #000 0%, transparent 100%);
+}
+
+.slide-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 12cqw 4cqw #0000004d;
+}
+
 .s {
+  position: relative;
+  z-index: 1;
   height: 100%;
   padding: 6cqw 7cqw;
   display: flex;
@@ -19,37 +52,156 @@
   gap: 2.2cqw;
 }
 
-.s-kicker { font-size: 1.7cqw; letter-spacing: .14em; color: var(--stage-accent); font-weight: 700; }
-.s-h1 { font-size: 6.2cqw; font-weight: 800; line-height: 1.16; letter-spacing: -.025em; }
-.s-h2 { font-size: 3.4cqw; font-weight: 700; letter-spacing: -.015em; }
-.s-sub { font-size: 2.3cqw; color: var(--stage-dim); line-height: 1.6; }
-.s-note { font-size: 1.7cqw; color: var(--stage-dim); }
+/* ---- chrome: where you are in the path, and in this deck ---- */
 
-.s-points { list-style: none; display: flex; flex-direction: column; gap: 2.6cqw; }
-.s-points li { display: flex; gap: 2cqw; align-items: baseline; font-size: 3cqw; line-height: 1.45; font-weight: 600; }
-.s-points em { font-style: normal; color: var(--stage-accent); font-weight: 800; font-size: 2cqw; }
+.s-chrome { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.s-stationtag {
+  position: absolute; top: 3.4cqw; left: 7cqw;
+  font-size: 1.35cqw; letter-spacing: .16em; font-weight: 700; color: #a8a09699;
+}
+.s-dots { position: absolute; top: 3.6cqw; right: 7cqw; display: flex; gap: .8cqw; }
+.s-dots i {
+  width: .7cqw; height: .7cqw; border-radius: 99px; background: #ffffff26;
+  transition: width .25s ease, background-color .25s ease;
+}
+.s-dots i.on { background: var(--stage-accent); width: 2.4cqw; }
 
-.s-numbers { display: flex; gap: 6cqw; justify-content: center; align-items: flex-end; }
-.s-num { text-align: center; }
-.s-num-v { font-size: 6cqw; font-weight: 800; color: var(--stage-accent); line-height: 1; }
-.s-num-l { font-size: 1.9cqw; color: var(--stage-dim); margin-top: 1.4cqw; line-height: 1.4; }
+/* ---- shared type ---- */
+
+.s-h1 { font-size: 7.4cqw; font-weight: 800; line-height: 1.1; letter-spacing: -.035em; }
+.s-h2 { font-size: 3cqw; font-weight: 700; letter-spacing: -.015em; }
+.s-sub { font-size: 2.1cqw; color: var(--stage-dim); line-height: 1.6; max-width: 62cqw; }
+.s-note { font-size: 1.6cqw; color: var(--stage-dim); }
+
+/* ---- title ---- */
+
+.s-title { justify-content: flex-end; gap: 1.8cqw; }
+.s-kicker {
+  align-self: flex-start;
+  display: inline-flex; align-items: center;
+  font-size: 1.5cqw; letter-spacing: .14em; font-weight: 800; color: var(--stage-accent);
+  border: 1px solid #e0a45840; background: #e0a4581a;
+  border-radius: 99px; padding: .7cqw 1.5cqw;
+}
+.s-rule {
+  height: .5cqw; width: 16cqw; border-radius: 99px; margin: .6cqw 0;
+  background: linear-gradient(90deg, var(--stage-accent), #e0a45800);
+}
+/* The station number, big enough to recognise the card by without reading it. */
+.s-ghost {
+  position: absolute; right: -2cqw; bottom: -5cqw; z-index: 0;
+  font-size: 26cqw; font-weight: 800; line-height: .8; letter-spacing: -.06em;
+  color: #ffffff08;
+}
+.s-hero { position: absolute; right: -4cqw; bottom: -2cqw; z-index: 0; width: 52cqw; color: var(--stage-accent); opacity: .17; }
+.s-hero svg { width: 100%; height: auto; display: block; }
+
+/* ---- points ---- */
+
+.s-points { list-style: none; display: flex; flex-direction: column; gap: 2.4cqw; }
+.s-points li {
+  display: grid; grid-template-columns: 4.4cqw 1fr; gap: 2.2cqw;
+  align-items: start; position: relative;
+}
+/* One thread down the marks, so three claims read as one argument. */
+.s-points li::after {
+  content: ''; position: absolute; left: 2.2cqw; top: 4.6cqw; bottom: -2.4cqw;
+  width: 1px; background: #ffffff1a;
+}
+.s-points li:last-child::after { display: none; }
+.s-dot {
+  width: 4.4cqw; height: 4.4cqw; border-radius: 99px;
+  display: grid; place-items: center;
+  border: 1px solid #e0a45859; background: #e0a4581f; color: var(--stage-accent);
+  font-size: 1.8cqw; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.s-ptext { font-size: 2.6cqw; line-height: 1.5; font-weight: 600; padding-top: .6cqw; }
+
+/* ---- number ---- */
+
+.s-bars { display: flex; flex-direction: column; gap: 2.4cqw; margin-top: .6cqw; }
+.s-bar-line { display: grid; grid-template-columns: 13cqw 1fr; gap: 2.4cqw; align-items: center; }
+.s-bars.plain .s-bar-line { grid-template-columns: auto; }
+.s-bar-v {
+  font-size: 5cqw; font-weight: 800; line-height: 1; color: var(--stage-accent);
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.s-bars.plain .s-bar-v { text-align: left; }
+.s-bar-track { height: 1.5cqw; border-radius: 99px; background: #ffffff12; position: relative; overflow: hidden; }
+.s-bar-fill {
+  position: absolute; inset: 0 auto 0 0; border-radius: 99px;
+  background: linear-gradient(90deg, #e0a458, #c4802f);
+  animation: bar-grow .6s cubic-bezier(.2,.7,.3,1) both;
+}
+/* A zero is the point of quoting a zero — mark the empty track, do not hide it. */
+.s-bar-fill.zero { width: 1.5cqw !important; background: #ffffff2e; }
+.s-bar-l {
+  font-size: 1.6cqw; color: var(--stage-dim); line-height: 1.45; margin-top: .9cqw;
+  margin-left: 15.4cqw;
+}
+.s-bars.plain .s-bar-l { margin-left: 0; }
+@keyframes bar-grow { from { transform: scaleX(0); transform-origin: left; } }
+
+/* ---- quote ---- */
 
 .s-quote-wrap { justify-content: center; }
-.s-quote { font-size: 3.4cqw; font-weight: 600; line-height: 1.55; letter-spacing: -.01em; }
-.s-cite { font-size: 1.8cqw; color: var(--stage-dim); }
-
-.s-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; }
-.s-pane-t { font-size: 2.4cqw; font-weight: 700; color: var(--stage-accent); margin-bottom: 1.6cqw; }
-.s-pane ul { list-style: none; display: flex; flex-direction: column; gap: 1.2cqw; }
-.s-pane li { font-size: 2cqw; line-height: 1.5; color: var(--stage-ink); }
-
-.s-flow { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 1.6cqw; }
-.s-flow li { display: flex; align-items: center; gap: 1.6cqw; }
-.s-step {
-  font-size: 2.1cqw; font-weight: 600; padding: 1.2cqw 2cqw;
-  border: 1px solid #ffffff26; border-radius: 8px; background: #ffffff0d;
+.s-qmark {
+  position: absolute; left: 4.2cqw; top: 8cqw; z-index: 0;
+  font-size: 22cqw; line-height: .7; font-weight: 800;
+  color: #e0a4581f; font-family: Georgia, 'Times New Roman', serif;
 }
-.s-arrow { color: var(--stage-accent); font-size: 2.4cqw; }
+.s-quote {
+  position: relative; z-index: 1;
+  font-size: 3.4cqw; font-weight: 600; line-height: 1.6; letter-spacing: -.01em;
+  border-left: .45cqw solid var(--stage-accent); padding-left: 3cqw;
+}
+.s-cite { font-size: 1.6cqw; color: var(--stage-dim); padding-left: 3.45cqw; letter-spacing: .04em; }
+
+/* ---- compare ---- */
+
+.s-compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 2.6cqw; align-items: stretch; }
+.s-vs { width: 1px; background: linear-gradient(#ffffff00, #ffffff1f 22%, #ffffff1f 78%, #ffffff00); }
+.s-pane { border: 1px solid #ffffff17; border-radius: 1.2cqw; padding: 2.6cqw 2.8cqw; background: #ffffff07; }
+.s-pane.hl { border-color: #e0a45866; background: #e0a4580f; }
+.s-pane-h { display: flex; align-items: center; gap: 1.3cqw; margin-bottom: 1.8cqw; }
+.s-pane-i { width: 3.4cqw; flex: none; color: var(--stage-accent); }
+.s-pane-i svg { width: 100%; height: auto; display: block; }
+.s-pane-t { font-size: 2.2cqw; font-weight: 800; color: var(--stage-accent); letter-spacing: -.01em; }
+.s-pane ul { list-style: none; display: flex; flex-direction: column; gap: 1.2cqw; }
+.s-pane li { font-size: 1.9cqw; line-height: 1.5; color: var(--stage-ink); padding-left: 1.8cqw; position: relative; }
+.s-pane li::before { content: ''; position: absolute; left: 0; top: .95em; width: .8cqw; height: 1px; background: #ffffff40; }
+
+/* ---- flow ---- */
+
+.s-flow { list-style: none; display: flex; flex-direction: column; gap: 0; }
+.s-flow li { display: flex; flex-direction: column; }
+.s-node { display: flex; align-items: center; gap: 1.8cqw; }
+.s-node-i {
+  width: 1.5cqw; height: 1.5cqw; flex: none; border-radius: 99px;
+  border: .35cqw solid var(--stage-accent); background: #26231d;
+}
+.s-node-t {
+  font-size: 2.2cqw; font-weight: 600; line-height: 1.4;
+  padding: 1cqw 2cqw; border: 1px solid #ffffff21; border-radius: .9cqw; background: #ffffff0d;
+}
+/* The connector is the content: a chain with gaps is a list. */
+.s-link { width: .25cqw; height: 2.2cqw; margin-left: .62cqw; background: #e0a45859; }
+
+/* ---- reveal ----
+
+   Items arrive with the narration. Kept as opacity and transform only, so it
+   costs one composited layer and never reflows mid-sentence. */
+.s-points li, .s-flow li, .s-pane {
+  transition: opacity .42s ease, transform .42s cubic-bezier(.2,.7,.3,1);
+}
+.s-points li.out, .s-flow li.out, .s-pane.out { opacity: 0; transform: translateY(1.2cqw); }
+.s-points li.in, .s-flow li.in, .s-pane.in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .s-points li, .s-flow li, .s-pane, .s-dots i { transition: none; }
+  .s-points li.out, .s-flow li.out, .s-pane.out { opacity: 1; transform: none; }
+  .s-bar-fill { animation: none; }
+}
 
 /* ---- caption ---- */
 
@@ -62,6 +214,7 @@
   right: 8cqw;
   bottom: 2.6cqw;
   min-height: 7.6cqw;
+  z-index: 3;
   display: flex;
   align-items: flex-end;
   justify-content: center;

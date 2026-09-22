@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { toCaptions } from '@cairn/core/pipeline/caption';
 import type { NodeDeck, PathNode } from '@cairn/core/types';
 import { SlideView } from '../slides/SlideView';
+import { revealProgress } from '../slides/reveal';
 import { RATES, useTransport } from './useTransport';
 
 /**
@@ -11,11 +12,13 @@ import { RATES, useTransport } from './useTransport';
  * are both derived from it, so they can never drift apart.
  */
 export function DeckPane({
-  node, deck, audioSrc, onSelect, onEnded,
+  node, deck, audioSrc, stageTitle, onSelect, onEnded,
 }: {
   node: PathNode;
   deck: NodeDeck | undefined;
   audioSrc: string;
+  /** The path's own stage, shown in the slide's frame. Absent is fine. */
+  stageTitle?: string;
   onSelect: (text: string) => void;
   onEnded: () => void;
 }): ReactElement {
@@ -53,6 +56,16 @@ export function DeckPane({
   const slide = deck.slides[slideIdx];
   const caption = captions[capIdx];
 
+  // How far the voice has moved through this slide's own span. Layouts that
+  // build use it to reveal in step; derived from audio time like everything
+  // else on screen, so a scrub backwards folds the slide back up too.
+  const progress = revealProgress(
+    captions.map((c) => c.startMs),
+    slide?.atMs ?? 0,
+    deck.slides[slideIdx + 1]?.atMs ?? deck.durationMs,
+    ms,
+  );
+
   const seek = (to: number): void => {
     const el = audio.current;
     if (!el) return;
@@ -72,7 +85,18 @@ export function DeckPane({
             deck is what is being watched, and a band below it pulled the eye
             off the slide every time the line changed. */}
         <div className="slide-stage captioned">
-          {slide && <SlideView slide={slide} />}
+          {slide && (
+            <SlideView
+              slide={slide}
+              progress={progress}
+              chrome={{
+                stageTitle,
+                stationNo: node.idx + 1,
+                slideIdx,
+                slideCount: deck.slides.length,
+              }}
+            />
+          )}
           <div
             className="slide-caption"
             onMouseUp={() => {

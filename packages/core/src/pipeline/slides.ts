@@ -7,7 +7,8 @@
  * to have map extract more (numbers, comparisons), not to read the book again.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
-import type { ChapterNote, DraftDeck, DraftSlide, PathNode, Slide } from '../types';
+import { ICON_NAMES, toIconName } from '../icons';
+import type { ChapterNote, ComparePane, DraftDeck, DraftSlide, PathNode, Slide } from '../types';
 import { targetChars } from './tts';
 
 /** A station is 2–6 minutes of narration; more than six slides turns into a flicker. */
@@ -23,9 +24,11 @@ const MIN_SLIDES = 3;
 const str = { type: 'string' } as const;
 const nullableStr = { type: ['string', 'null'] } as const;
 const strList = { type: 'array', items: str } as const;
+/** Nullable rather than omitted: structured output requires every key in `required`. */
+const nullableIcon = { type: ['string', 'null'], enum: [...ICON_NAMES, null] } as const;
 const pane = {
-  type: 'object', additionalProperties: false, required: ['title', 'points'],
-  properties: { title: str, points: strList },
+  type: 'object', additionalProperties: false, required: ['title', 'points', 'icon'],
+  properties: { title: str, points: strList, icon: nullableIcon },
 } as const;
 
 const variant = (
@@ -44,7 +47,7 @@ const variant = (
 
 const SLIDE_SCHEMA = {
   anyOf: [
-    variant('title', { title: str, kicker: nullableStr, subtitle: nullableStr }),
+    variant('title', { title: str, kicker: nullableStr, subtitle: nullableStr, icon: nullableIcon }),
     variant('points', { heading: str, points: strList }),
     variant('number', {
       items: {
@@ -91,7 +94,11 @@ const SYSTEM = `你在把一站学习内容做成一组幻灯 + 一段口播。
 5. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
    **总字数必须接近给定目标**——字数决定音频时长，写短了这一站就不到该有的长度。
 6. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
-7. 只输出 JSON。`;
+7. icon 只出现在 title 和 compare 的两栏上，用来给这一站一个能认出来的标记。
+   只能从给定的名字里挑，挑不到贴切的就填 null。
+   **宁可不给也不要硬给**：抽象概念（复利、身份认同、锚定）没有对应的图形，
+   硬套一个只会变成毫无意义的装饰。挑的是内容里真实出现的具体事物。
+8. 只输出 JSON。`;
 
 export async function makeDeck(
   node: PathNode,
@@ -128,6 +135,7 @@ function buildPrompt(node: PathNode, notes: readonly ChapterNote[]): string {
 要讲明白：${node.brief}
 ${node.keyPoints.length > 0 ? `要点：\n${node.keyPoints.map((k) => `- ${k}`).join('\n')}\n` : ''}
 时长约 ${node.estMinutes} 分钟，做 ${MIN_SLIDES}-${MAX_SLIDES} 张幻灯。
+可用的 icon 名字（没有贴切的就填 null）：${ICON_NAMES.join(' ')}
 口播稿总字数目标 ${targetChars(node.estMinutes)} 字（允许 ±15%），这决定音频时长，请认真控制。
 
 可用材料（来自这一站溯源的章节）：
@@ -159,7 +167,13 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
   switch (item.layout) {
     case 'title': {
       const title = asText(item.title);
-      return title ? { layout: 'title', title, ...opt('kicker', item), ...opt('subtitle', item) } : undefined;
+      if (!title) return undefined;
+      const icon = toIconName(item.icon);
+      return {
+        layout: 'title', title,
+        ...opt('kicker', item), ...opt('subtitle', item),
+        ...(icon ? { icon } : {}),
+      };
     }
     case 'points': {
       const points = strs(item.points).slice(0, 3);
@@ -196,12 +210,16 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
   }
 }
 
-function toPane(value: unknown): { title: string; points: readonly string[] } | undefined {
+function toPane(value: unknown): ComparePane | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const p = value as Record<string, unknown>;
   const title = asText(p.title);
   const points = strs(p.points).slice(0, 3);
-  return title && points.length > 0 ? { title, points } : undefined;
+  if (!title || points.length === 0) return undefined;
+  // An unknown name is dropped rather than repaired: there is no glyph to fall
+  // back to, and a wrong pictogram mislabels the pane it sits on.
+  const icon = toIconName(p.icon);
+  return { title, points, ...(icon ? { icon } : {}) };
 }
 
 const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');

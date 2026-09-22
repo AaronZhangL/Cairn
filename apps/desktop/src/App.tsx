@@ -170,6 +170,7 @@ export function App(): ReactElement {
         node={node}
         deck={bundle.decks.get(node.id)}
         audioSrc={`${base ?? '.'}/${audioFile(path.bookId, node.id)}`}
+        stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
         onSelect={setSelection}
         onEnded={() => step(1)}
       />

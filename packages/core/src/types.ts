@@ -1,4 +1,7 @@
 /** Domain types. No framework imports — shared by apps/web and apps/desktop. */
+import type { IconName } from './icons';
+
+export type { IconName };
 
 export type BookType = 'knowledge' | 'narrative';
 export type BookFormat = 'epub' | 'txt' | 'markdown';
@@ -66,9 +69,15 @@ export interface Path {
  * Slide layouts. No image generation: abstract ideas do not yield informative
  * illustrations, and a good deck is mostly type and simple diagrams anyway.
  * Every layout renders from structured data via React/SVG.
+ *
+ * `icon` is the one visual escape hatch, and it is not an illustration: it
+ * names a glyph from the fixed local set in ./icons, drawn as a few stroked
+ * paths at render time. It is optional everywhere and appears on exactly two
+ * layouts — the station's opening card, and each side of a comparison. An icon
+ * on every bullet is decoration, and decoration on every line is noise.
  */
 export type Slide =
-  | { readonly layout: 'title'; readonly kicker?: string; readonly title: string; readonly subtitle?: string }
+  | { readonly layout: 'title'; readonly kicker?: string; readonly title: string; readonly subtitle?: string; readonly icon?: IconName }
   | { readonly layout: 'points'; readonly heading: string; readonly points: readonly string[] }
   | { readonly layout: 'number'; readonly heading?: string; readonly items: readonly NumberItem[]; readonly note?: string }
   | { readonly layout: 'quote'; readonly text: string; readonly cite?: string }
@@ -83,6 +92,7 @@ export interface NumberItem {
 export interface ComparePane {
   readonly title: string;
   readonly points: readonly string[];
+  readonly icon?: IconName;
 }
 
 /** A slide before narration timing exists, keyed to the sentence it appears on. */
