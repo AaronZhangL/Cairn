@@ -2,13 +2,29 @@
  * Reading budget. Duration is the constraint and station count is the result:
  * a dense book gets fewer, deeper stations, a loose one more, shallower ones.
  *
- * Picking a budget changes the station count and coverage, not the length of a
+ * The four rungs are fixed in *intent* — skim, gist, read, walk it all — but not
+ * in minutes. A 40k-word essay collection and a 900k-word textbook cannot share
+ * one ladder: "2 hours" is most of the first book and a tenth of the second, so
+ * the same label would mean opposite things. `budgetsFor` scales the rungs to
+ * the book's own length and chapter structure instead.
+ *
+ * Picking a rung changes the station count and coverage, not the length of a
  * station. A station's job is to make one thing clear, which has a floor — you
  * cannot make it shallower, only drop it.
  */
-import type { PathNode } from '../types';
+import type { ParsedBook, PathNode } from '../types';
 
 export type BudgetId = 'quick' | 'brief' | 'solid' | 'full';
+
+/** What the pipeline needs to know about a book before any model call. */
+export interface BookShape {
+  readonly totalWords: number;
+  readonly chapterCount: number;
+}
+
+export function shapeOf(book: ParsedBook): BookShape {
+  return { totalWords: book.totalWords, chapterCount: book.chapters.length };
+}
 
 export interface ReadingBudget {
   readonly id: BudgetId;
@@ -22,30 +38,109 @@ export interface ReadingBudget {
   readonly coverage: string;
 }
 
-export const BUDGETS: Readonly<Record<BudgetId, ReadingBudget>> = {
-  quick: {
-    id: 'quick', label: '10 分钟 · 知道个大概',
-    minMinutes: 8, maxMinutes: 14, nodeRange: [4, 5], minutesPerNode: [2, 3],
+interface Rung {
+  readonly id: BudgetId;
+  readonly name: string;
+  /** Share of the full walk this rung targets. */
+  readonly share: number;
+  readonly minutesPerNode: readonly [number, number];
+  readonly coverage: string;
+}
+
+const RUNGS: readonly Rung[] = [
+  {
+    id: 'quick', name: '知道个大概', share: 0.1, minutesPerNode: [2, 3],
     coverage: '只要全书的主干论点。够在饭桌上说清这本书讲了什么就行，细节全部舍弃。',
   },
-  brief: {
-    id: 'brief', label: '30 分钟 · 抓住要点',
-    minMinutes: 25, maxMinutes: 36, nodeRange: [8, 11], minutesPerNode: [2, 4],
+  {
+    id: 'brief', name: '抓住要点', share: 0.28, minutesPerNode: [2, 4],
     coverage: '主干论点加上支撑它的关键论证。舍弃例子、旁支和操作细节。',
   },
-  solid: {
-    id: 'solid', label: '1 小时 · 真的读懂',
-    minMinutes: 52, maxMinutes: 70, nodeRange: [14, 19], minutesPerNode: [3, 4],
+  {
+    id: 'solid', name: '真的读懂', share: 0.58, minutesPerNode: [3, 4],
     coverage: '概念、论证和代表性的例子。覆盖大部分核心章节，舍弃附录与边缘话题。',
   },
-  full: {
-    id: 'full', label: '2 小时 · 完整走一遍',
-    minMinutes: 100, maxMinutes: 120, nodeRange: [26, 36], minutesPerNode: [3, 5],
+  {
+    id: 'full', name: '完整走一遍', share: 1, minutesPerNode: [3, 5],
     coverage: '覆盖几乎全部实质内容，允许为重要概念单独设站。仍要舍弃版权页、索引、名单这类非内容章节。',
   },
-};
+];
 
 export const DEFAULT_BUDGET_ID: BudgetId = 'full';
+
+/** The book the rungs were calibrated against: Pro Git zh, walked end to end in two hours. */
+const ANCHOR_WORDS = 200_000;
+const ANCHOR_MINUTES = 120;
+
+/** Under this a walk is not worth splitting into stages; over it nobody finishes in one sitting. */
+const FULL_WALK_BOUNDS: readonly [number, number] = [30, 240];
+
+/** Short of this a walk is one station with a preamble, whatever the book. */
+const MIN_TARGET_MINUTES = 8;
+
+/**
+ * Each rung must clear the one below by more than the two tolerance bands
+ * (0.85 * t2 > 1.15 * t1), or a short book collapses all four into the same
+ * few minutes and the choice stops meaning anything.
+ */
+const RUNG_GAP = 1.45;
+
+/**
+ * How long a complete walk of this book should take.
+ *
+ * Sub-linear on purpose: a book four times as long does not carry four times as
+ * many distinct ideas, it carries more support for roughly twice as many. The
+ * square root keeps the longest books finishable without starving the short ones.
+ */
+export function fullWalkMinutes(shape: BookShape): number {
+  const [lo, hi] = FULL_WALK_BOUNDS;
+  const scaled = ANCHOR_MINUTES * Math.sqrt(Math.max(shape.totalWords, 1) / ANCHOR_WORDS);
+  return Math.min(hi, Math.max(lo, Math.round(scaled)));
+}
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} 小时`;
+}
+
+/**
+ * Station count follows from the target duration, bounded by the book's own
+ * structure: past roughly two stations per chapter the extra stations are
+ * splitting hairs rather than covering more ground.
+ */
+function nodeRangeFor(targetMinutes: number, shape: BookShape, perNode: readonly [number, number]): readonly [number, number] {
+  const [shortest, longest] = perNode;
+  const cap = Math.max(3, shape.chapterCount * 2);
+  const hi = Math.min(Math.max(3, Math.floor(targetMinutes / shortest)), cap);
+  const lo = Math.min(Math.max(3, Math.ceil(targetMinutes / longest)), hi);
+  return [lo, hi];
+}
+
+/** The four budgets on offer for one book, cheapest rung first. */
+export function budgetsFor(shape: BookShape): Readonly<Record<BudgetId, ReadingBudget>> {
+  const full = fullWalkMinutes(shape);
+  let previous = 0;
+  const entries = RUNGS.map((rung) => {
+    const target = Math.max(
+      MIN_TARGET_MINUTES,
+      Math.round(full * rung.share),
+      Math.ceil(previous * RUNG_GAP),
+    );
+    previous = target;
+    const budget: ReadingBudget = {
+      id: rung.id,
+      label: `${formatMinutes(target)} · ${rung.name}`,
+      minMinutes: Math.max(5, Math.round(target * 0.85)),
+      maxMinutes: Math.round(target * 1.15),
+      nodeRange: nodeRangeFor(target, shape, rung.minutesPerNode),
+      minutesPerNode: rung.minutesPerNode,
+      coverage: rung.coverage,
+    };
+    return [rung.id, budget] as const;
+  });
+  return Object.fromEntries(entries) as Record<BudgetId, ReadingBudget>;
+}
 
 /** Overrun past this multiple of the target triggers a tighter retry. Being under a hard cap is not licence to overshoot. */
 const OVERRUN_TOLERANCE = 1.15;
@@ -79,27 +174,30 @@ export interface BudgetChoice {
   readonly note?: string;
 }
 
+/** Past this much book behind one station, the summary degrades into platitudes. */
+const WORDS_PER_NODE_CEILING = 120_000;
+
 /**
- * Offer budgets that suit the book's length.
- * Offering "10 minutes" for a 7-million-word serial is a lie: each station would
- * have to stand for 1.5 million words, which can only be filled by inventing.
+ * Offer the four budgets for this book, flagging any rung whose arithmetic does
+ * not work out. Scaling the rungs removes most of the mismatch, but a 7-million
+ * word serial still cannot be honestly skimmed in a tenth of its full walk.
  */
-export function suggestBudgets(totalWords: number): {
+export function suggestBudgets(shape: BookShape): {
   readonly choices: readonly BudgetChoice[];
   readonly recommended: BudgetId;
 } {
-  const choices = (Object.keys(BUDGETS) as BudgetId[]).map((id) => {
-    const budget = BUDGETS[id];
-    const wordsPerNode = totalWords / suggestNodeCount(totalWords, budget);
-    // Past 120k words behind one station, the summary degrades into platitudes
-    const honest = wordsPerNode <= 120_000;
+  const budgets = budgetsFor(shape);
+  const choices = RUNGS.map(({ id }) => {
+    const budget = budgets[id];
+    const wordsPerNode = shape.totalWords / suggestNodeCount(shape.totalWords, budget);
+    const honest = wordsPerNode <= WORDS_PER_NODE_CEILING;
     return honest
       ? { budget, honest }
-      : { budget, honest, note: `这本书 ${Math.round(totalWords / 10_000)} 万字，该档位每站要概括约 ${Math.round(wordsPerNode / 10_000)} 万字，会流于空泛` };
+      : { budget, honest, note: `这本书 ${Math.round(shape.totalWords / 10_000)} 万字，该档位每站要概括约 ${Math.round(wordsPerNode / 10_000)} 万字，会流于空泛` };
   });
 
-  const recommended = totalWords >= 300_000 ? 'full'
-    : totalWords >= 120_000 ? 'solid'
+  const recommended: BudgetId = shape.totalWords >= 300_000 ? 'full'
+    : shape.totalWords >= 120_000 ? 'solid'
     : 'brief';
 
   return { choices, recommended };

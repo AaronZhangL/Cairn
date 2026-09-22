@@ -8,7 +8,7 @@
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import type { BookType, ChapterNote, NodeKind, PathNode, Stage } from '../types';
 import {
-  BUDGETS, clampNodeMinutes, DEFAULT_BUDGET_ID, exceedsBudget,
+  budgetsFor, clampNodeMinutes, DEFAULT_BUDGET_ID, exceedsBudget,
   type ReadingBudget, suggestNodeCount, totalMinutes,
 } from './budget';
 
@@ -78,7 +78,8 @@ export async function reduceToPath(
   provider: LlmProvider,
   options: ReduceOptions = {},
 ): Promise<ReduceResult> {
-  const budget = options.budget ?? BUDGETS[DEFAULT_BUDGET_ID];
+  const budget = options.budget
+    ?? budgetsFor({ totalWords, chapterCount: notes.length })[DEFAULT_BUDGET_ID];
   const valid = new Set(notes.map((n) => n.idx));
   let target = suggestNodeCount(totalWords, budget);
   let dropped = 0;

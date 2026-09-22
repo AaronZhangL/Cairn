@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { isRecap, makeRecapDeck, RECAP_NODE_ID, withRecap } from '../../src/pipeline/recap';
-import { BUDGETS } from '../../src/pipeline/budget';
+import { budgetsFor } from '../../src/pipeline/budget';
+
+const BUDGETS = budgetsFor({ totalWords: 200_000, chapterCount: 86 });
 import type { ReduceResult } from '../../src/pipeline/reduce';
 import type { LlmProvider, LlmRequest } from '../../src/llm/types';
 import type { PathNode, Stage } from '../../src/types';

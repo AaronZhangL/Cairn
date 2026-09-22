@@ -15,7 +15,9 @@ import { classifyBook } from '../packages/core/src/pipeline/classify';
 import { reduceToPath } from '../packages/core/src/pipeline/reduce';
 import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
 import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts';
-import { BUDGETS, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
+import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
+
+const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];
 import { fileStore } from '../packages/core/src/store/file-store';
 import { codexCliProvider } from '../packages/core/src/runtime/codex-cli';
 import {
@@ -34,7 +36,7 @@ async function main(): Promise<void> {
   if (!file) return usage();
 
   const wanted = flag(args, '--budget') as BudgetId | undefined;
-  if (wanted && !(wanted in BUDGETS)) return usage(`未知预算：${wanted}`);
+  if (wanted && !BUDGET_IDS.includes(wanted)) return usage(`未知预算：${wanted}`);
 
   const bytes = new Uint8Array(await Bun.file(file).arrayBuffer());
   const book = await parseBook(bytes, basename(file));
@@ -44,8 +46,8 @@ async function main(): Promise<void> {
   console.log(`《${book.title}》${book.author ? ` · ${book.author}` : ''}`);
   console.log(`${book.chapters.length} 章 · ${book.totalWords.toLocaleString()} 字\n`);
 
-  const { choices, recommended } = suggestBudgets(book.totalWords);
-  const budget = BUDGETS[wanted ?? recommended];
+  const { choices, recommended } = suggestBudgets(shapeOf(book));
+  const budget = budgetsFor(shapeOf(book))[wanted ?? recommended];
   console.log('可选预算：');
   for (const c of choices) {
     const mark = c.budget.id === budget.id ? '▸' : ' ';
@@ -187,10 +189,10 @@ function usage(message?: string): void {
   console.log(`用法：bun run add-book <书文件> [--budget quick|brief|solid|full]
 
 支持 .epub / .txt / .md
-预算档位：
-${Object.values(BUDGETS).map((b) => `  ${b.id.padEnd(6)} ${b.label}`).join('\n')}
+预算档位：${BUDGET_IDS.map((id) => `\n  ${id}`).join('')}
 
-不指定预算时按书的体量推荐。书不会离开这台机器。`);
+四个档位的实际时长按书的体量和章节结构推导，选书之后才知道。
+不指定预算时按书的体量推荐。`);
   process.exit(message ? 1 : 0);
 }
 

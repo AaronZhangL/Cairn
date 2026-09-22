@@ -7,6 +7,7 @@
  * to have map extract more (numbers, comparisons), not to read the book again.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
+import { type FitField, overBudget } from '../fit';
 import { ICON_NAMES, toIconName } from '../icons';
 import type {
   ChapterNote, ComparePane, DraftDeck, DraftSlide, PathNode, QuoteSource, Slide,
@@ -93,6 +94,10 @@ const SYSTEM = `你在把一站学习内容做成一组幻灯 + 一段口播。
 2. quote 的 text 必须原样取自我给出的摘句，一个字都不能改。
 3. number 的数字必须来自摘要里真实出现的数据。摘要里没有数字，就不要用这个版式。
 4. 幻灯上写要点，不写完整句子。完整的话留给口播。
+   每个字段的字数上限（中文按字算，英文按词长的一半算）：
+   标题 20，副标 30，小标题 24，points 每条 28，
+   number 的数值 6、标签 14，flow 每步 16，compare 每栏标题 10、每条 20，
+   引文 100。**超出的幻灯会被整张丢弃**，写不下就换个说法，不要硬塞。
 5. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
    **总字数必须接近给定目标**——字数决定音频时长，写短了这一站就不到该有的长度。
 6. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
@@ -262,23 +267,37 @@ function toDraftSlide(item: Record<string, unknown>, sentenceCount: number): Dra
   return slide ? { slide, atSentence } : undefined;
 }
 
-/** Drops any slide whose required fields for its layout are missing. */
+/**
+ * Drops any slide whose required fields for its layout are missing, or whose
+ * text is past any size the stage can render it at.
+ *
+ * Length is checked here as well as in the renderer because the two failures
+ * are different. `fit.ts` steps the type down for a string that is merely long,
+ * which covers everything a model writes when it overshoots. Past the last rung
+ * there is no size left, and a slide rendered anyway would overflow its box —
+ * so it is dropped, the same way a slide missing a required field is. Dropping
+ * one slide costs a beat of the deck; a broken one costs the station.
+ *
+ * A required field over budget drops the slide. An optional one is omitted
+ * instead: losing a kicker is not worth losing the card it sits on.
+ */
 function toSlide(item: Record<string, unknown>): Slide | undefined {
   switch (item.layout) {
     case 'title': {
-      const title = asText(item.title);
+      const title = fitted(item.title, 'title');
       if (!title) return undefined;
       const icon = toIconName(item.icon);
       return {
         layout: 'title', title,
-        ...opt('kicker', item), ...opt('subtitle', item),
+        ...opt('kicker', item, 'kicker'), ...opt('subtitle', item, 'subtitle'),
         ...(icon ? { icon } : {}),
       };
     }
     case 'points': {
       const points = strs(item.points).slice(0, 3);
-      const heading = asText(item.heading);
-      return heading && points.length > 0 ? { layout: 'points', heading, points } : undefined;
+      const heading = fitted(item.heading, 'heading');
+      if (!heading || points.length === 0 || anyOverBudget(points, 'point')) return undefined;
+      return { layout: 'points', heading, points };
     }
     case 'number': {
       const items = Array.isArray(item.items)
@@ -288,22 +307,32 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
             .map((i) => ({ value: asText(i.value), label: asText(i.label) }))
             .slice(0, 3)
         : [];
-      return items.length > 0
-        ? { layout: 'number', items, ...opt('heading', item), ...opt('note', item) }
-        : undefined;
+      if (items.length === 0) return undefined;
+      if (anyOverBudget(items.map((i) => i.value), 'value')) return undefined;
+      if (anyOverBudget(items.map((i) => i.label), 'label')) return undefined;
+      return {
+        layout: 'number', items,
+        ...opt('heading', item, 'heading'), ...opt('note', item, 'note'),
+      };
     }
     case 'quote': {
-      const quoteText = asText(item.text);
-      return quoteText ? { layout: 'quote', text: quoteText, ...opt('cite', item) } : undefined;
+      const quoteText = fitted(item.text, 'quote');
+      return quoteText
+        ? { layout: 'quote', text: quoteText, ...opt('cite', item, 'cite') }
+        : undefined;
     }
     case 'compare': {
       const left = toPane(item.left);
       const right = toPane(item.right);
-      return left && right ? { layout: 'compare', left, right, ...opt('heading', item) } : undefined;
+      return left && right
+        ? { layout: 'compare', left, right, ...opt('heading', item, 'heading') }
+        : undefined;
     }
     case 'flow': {
       const steps = strs(item.steps).slice(0, 5);
-      return steps.length > 1 ? { layout: 'flow', steps, ...opt('heading', item) } : undefined;
+      return steps.length > 1 && !anyOverBudget(steps, 'step')
+        ? { layout: 'flow', steps, ...opt('heading', item, 'heading') }
+        : undefined;
     }
     default:
       return undefined;
@@ -313,9 +342,9 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
 function toPane(value: unknown): ComparePane | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const p = value as Record<string, unknown>;
-  const title = asText(p.title);
+  const title = fitted(p.title, 'paneTitle');
   const points = strs(p.points).slice(0, 3);
-  if (!title || points.length === 0) return undefined;
+  if (!title || points.length === 0 || anyOverBudget(points, 'panePoint')) return undefined;
   // An unknown name is dropped rather than repaired: there is no glyph to fall
   // back to, and a wrong pictogram mislabels the pane it sits on.
   const icon = toIconName(p.icon);
@@ -325,7 +354,18 @@ function toPane(value: unknown): ComparePane | undefined {
 const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 const strs = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : [];
-const opt = (key: string, item: Record<string, unknown>): Record<string, string> => {
-  const value = asText(item[key]);
+
+/** The text, or '' when no size would fit it — which reads as missing downstream. */
+const fitted = (v: unknown, field: FitField): string => {
+  const value = asText(v);
+  return value && !overBudget(value, field) ? value : '';
+};
+
+/** All or nothing: dropping one item of three quietly changes what was claimed. */
+const anyOverBudget = (texts: readonly string[], field: FitField): boolean =>
+  texts.some((text) => overBudget(text, field));
+
+const opt = (key: string, item: Record<string, unknown>, field: FitField): Record<string, string> => {
+  const value = fitted(item[key], field);
   return value ? { [key]: value } : {};
 };

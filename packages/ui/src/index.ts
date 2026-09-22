@@ -1,5 +1,7 @@
 export { SlideView, type SlideChrome } from './slides/SlideView';
 export { Icon } from './slides/Icon';
+/** Dev-only: every layout at its worst, for looking at. See Gauntlet.tsx. */
+export { Gauntlet } from './slides/Gauntlet';
 export { PlayMark, PauseMark, FastMark } from './panes/icons';
 export { StagePane } from './panes/StagePane';
 export { DeckPane } from './panes/DeckPane';

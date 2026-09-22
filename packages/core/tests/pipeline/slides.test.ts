@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { locateQuote, makeDeck } from '../../src/pipeline/slides';
 import type { LlmProvider, LlmRequest } from '../../src/llm/types';
+import { BUDGETS, HARD_CAP } from '../../src/fit';
 import type { ChapterNote, PathNode } from '../../src/types';
 
 const stub = (reply: string): LlmProvider & { seen: LlmRequest[] } => {
@@ -21,6 +22,70 @@ const notes: ChapterNote[] = [{
 
 const deck = (slides: unknown[], sentences = ['第一句。', '第二句。', '第三句。']) =>
   JSON.stringify({ sentences, slides });
+
+/** A string of n CJK characters, which `units` measures as n. */
+const cjk = (n: number): string => '字'.repeat(n);
+/** Just past the last rung of the fit ladder for this field. */
+const unrenderable = (field: keyof typeof BUDGETS): string =>
+  cjk(Math.ceil(BUDGETS[field] * HARD_CAP) + 1);
+
+describe('makeDeck 长度上限', () => {
+  test('必填字段长到没有字号放得下时，整张幻灯丢弃', async () => {
+    // Not a taste judgement: past the last rung in fit.ts there is no size
+    // that keeps the text inside its box, so rendering it would overflow.
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'points', heading: unrenderable('heading'), points: ['甲'], atSentence: 0 },
+      { layout: 'points', heading: '要点', points: [unrenderable('point')], atSentence: 1 },
+      { layout: 'points', heading: '要点', points: ['甲'], atSentence: 2 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('刚好在上限内的保留：分档会把它缩到放得下', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'points', heading: cjk(Math.floor(BUDGETS.heading * HARD_CAP)), points: ['甲'], atSentence: 0 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('可选字段超限只丢这个字段，不丢它所在的卡片', async () => {
+    // Losing a kicker is not worth losing the station's opening card.
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'title', title: '锚定效应', kicker: unrenderable('kicker'), atSentence: 0 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+    const s = d.slides[0]!.slide;
+    expect(s.layout === 'title' && s.kicker).toBeUndefined();
+  });
+
+  test('一组里有一条超限，整张丢弃而不是悄悄少一条', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'flow', steps: ['一', unrenderable('step'), '三'], atSentence: 0 },
+    ])));
+    expect(d.slides).toHaveLength(0);
+  });
+
+  test('number 的数值与标签各自有上限', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'number', items: [{ value: unrenderable('value'), label: '标签' }], atSentence: 0 },
+      { layout: 'number', items: [{ value: '25%', label: unrenderable('label') }], atSentence: 1 },
+      { layout: 'number', items: [{ value: '25%', label: '停在10' }], atSentence: 2 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('compare 一栏的标题超限就整张丢弃', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      {
+        layout: 'compare',
+        left: { title: 'A', points: ['甲'] },
+        right: { title: unrenderable('paneTitle'), points: ['乙'] },
+        atSentence: 0,
+      },
+    ])));
+    expect(d.slides).toHaveLength(0);
+  });
+});
 
 describe('makeDeck 版式校验', () => {
   test('缺必填字段的幻灯被丢弃，不产出半截版式', async () => {

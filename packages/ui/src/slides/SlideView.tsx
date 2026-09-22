@@ -15,8 +15,8 @@ import './slide.css';
  *
  * `progress` is how far the narration has moved through this slide's own span,
  * in [0, 1]; layouts that build use it to reveal in step with the voice. It
- * defaults to 1 so a static render — a test, a still, the text view — shows the
- * finished slide rather than its first beat.
+ * defaults to 1 so a static render — a test, a still, the layout gauntlet —
+ * shows the finished slide rather than its first beat.
  *
  * The union is exhaustive; an unknown layout is a programming error, not a
  * runtime case to paper over, so it renders nothing rather than a fallback that

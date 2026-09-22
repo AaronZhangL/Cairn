@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { magnitude, magnitudes } from '../../src/slides/magnitude';
+import { magnitude, magnitudes, unitOf } from '../../src/slides/magnitude';
 
 describe('magnitude', () => {
   it('reads the leading quantity out of a display string', () => {
@@ -36,7 +36,7 @@ describe('magnitude', () => {
 
 describe('magnitudes', () => {
   it('returns fractions of the largest value', () => {
-    expect(magnitudes(['1 枚', '0 枚', '110 年'])).toEqual([1 / 110, 0, 1]);
+    expect(magnitudes(['1 枚', '0 枚', '110 枚'])).toEqual([1 / 110, 0, 1]);
   });
 
   it('refuses the whole set when any value is unreadable', () => {
@@ -51,5 +51,48 @@ describe('magnitudes', () => {
 
   it('refuses negatives rather than drawing a bar backwards', () => {
     expect(magnitudes(['-5', '10'])).toBeUndefined();
+  });
+
+  it('refuses a set whose values are not the same kind of thing', () => {
+    // The bug this guards: a station quoting "1%" of improvement beside the
+    // "32华氏度" melting point drew 1 against 32 — a ratio between a
+    // proportion and a temperature, which the book never claimed.
+    expect(magnitudes(['1%', '32华氏度'])).toBeUndefined();
+    expect(magnitudes(['110 年', '1 枚'])).toBeUndefined();
+    // A bare number is its own unit, so it does not silently join a set.
+    expect(magnitudes(['68%', '32'])).toBeUndefined();
+  });
+
+  it('still compares values that share a unit', () => {
+    expect(magnitudes(['3 万人', '500 人'])).toEqual([1, 500 / 30_000]);
+    expect(magnitudes(['68%', '32%'])).toEqual([1, 32 / 68]);
+  });
+});
+
+describe('unitOf', () => {
+  it('reads the unit the quantity is measured in', () => {
+    expect(unitOf('32华氏度')).toBe('华氏度');
+    expect(unitOf('1%')).toBe('%');
+    expect(unitOf('3.5 倍')).toBe('倍');
+    expect(unitOf('约 42 分钟')).toBe('分钟');
+  });
+
+  it('treats a bare number as its own unit', () => {
+    expect(unitOf('500')).toBe('');
+  });
+
+  it('consumes a scale word rather than reporting it', () => {
+    // "3 万人" and "500 人" are the same unit at different scales; magnitude
+    // has already folded the scale into the value.
+    expect(unitOf('3 万人')).toBe('人');
+    expect(unitOf('12K')).toBe('');
+  });
+
+  it('stops at the separator before an aside', () => {
+    expect(unitOf('110 年 · 第 3 万 次')).toBe('年');
+  });
+
+  it('is undefined when there is no quantity to attach a unit to', () => {
+    expect(unitOf('几乎没有')).toBeUndefined();
   });
 });

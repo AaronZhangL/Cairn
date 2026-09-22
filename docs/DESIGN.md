@@ -94,8 +94,8 @@ opposite directions.
 
 | Level | Size | Weight | Tracking | Leading |
 | --- | --- | --- | --- | --- |
-| Slide title `.s-h1` | 6.2cqw | 780 | `-.026em` | 1.08 |
-| Slide heading `.s-h2` | 3.4cqw | 700 | `-.018em` | 1.18 |
+| Slide title `.s-h1` | 7.4cqw | 800 | `-.035em` | 1.1 |
+| Slide heading `.s-h2` | 3cqw | 700 | `-.015em` | — |
 | Pane and station titles | 15px | 640 | `-.011em` | — |
 | Body | 15px | 400 | `0` | 1.55 |
 | Station rows | 13px | 400/620 | `0` | — |
@@ -109,6 +109,40 @@ alone — weight adds presence without taking more space.
 System fonts first (`-apple-system` / `SF Pro Text` / `PingFang SC`), with
 `font-optical-sizing: auto`. They already ship optical sizing and tracking tables; override only
 with a reason.
+
+### The fit ladder
+
+Every slide size above is a fraction of the stage, so a string longer than its box **overflows
+rather than shrinks**. The text comes from a model and has no length limit, so the sizes in the
+table are the *designed* sizes, not the only ones a field is drawn at.
+
+`packages/core/src/fit.ts` holds one budget per field — how many display units fit at the
+designed size, derived as `available width ÷ font size × allowed lines` and shown with its
+arithmetic. The layouts stamp a rung on the element (`data-fit`), and three rules in
+`slide.css` turn the rung into type:
+
+| Rung | Size | Tracking | Leading |
+| --- | --- | --- | --- |
+| `0` | ×1 | +0 | +0 |
+| `1` | ×0.8 | `+.008em` | `+.06` |
+| `2` | ×0.62 | `+.016em` | `+.12` |
+
+The deltas are why this is one ladder and not three ad-hoc rules: **a field cannot step down in
+size without its tracking and leading following**, which is the rule at the top of this section.
+Every size is written as `calc(<designed> * var(--fit, 1))`, so the table above still reads as
+the design.
+
+Two numbers must move together. The rung thresholds in `fit.ts` are the reciprocals of the
+scales here (`1/0.8`, `1/0.62`); change a scale without the threshold and a string lands on a
+rung that still does not fit it. Past the last rung there is no size left, and
+`pipeline/slides.ts` drops the slide instead of rendering it broken.
+
+A list steps as a whole, from its longest item — three claims at three sizes read as an
+emphasis nobody intended.
+
+Nothing here can be unit-tested: overflow is a property of real layout and there is no render
+setup. `?gauntlet` in `bun run dev` draws every layout at its worst, which is what the budgets
+are checked against.
 
 ## Motion
 

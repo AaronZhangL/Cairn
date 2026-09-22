@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { fitOf } from '@cairn/core/fit';
 import type { Slide } from '@cairn/core/types';
 import { Icon } from '../Icon';
 
@@ -18,10 +19,10 @@ export function Title({ kicker, title, subtitle, icon, stationNo }: Props): Reac
       )}
       {icon && <div className="s-hero" aria-hidden="true"><Icon name={icon} /></div>}
       <div className="s s-title">
-        {kicker && <span className="s-kicker">{kicker}</span>}
-        <h1 className="s-h1">{title}</h1>
+        {kicker && <span className="s-kicker" data-fit={fitOf(kicker, 'kicker')}>{kicker}</span>}
+        <h1 className="s-h1" data-fit={fitOf(title, 'title')}>{title}</h1>
         <div className="s-rule" />
-        {subtitle && <p className="s-sub">{subtitle}</p>}
+        {subtitle && <p className="s-sub" data-fit={fitOf(subtitle, 'subtitle')}>{subtitle}</p>}
       </div>
     </>
   );

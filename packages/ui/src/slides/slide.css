@@ -66,12 +66,37 @@
 }
 .s-dots i.on { background: var(--stage-accent); width: 2.4cqw; }
 
+/* ---- the fit ladder ----
+
+   Slide text comes from the model and has no length limit, but every size here
+   is a fixed fraction of the stage, so a long string overflows rather than
+   shrinks. `fit.ts` in core measures each field against a budget and the
+   layouts stamp the rung on the element; these three rules turn that rung into
+   type. One ladder, applied by `calc`, so a field cannot be stepped down in
+   size without its tracking and leading following.
+
+   The scales are the reciprocals of the thresholds in core/src/fit.ts. Change
+   one and the other stops meaning anything. */
+[data-fit="0"] { --fit: 1; --fit-track: 0em; --fit-lead: 0; }
+[data-fit="1"] { --fit: .8; --fit-track: .008em; --fit-lead: .06; }
+[data-fit="2"] { --fit: .62; --fit-track: .016em; --fit-lead: .12; }
+
 /* ---- shared type ---- */
 
-.s-h1 { font-size: 7.4cqw; font-weight: 800; line-height: 1.1; letter-spacing: -.035em; }
-.s-h2 { font-size: 3cqw; font-weight: 700; letter-spacing: -.015em; }
-.s-sub { font-size: 2.1cqw; color: var(--stage-dim); line-height: 1.6; max-width: 62cqw; }
-.s-note { font-size: 1.6cqw; color: var(--stage-dim); }
+.s-h1 {
+  font-size: calc(7.4cqw * var(--fit, 1)); font-weight: 800;
+  line-height: calc(1.1 + var(--fit-lead, 0));
+  letter-spacing: calc(-.035em + var(--fit-track, 0em));
+}
+.s-h2 {
+  font-size: calc(3cqw * var(--fit, 1)); font-weight: 700;
+  letter-spacing: calc(-.015em + var(--fit-track, 0em));
+}
+.s-sub {
+  font-size: calc(2.1cqw * var(--fit, 1)); color: var(--stage-dim);
+  line-height: calc(1.6 + var(--fit-lead, 0)); max-width: 62cqw;
+}
+.s-note { font-size: calc(1.6cqw * var(--fit, 1)); color: var(--stage-dim); }
 
 /* ---- title ---- */
 
@@ -79,7 +104,8 @@
 .s-kicker {
   align-self: flex-start;
   display: inline-flex; align-items: center;
-  font-size: 1.5cqw; letter-spacing: .14em; font-weight: 800; color: var(--stage-accent);
+  font-size: calc(1.5cqw * var(--fit, 1)); letter-spacing: .14em;
+  font-weight: 800; color: var(--stage-accent);
   border: 1px solid #e0a45840; background: #e0a4581a;
   border-radius: 99px; padding: .7cqw 1.5cqw;
 }
@@ -98,36 +124,56 @@
 
 /* ---- points ---- */
 
-.s-points { list-style: none; display: flex; flex-direction: column; gap: 2.4cqw; }
+/* The mark's size and the row gap are each used by three rules — the thread
+   between marks is positioned from both. Written out per rule, they drift: the
+   thread starts inside the mark or stops short of the next one, and nothing
+   says why. */
+.s-points { --mark: 4.4cqw; --row-gap: 2.4cqw; list-style: none; display: flex; flex-direction: column; gap: var(--row-gap); }
 .s-points li {
-  display: grid; grid-template-columns: 4.4cqw 1fr; gap: 2.2cqw;
+  display: grid; grid-template-columns: var(--mark) 1fr; gap: 2.2cqw;
   align-items: start; position: relative;
 }
 /* One thread down the marks, so three claims read as one argument. */
 .s-points li::after {
-  content: ''; position: absolute; left: 2.2cqw; top: 4.6cqw; bottom: -2.4cqw;
+  content: ''; position: absolute;
+  left: calc(var(--mark) / 2); top: calc(var(--mark) + .2cqw); bottom: calc(var(--row-gap) * -1);
   width: 1px; background: #ffffff1a;
 }
 .s-points li:last-child::after { display: none; }
 .s-dot {
-  width: 4.4cqw; height: 4.4cqw; border-radius: 99px;
+  width: var(--mark); height: var(--mark); border-radius: 99px;
   display: grid; place-items: center;
   border: 1px solid #e0a45859; background: #e0a4581f; color: var(--stage-accent);
   font-size: 1.8cqw; font-weight: 800; font-variant-numeric: tabular-nums;
 }
-.s-ptext { font-size: 2.6cqw; line-height: 1.5; font-weight: 600; padding-top: .6cqw; }
+.s-ptext {
+  font-size: calc(2.6cqw * var(--fit, 1)); line-height: calc(1.5 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  font-weight: 600; padding-top: .6cqw;
+}
 
 /* ---- number ---- */
 
 .s-bars { display: flex; flex-direction: column; gap: 2.4cqw; margin-top: .6cqw; }
-.s-bar-line { display: grid; grid-template-columns: 13cqw 1fr; gap: 2.4cqw; align-items: center; }
-.s-bars.plain .s-bar-line { grid-template-columns: auto; }
+/* Both columns are content-aware: the value column grows with the numeral but
+   never past a third of the stage, and every child may shrink. A grid item
+   defaults to `min-width: auto` and overflows rather than shrinks — which is
+   how a six-unit value came to be drawn underneath its own bar. */
+.s-bar-row {
+  display: grid;
+  grid-template-columns: fit-content(32cqw) minmax(0, 1fr);
+  column-gap: 2.4cqw; row-gap: .9cqw;
+  align-items: center;
+}
+.s-bars.plain .s-bar-row { grid-template-columns: minmax(0, 1fr); }
 .s-bar-v {
-  font-size: 5cqw; font-weight: 800; line-height: 1; color: var(--stage-accent);
+  min-width: 0;
+  font-size: calc(5cqw * var(--fit, 1)); font-weight: 800; line-height: 1;
+  color: var(--stage-accent);
   text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .s-bars.plain .s-bar-v { text-align: left; }
-.s-bar-track { height: 1.5cqw; border-radius: 99px; background: #ffffff12; position: relative; overflow: hidden; }
+.s-bar-track { min-width: 0; height: 1.5cqw; border-radius: 99px; background: #ffffff12; position: relative; overflow: hidden; }
 .s-bar-fill {
   position: absolute; inset: 0 auto 0 0; border-radius: 99px;
   background: linear-gradient(90deg, #e0a458, #c4802f);
@@ -135,11 +181,16 @@
 }
 /* A zero is the point of quoting a zero — mark the empty track, do not hide it. */
 .s-bar-fill.zero { width: 1.5cqw !important; background: #ffffff2e; }
+/* In the bar's own grid column, not at a margin restating that column's width.
+   The margin used to be `13 + 2.4` copied by hand, so it silently stopped
+   lining up the moment either number moved. */
 .s-bar-l {
-  font-size: 1.6cqw; color: var(--stage-dim); line-height: 1.45; margin-top: .9cqw;
-  margin-left: 15.4cqw;
+  grid-column: 2; min-width: 0;
+  font-size: calc(1.6cqw * var(--fit, 1)); color: var(--stage-dim);
+  line-height: calc(1.45 + var(--fit-lead, 0));
+  letter-spacing: calc(.004em + var(--fit-track, 0em));
 }
-.s-bars.plain .s-bar-l { margin-left: 0; }
+.s-bars.plain .s-bar-l { grid-column: 1; }
 @keyframes bar-grow { from { transform: scaleX(0); transform-origin: left; } }
 
 /* ---- quote ---- */
@@ -150,51 +201,79 @@
   font-size: 22cqw; line-height: .7; font-weight: 800;
   color: #e0a4581f; font-family: Georgia, 'Times New Roman', serif;
 }
+/* One source for the indent: everything under the quote lines up with its text,
+   not with a number that happens to equal the rule plus the padding. */
+.s-quote-wrap { --q-rule: .45cqw; --q-pad: 3cqw; --q-indent: calc(var(--q-rule) + var(--q-pad)); }
 .s-quote {
   position: relative; z-index: 1;
-  font-size: 3.4cqw; font-weight: 600; line-height: 1.6; letter-spacing: -.01em;
-  border-left: .45cqw solid var(--stage-accent); padding-left: 3cqw;
+  font-size: calc(3.4cqw * var(--fit, 1)); font-weight: 600;
+  line-height: calc(1.6 + var(--fit-lead, 0));
+  letter-spacing: calc(-.01em + var(--fit-track, 0em));
+  border-left: var(--q-rule) solid var(--stage-accent); padding-left: var(--q-pad);
 }
-.s-cite { font-size: 1.6cqw; color: var(--stage-dim); padding-left: 3.45cqw; letter-spacing: .04em; }
+.s-cite {
+  font-size: calc(1.6cqw * var(--fit, 1)); color: var(--stage-dim);
+  padding-left: var(--q-indent); letter-spacing: .04em;
+}
 
 /* Provenance, down to the chapter the line was found in. The unsourced case is
    shown rather than hidden: a "verbatim" quote nobody could locate in the text
    is exactly the one the reader should doubt. */
 .s-source {
-  font-size: 1.35cqw; padding-left: 3.45cqw; letter-spacing: .06em;
+  font-size: 1.35cqw; padding-left: var(--q-indent); letter-spacing: .06em;
   color: var(--stage-dim); opacity: .72; margin-top: .6cqw;
 }
 .s-source.unsourced { color: #e0a458; opacity: .9; }
 
 /* ---- compare ---- */
 
-.s-compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 2.6cqw; align-items: stretch; }
+.s-compare {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 2.6cqw; align-items: stretch;
+}
 .s-vs { width: 1px; background: linear-gradient(#ffffff00, #ffffff1f 22%, #ffffff1f 78%, #ffffff00); }
-.s-pane { border: 1px solid #ffffff17; border-radius: 1.2cqw; padding: 2.6cqw 2.8cqw; background: #ffffff07; }
+.s-pane { min-width: 0; border: 1px solid #ffffff17; border-radius: 1.2cqw; padding: 2.6cqw 2.8cqw; background: #ffffff07; }
 .s-pane.hl { border-color: #e0a45866; background: #e0a4580f; }
 .s-pane-h { display: flex; align-items: center; gap: 1.3cqw; margin-bottom: 1.8cqw; }
 .s-pane-i { width: 3.4cqw; flex: none; color: var(--stage-accent); }
 .s-pane-i svg { width: 100%; height: auto; display: block; }
-.s-pane-t { font-size: 2.2cqw; font-weight: 800; color: var(--stage-accent); letter-spacing: -.01em; }
+.s-pane-t {
+  min-width: 0;
+  font-size: calc(2.2cqw * var(--fit, 1)); font-weight: 800; color: var(--stage-accent);
+  letter-spacing: calc(-.01em + var(--fit-track, 0em));
+}
 .s-pane ul { list-style: none; display: flex; flex-direction: column; gap: 1.2cqw; }
-.s-pane li { font-size: 1.9cqw; line-height: 1.5; color: var(--stage-ink); padding-left: 1.8cqw; position: relative; }
+.s-pane li {
+  font-size: calc(1.9cqw * var(--fit, 1)); line-height: calc(1.5 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  color: var(--stage-ink); padding-left: 1.8cqw; position: relative;
+}
 .s-pane li::before { content: ''; position: absolute; left: 0; top: .95em; width: .8cqw; height: 1px; background: #ffffff40; }
 
 /* ---- flow ---- */
 
-.s-flow { list-style: none; display: flex; flex-direction: column; gap: 0; }
+/* The connector is centred under the node mark, so its offset is derived from
+   both widths rather than written as the .62cqw that happens to equal them. */
+.s-flow { --node: 1.5cqw; --wire: .25cqw; list-style: none; display: flex; flex-direction: column; gap: 0; }
 .s-flow li { display: flex; flex-direction: column; }
 .s-node { display: flex; align-items: center; gap: 1.8cqw; }
 .s-node-i {
-  width: 1.5cqw; height: 1.5cqw; flex: none; border-radius: 99px;
+  width: var(--node); height: var(--node); flex: none; border-radius: 99px;
   border: .35cqw solid var(--stage-accent); background: #26231d;
 }
 .s-node-t {
-  font-size: 2.2cqw; font-weight: 600; line-height: 1.4;
+  min-width: 0;
+  font-size: calc(2.2cqw * var(--fit, 1)); font-weight: 600;
+  line-height: calc(1.4 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
   padding: 1cqw 2cqw; border: 1px solid #ffffff21; border-radius: .9cqw; background: #ffffff0d;
 }
 /* The connector is the content: a chain with gaps is a list. */
-.s-link { width: .25cqw; height: 2.2cqw; margin-left: .62cqw; background: #e0a45859; }
+.s-link {
+  width: var(--wire); height: 2.2cqw;
+  margin-left: calc((var(--node) - var(--wire)) / 2);
+  background: #e0a45859;
+}
 
 /* ---- reveal ----
 

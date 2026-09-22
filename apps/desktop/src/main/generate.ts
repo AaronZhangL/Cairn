@@ -22,7 +22,7 @@ import { classifyBook } from '@cairn/core/pipeline/classify';
 import { reduceToPath } from '@cairn/core/pipeline/reduce';
 import { buildNode, deckKey, notesByChapter, realMinutes } from '@cairn/core/pipeline/build';
 import { withRecap } from '@cairn/core/pipeline/recap';
-import { BUDGETS, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
+import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
 import {
   type DeckScheduler, startDeckScheduler, type SchedulerProgress,
 } from '@cairn/core/pipeline/scheduler';
@@ -44,7 +44,7 @@ const narrator: Narrator = edgeTtsNarrator();
 /** Parse only. No model calls, so picking a file stays instant. */
 export async function inspect(filePath: string): Promise<BookPreview> {
   const book = await read(filePath);
-  const { choices, recommended } = suggestBudgets(book.totalWords);
+  const { choices, recommended } = suggestBudgets(shapeOf(book));
 
   return {
     id: idFor(book, filePath),
@@ -105,7 +105,7 @@ export async function generate(
 
   const book = await read(filePath);
   const id = idFor(book, filePath);
-  const budget = BUDGETS[budgetId];
+  const budget = budgetsFor(shapeOf(book))[budgetId];
   const cache = join(CACHE_DIR, id);
   const provider = traced(id);
 
