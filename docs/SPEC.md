@@ -69,8 +69,27 @@ A stage name should describe **what the reader is doing right now** — "build t
 - `←` `→` previous / next slide
 - `↓` `↑` previous / next station
 - `space` pause and resume
+- **Click the slide** to pause and resume. A deck plays like a video, so the frame is the pause
+  target; there is no play button below it. A drag that selects caption text is a quote, not a
+  pause, so a live selection does not toggle playback.
 - Click any station in the left pane to jump
 - Select text in the caption or on the slide → the right pane picks it up as a quote
+
+### Closing the app does not lose your place
+
+Which book, which station, which second — remembered per book. The next launch reopens the last
+book where it stopped, **paused**: being dropped into the middle of a sentence unannounced is
+worse than pressing play. A position in the first few seconds or the last few of a station starts
+that station over instead, because resuming there buys nothing. Going back to the shelf is
+deliberate, so the launch after that opens on the shelf; the position in each book is still kept.
+
+### The path closes with a recap
+
+The last station is not a chapter — it is the walk's own ending. It reconnects the stations into
+one line, says what the book finally claims, and tells the reader they have finished. It is built
+from the path's own station briefs rather than from the chapters, so it costs no second pass over
+the book, and it quotes nothing: it has no excerpts of its own, and an invented quotation is
+exactly what this pipeline refuses to render.
 
 ### One interaction decision
 

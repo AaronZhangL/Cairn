@@ -17,6 +17,7 @@ import type { LlmProvider } from '../llm/types';
 import type { ChapterNote, NodeDeck, Path, PathNode } from '../types';
 import { type JobOptions, type JobResult, type JobStore, runJob } from './job';
 import { fingerprint } from './fingerprint';
+import { isRecap, makeRecapDeck } from './recap';
 import { makeDeck } from './slides';
 import { DEFAULT_VOICE, deckAudioPath, type Narrator, type TtsOptions } from './tts';
 
@@ -61,12 +62,27 @@ export function deckKey(node: PathNode, voice?: string): string {
  */
 export async function buildNode(
   node: PathNode,
+  path: Path,
   byChapter: ReadonlyMap<number, ChapterNote>,
   audioDir: string,
   provider: LlmProvider,
   narrator: Narrator,
   options: TtsOptions = {},
 ): Promise<NodeDeck> {
+  const draft = isRecap(node)
+    // The closing station recaps the path, so its material is the other
+    // stations, not the book. Sending it the chapters its sourceChapters point
+    // at would be the whole book in one prompt.
+    ? await makeRecapDeck(node, path.nodes.filter((n) => !isRecap(n)), path.title, provider, options.signal)
+    : await makeDeck(node, chapterNotes(node, byChapter), provider, options.signal);
+
+  return narrator.speak(draft, deckAudioPath(audioDir, deckKey(node, options.voice)), options);
+}
+
+function chapterNotes(
+  node: PathNode,
+  byChapter: ReadonlyMap<number, ChapterNote>,
+): readonly ChapterNote[] {
   const notes = node.sourceChapters
     .map((idx) => byChapter.get(idx))
     .filter((n): n is ChapterNote => n !== undefined);
@@ -74,9 +90,7 @@ export async function buildNode(
   if (notes.length === 0) {
     throw new Error(`第 ${node.idx + 1} 站「${node.title}」的溯源章节不存在`);
   }
-
-  const draft = await makeDeck(node, notes, provider, options.signal);
-  return narrator.speak(draft, deckAudioPath(audioDir, deckKey(node, options.voice)), options);
+  return notes;
 }
 
 export function notesByChapter(
@@ -98,7 +112,7 @@ export async function buildDecks(
 
   const job = await runJob(
     path.nodes.map((node) => ({ id: deckKey(node, options.voice), input: node })),
-    async (node) => buildNode(node, byChapter, audioDir, provider, narrator, options),
+    async (node) => buildNode(node, path, byChapter, audioDir, provider, narrator, options),
     store,
     { ...options, concurrency: options.concurrency ?? provider.suggestedConcurrency },
   );

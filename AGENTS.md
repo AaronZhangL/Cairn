@@ -2,9 +2,9 @@
 
 Turn an ebook you already own into a path you can walk to the end.
 
-The path is a sequence of stations grouped into stages. Each station is a short deck of
-generated slides with narrated audio, backed by the book's real text and traceable to the
-chapters it came from. You pick how long the whole walk should take — 10 minutes, 30, an hour,
+The path is a sequence of stations grouped into stages, closing with a recap station that ties
+them back together. Each station is a short deck of generated slides with narrated audio, backed
+by the book's real text and traceable to the chapters it came from. You pick how long the whole walk should take — 10 minutes, 30, an hour,
 two — and the station count and coverage follow from that.
 
 Slides are data, not video. The same station renders as a player and as plain text.
@@ -170,7 +170,9 @@ These are load-bearing. Breaking one silently undoes a decision that took real w
 
 6. **The pipeline reads the full text exactly once.** Map produces per-chapter notes; every
    downstream stage reads the notes, not the book. Re-reading the book per stage multiplies
-   cost by 5x for no gain.
+   cost by 5x for no gain. The recap station (`pipeline/recap.ts`) goes one step further and
+   reads the *path* — the station briefs reduce already wrote — so closing a book costs no pass
+   over the notes either.
 
 7. **Long-running work goes through `runJob` or `scheduler.ts`.** Near a hundred LLM calls per
    book. Results persist per task, concurrency is capped, failures are isolated and retried with

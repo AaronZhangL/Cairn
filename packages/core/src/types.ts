@@ -33,8 +33,15 @@ export interface ChapterNote {
   readonly quotes: readonly string[];
 }
 
-/** One station on the learning path. Produced by reduce; slides/narration are generated later. */
-export type NodeKind = 'concept' | 'argument' | 'event' | 'character';
+/**
+ * One station on the learning path. Produced by reduce; slides/narration are
+ * generated later.
+ *
+ * `recap` is not one the model may choose: it marks the single closing station
+ * appended to the path after reduce (see pipeline/recap.ts), which is built from
+ * the path itself rather than from chapter notes.
+ */
+export type NodeKind = 'concept' | 'argument' | 'event' | 'character' | 'recap';
 
 export interface PathNode {
   readonly id: string;

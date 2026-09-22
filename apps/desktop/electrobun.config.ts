@@ -5,11 +5,14 @@ export default {
   build: {
     mainProcess: 'cottontail',
     cottontail: { entrypoint: 'src/main/index.ts' },
-    // Vite builds the renderer; the generated bundle ships beside it
+    // Vite builds the renderer; the generated bundle ships beside it.
+    // `public/` is deliberately not copied: its only contents are the generated
+    // library, which lives in the user data dir and is served over loopback
+    // (see src/main/library.ts). It is also gitignored, so copying it made the
+    // build fail outright in any checkout that had never run `bun run dev`.
     copy: {
       'dist/index.html': 'views/mainview/index.html',
       'dist/assets': 'views/mainview/assets',
-      'public': 'views/mainview',
     },
     watchIgnore: ['dist/**'],
     // `icons` is the default path, named here because it is generated:

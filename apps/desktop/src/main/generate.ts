@@ -21,6 +21,7 @@ import { mapChapters } from '@cairn/core/pipeline/map';
 import { classifyBook } from '@cairn/core/pipeline/classify';
 import { reduceToPath } from '@cairn/core/pipeline/reduce';
 import { buildNode, deckKey, notesByChapter, realMinutes } from '@cairn/core/pipeline/build';
+import { withRecap } from '@cairn/core/pipeline/recap';
 import { BUDGETS, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
 import {
   type DeckScheduler, startDeckScheduler, type SchedulerProgress,
@@ -118,7 +119,9 @@ export async function generate(
   const cls = await classifyBook(book.title, notes, provider);
 
   onProgress({ stage: 'reduce', done: 0, total: 1, note: cls.type });
-  const reduced = await reduceToPath(notes, cls.type, book.totalWords, provider, { budget });
+  // The closing station is appended here rather than inside reduce: reduce is
+  // judged against the budget, and a station it did not choose would fight that.
+  const reduced = withRecap(await reduceToPath(notes, cls.type, book.totalWords, provider, { budget }));
 
   const path: Path = {
     bookId: id, title: book.title, type: cls.type,
@@ -225,7 +228,7 @@ async function startBuilding(
     // Content-keyed, never positional: `reduce` re-runs per generation and `n0`
     // is routinely a different station than it was last time.
     keyOf: (node) => deckKey(node),
-    build: (node) => buildNode(node, byChapter, audioDir, provider, narrator),
+    build: (node) => buildNode(node, path, byChapter, audioDir, provider, narrator),
     onReady: async (deck, progress) => {
       decks.push(deck);
       // Deck and audio land together: a station listed as ready must be playable

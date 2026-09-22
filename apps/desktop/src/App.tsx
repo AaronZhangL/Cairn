@@ -4,7 +4,7 @@ import { askLogFile, audioFile } from '@cairn/core/store/library';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { type AskRecord, stationHeat } from '@cairn/core/store/asks';
 import {
-  AskPane, DeckPane, StagePane, Splitter, PanelToggle, useSplit, columnWidth,
+  AskPane, DeckPane, StagePane, Splitter, PanelToggle, useSplit, useResume, columnWidth,
   DEFAULT_LEFT, DEFAULT_RIGHT, LEFT_LIMITS, RIGHT_LIMITS,
   type Turn,
 } from '@cairn/ui';
@@ -23,6 +23,7 @@ export function App(): ReactElement {
   const [base, setBase] = useState<string>();
   const { bundle, error, reload } = useBundle(bookId, base);
 
+  const resume = useResume();
   const left = useSplit('pane.left', DEFAULT_LEFT, LEFT_LIMITS, 'left');
   const right = useSplit('pane.right', DEFAULT_RIGHT, RIGHT_LIMITS, 'right');
 
@@ -34,10 +35,15 @@ export function App(): ReactElement {
   useEffect(() => {
     void (async () => {
       setBase(await libraryBase().catch(() => '.'));
-      // The shelf is listed, but nothing is opened: the entry point is the drop zone
-      setBooks(await listBooks().catch(() => []));
+      const shelf = await listBooks().catch(() => []);
+      setBooks(shelf);
+      // Reopen whatever was being read, if it is still on the shelf. A path is
+      // walked over several sittings; landing on the drop zone every launch
+      // makes the reader find their place by hand.
+      const last = resume.lastBookId;
+      if (last !== undefined && shelf.some((b) => b.id === last)) setBookId(last);
     })();
-  }, []);
+  }, [resume]);
 
   // A book closed mid-build would otherwise sit unfinished forever
   useEffect(() => {
@@ -59,9 +65,16 @@ export function App(): ReactElement {
   const heat = useMemo(() => stationHeat(asks), [asks]);
 
   const path = bundle?.path;
+  /** Where the reader stopped in this book, read once per book, before any render. */
+  const place = useMemo(
+    () => (path ? resume.placeFor(path.bookId) : undefined),
+    [path, resume],
+  );
+  // The stored station is the fallback, not an effect that sets state afterwards:
+  // setting it later would render — and start playing — the first station first.
   const node = useMemo(
-    () => path?.nodes.find((n) => n.id === currentId) ?? path?.nodes[0],
-    [path, currentId],
+    () => path?.nodes.find((n) => n.id === (currentId ?? place?.nodeId)) ?? path?.nodes[0],
+    [path, currentId, place],
   );
 
   const step = useCallback((delta: number) => {
@@ -116,19 +129,28 @@ export function App(): ReactElement {
     setTurns((t) => t.map((x) => (x.id === turnId ? { ...x, outside } : x)));
   }, [turns, path]);
 
+  /** Opening a book is what makes it the one to reopen next launch. */
+  const openBook = useCallback((id: string) => {
+    resume.open(id);
+    setBookId(id);
+  }, [resume]);
+
   const onAdded = useCallback((entry: LibraryEntry) => {
     setBooks((b) => [entry, ...b.filter((x) => x.id !== entry.id)]);
     setAdding(false);
     setCurrentId(undefined);
     setTurns([]);
-    if (entry.id === bookId) reload(); else setBookId(entry.id);
-  }, [bookId, reload]);
+    if (entry.id === bookId) reload(); else openBook(entry.id);
+  }, [bookId, reload, openBook]);
 
   const goHome = useCallback(() => {
+    // Going back to the shelf is deliberate, so the next launch opens there too.
+    // The position inside each book is kept.
+    resume.close();
     setBookId(undefined);
     setCurrentId(undefined);
     setTurns([]);
-  }, []);
+  }, [resume]);
 
   const modal = adding
     ? <AddBook autoPick onDone={onAdded} onClose={() => setAdding(false)} />
@@ -137,7 +159,7 @@ export function App(): ReactElement {
   if (!bookId) {
     return (
       <div className="shell empty">
-        <Home books={books} onAdd={() => setAdding(true)} onOpen={setBookId} />
+        <Home books={books} onAdd={() => setAdding(true)} onOpen={openBook} />
         {modal}
       </div>
     );
@@ -189,7 +211,7 @@ export function App(): ReactElement {
         currentId={node.id}
         onPick={setCurrentId}
         books={books}
-        onSwitchBook={(id) => { setBookId(id); setCurrentId(undefined); setTurns([]); }}
+        onSwitchBook={(id) => { openBook(id); setCurrentId(undefined); setTurns([]); }}
         onAdd={inShell ? () => setAdding(true) : undefined}
         onHome={goHome}
         failed={bundle.failed}
@@ -206,8 +228,10 @@ export function App(): ReactElement {
         build={bundle.failed.has(node.id) ? 'failed' : 'pending'}
         audioSrc={`${base ?? '.'}/${audioFile(path.bookId, node.id)}`}
         stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
+        resumeAt={place}
         onSelect={setSelection}
         onEnded={() => step(1)}
+        onProgress={(ms) => resume.record(path.bookId, { nodeId: node.id, ms })}
       />
 
       <Splitter split={right} label="提问栏" />

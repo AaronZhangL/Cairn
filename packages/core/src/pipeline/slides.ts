@@ -108,10 +108,47 @@ export async function makeDeck(
   provider: LlmProvider,
   signal?: AbortSignal,
 ): Promise<DraftDeck> {
+  return composeDeck(
+    {
+      nodeId: node.id,
+      label: `第 ${node.idx + 1} 站`,
+      traceLabel: `slides:${node.id}`,
+      system: SYSTEM,
+      prompt: buildPrompt(node, notes),
+      notes,
+    },
+    provider,
+    signal,
+  );
+}
+
+export interface DeckRequest {
+  readonly nodeId: string;
+  /** Names the station in an error message, since the reader sees the number, not the id. */
+  readonly label: string;
+  /** Names the call in a trace. */
+  readonly traceLabel: string;
+  readonly system: string;
+  readonly prompt: string;
+  /** Excerpts a quote slide may be traced back to. The recap station has none. */
+  readonly notes?: readonly ChapterNote[];
+}
+
+/**
+ * The half of the slides stage that is not about chapter notes: schema, parsing
+ * and slide normalization. Shared with the recap station, which is built from
+ * the path rather than from the book (see ./recap.ts) but must produce exactly
+ * the same kind of deck.
+ */
+export async function composeDeck(
+  request: DeckRequest,
+  provider: LlmProvider,
+  signal?: AbortSignal,
+): Promise<DraftDeck> {
   const raw = await provider.complete({
-    system: SYSTEM,
-    label: `slides:${node.id}`,
-    prompt: buildPrompt(node, notes),
+    system: request.system,
+    label: request.traceLabel,
+    prompt: request.prompt,
     schema: SCHEMA,
     signal,
   });
@@ -119,11 +156,12 @@ export async function makeDeck(
   const parsed = parseJsonOutput<{ sentences?: unknown; slides?: unknown }>(raw);
   const sentences = strs(parsed.sentences);
   if (sentences.length === 0) {
-    throw new Error(`第 ${node.idx + 1} 站没有产出口播稿`);
+    throw new Error(`${request.label}没有产出口播稿`);
   }
 
+  const notes = request.notes ?? [];
   const slides = normalize(parsed.slides, sentences.length).map((draft) => attachSource(draft, notes));
-  return { nodeId: node.id, sentences, slides };
+  return { nodeId: request.nodeId, sentences, slides };
 }
 
 /**
@@ -181,6 +219,8 @@ export function locateQuote(
 
   return best?.source;
 }
+
+export { MAX_SLIDES, MIN_SLIDES };
 
 function buildPrompt(node: PathNode, notes: readonly ChapterNote[]): string {
   const material = notes

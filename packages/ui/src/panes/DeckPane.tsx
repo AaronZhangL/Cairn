@@ -3,7 +3,10 @@ import type { ReactElement } from 'react';
 import { toCaptions } from '@cairn/core/pipeline/caption';
 import type { NodeDeck, PathNode } from '@cairn/core/types';
 import { SlideView } from '../slides/SlideView';
+import { FastMark, PlayMark } from './icons';
 import { revealProgress } from '../slides/reveal';
+import type { Place } from './resume';
+import { startAt } from './resume';
 import { RATES, useTransport } from './useTransport';
 
 /**
@@ -12,7 +15,8 @@ import { RATES, useTransport } from './useTransport';
  * are both derived from it, so they can never drift apart.
  */
 export function DeckPane({
-  node, deck, audioSrc, stageTitle, onSelect, onEnded, build = 'pending',
+  node, deck, audioSrc, stageTitle, resumeAt, onSelect, onEnded, onProgress,
+  build = 'pending',
 }: {
   node: PathNode;
   deck: NodeDeck | undefined;
@@ -21,8 +25,17 @@ export function DeckPane({
   audioSrc: string;
   /** The path's own stage, shown in the slide's frame. Absent is fine. */
   stageTitle?: string;
+  /**
+   * Where the reader stopped last time. Applied once, to the station it names:
+   * a resumed station opens paused at that second instead of playing from the
+   * top, because being dropped into the middle of a sentence unannounced is
+   * worse than pressing play.
+   */
+  resumeAt?: Place;
   onSelect: (text: string) => void;
   onEnded: () => void;
+  /** Fires as the audio moves, so the caller can remember the position. */
+  onProgress?: (ms: number) => void;
 }): ReactElement {
   const audio = useRef<HTMLAudioElement>(null);
   const [ms, setMs] = useState(0);
@@ -34,14 +47,35 @@ export function DeckPane({
   // so a book generated before captions existed gets them without regenerating.
   const captions = useMemo(() => toCaptions(deck?.narration ?? []), [deck]);
 
+  // Read through a ref so a changing resume point cannot re-trigger the effect
+  // below: it is consumed once, on the station it belongs to.
+  const pending = useRef(resumeAt);
+
   // Restart from the top whenever the station changes — and only then
   useEffect(() => {
-    setMs(0);
     const el = audio.current;
-    if (!el) return;
-    el.currentTime = 0;
-    void el.play().catch(() => setPlaying(false));
-  }, [node.id]);
+    // Wait for the deck: consuming the resume point before there is audio to
+    // seek would spend it on nothing and start the station over.
+    if (!el || !deck) return;
+
+    const resumeMs = startAt(pending.current, node.id, deck.durationMs);
+    pending.current = undefined;
+    setMs(resumeMs);
+
+    if (resumeMs === 0) {
+      el.currentTime = 0;
+      void el.play().catch(() => setPlaying(false));
+      return;
+    }
+
+    // Resumed mid-station: seek, and leave it paused — being dropped into the
+    // middle of a sentence is worse than pressing play. A seek before the
+    // metadata arrives is ignored by the element, so wait for it if it is early.
+    const seekThere = (): void => { el.currentTime = resumeMs / 1000; };
+    if (el.readyState >= 1) { seekThere(); return; }
+    el.addEventListener('loadedmetadata', seekThere, { once: true });
+    return () => el.removeEventListener('loadedmetadata', seekThere);
+  }, [node.id, deck]);
 
   // A new src resets playbackRate, so reapply it without touching the position
   useEffect(() => {
@@ -76,6 +110,14 @@ export function DeckPane({
     ms,
   );
 
+  // Clicking the slide is the transport. A deck plays like a video, so the frame
+  // itself is the pause target; a 38px button below it was the wrong place to aim.
+  const toggleFromStage = (): void => {
+    // A drag that selects caption text ends in a click too — that is a quote, not a pause.
+    if (window.getSelection()?.toString().trim()) return;
+    transport.toggle();
+  };
+
   const seek = (to: number): void => {
     const el = audio.current;
     if (!el) return;
@@ -94,7 +136,14 @@ export function DeckPane({
         {/* The caption sits inside the frame, the way it would in a video: the
             deck is what is being watched, and a band below it pulled the eye
             off the slide every time the line changed. */}
-        <div className="slide-stage captioned">
+        <div
+          className="slide-stage captioned"
+          onClick={toggleFromStage}
+          role="button"
+          tabIndex={-1}
+          aria-label={playing ? '暂停' : '播放'}
+          title="点击画面暂停 / 播放"
+        >
           {slide && (
             <SlideView
               slide={slide}
@@ -116,14 +165,18 @@ export function DeckPane({
           >
             {caption && <p key={capIdx}>{caption.text}</p>}
           </div>
+          {/* Paused is the only state worth drawing: while it plays the slide
+              should be the whole picture. pointer-events off so the click that
+              resumes lands on the stage, not on the badge. */}
+          {!playing && (
+            <div className="stage-paused" aria-hidden="true">
+              <span className="stage-paused-disc"><PlayMark size={34} /></span>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="transport">
-        <button type="button" className="play" onClick={transport.toggle}>
-          {playing ? '❚❚' : '▶'}
-        </button>
-
         <input
           className="scrub" type="range" min={0} max={deck.durationMs} value={ms}
           onChange={(e) => seek(Number(e.target.value))}
@@ -159,7 +212,7 @@ export function DeckPane({
             onClick={() => setRateOpen((v) => !v)}
             title="选择倍速 · 长按 → 临时加速"
           >
-            {transport.boosting ? '▶▶' : `${transport.rate}×`}
+            {transport.boosting ? <FastMark /> : `${transport.rate}×`}
           </button>
         </div>
 
@@ -169,7 +222,11 @@ export function DeckPane({
       <audio
         ref={audio}
         src={audioSrc}
-        onTimeUpdate={(e) => setMs(Math.round(e.currentTarget.currentTime * 1000))}
+        onTimeUpdate={(e) => {
+          const at = Math.round(e.currentTarget.currentTime * 1000);
+          setMs(at);
+          onProgress?.(at);
+        }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={onEnded}
