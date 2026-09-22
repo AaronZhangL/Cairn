@@ -19,10 +19,18 @@ export interface Turn {
  * a blended answer would leave them unable to tell which claim came from where.
  */
 export function AskPane({
-  turns, onAsk, onSearchOutside, onJumpToChapter, collapsed = false,
+  turns, onAsk, onSearchOutside, onJumpToChapter, selection, onClearSelection,
+  collapsed = false,
 }: {
   turns: readonly Turn[];
   onAsk: (question: string) => void;
+  /**
+   * The line the next question is about — a caption picked up when the reader
+   * paused, or text they selected. It rides along with whatever they type, so
+   * pausing on a sentence is already half the question.
+   */
+  selection?: string;
+  onClearSelection?: () => void;
   onSearchOutside: (turnId: string) => void;
   onJumpToChapter: (chapter: number) => void;
   /** Collapsed panes keep their grid slot, or the columns would shift. */
@@ -35,10 +43,6 @@ export function AskPane({
   return (
     <aside className="pane ask-pane">
       <div className="ask-scroll">
-        {turns.length === 0 && (
-          <p className="ask-hint">划中字幕里的一段，或直接提问。</p>
-        )}
-
         {turns.map((turn) => (
           <div className="turn" key={turn.id}>
             {turn.selection && <blockquote className="sel">{turn.selection}</blockquote>}
@@ -59,6 +63,21 @@ export function AskPane({
           </div>
         ))}
       </div>
+
+      {selection && (
+        <div className="sel-pending">
+          <blockquote className="sel">{selection}</blockquote>
+          <button
+            type="button"
+            className="sel-drop"
+            onClick={onClearSelection}
+            aria-label="不带这句"
+            title="不带这句"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <form
         className="composer"

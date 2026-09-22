@@ -9,11 +9,24 @@ import type { ReactElement } from 'react';
  * shape is the same everywhere and its optical centre is ours to set.
  */
 
-/** A triangle's visual mass sits left of its bounding box, so the points lean right. */
+/**
+ * A triangle's visual mass sits left of its bounding box, so the points lean right.
+ *
+ * The corners are rounded by stroking the same path as it is filled: a sharp
+ * apex next to the pause bars' rounded ends read as two different families, and
+ * at this size the point was the sharpest thing on screen. The path is inset by
+ * half the stroke so the outer silhouette keeps its intended size.
+ */
 export function PlayMark({ size = 24 }: { size?: number }): ReactElement {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
-      <path d="M9 5.6 19.2 12 9 18.4Z" fill="currentColor" />
+      <path
+        d="M10 7.7 17.5 12 10 16.3Z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -28,12 +41,15 @@ export function PauseMark({ size = 24 }: { size?: number }): ReactElement {
   );
 }
 
-/** The boost state on the rate button: same lean, doubled. */
+/** The boost state on the rate button: same lean, same rounding, doubled. */
 export function FastMark({ size = 14 }: { size?: number }): ReactElement {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
-      <path d="M3.5 6 12 12 3.5 18Z" fill="currentColor" />
-      <path d="M12 6 20.5 12 12 18Z" fill="currentColor" />
+    <svg
+      viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false"
+      fill="currentColor" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round"
+    >
+      <path d="M4.7 7.7 10.8 12 4.7 16.3Z" />
+      <path d="M13.2 7.7 19.3 12 13.2 16.3Z" />
     </svg>
   );
 }

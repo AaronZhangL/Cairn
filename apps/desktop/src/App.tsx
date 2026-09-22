@@ -230,6 +230,7 @@ export function App(): ReactElement {
         stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
         resumeAt={place}
         onSelect={setSelection}
+        onPause={(caption) => setSelection((s) => s ?? caption)}
         onEnded={() => step(1)}
         onProgress={(ms) => resume.record(path.bookId, { nodeId: node.id, ms })}
       />
@@ -241,6 +242,8 @@ export function App(): ReactElement {
         onAsk={askQuestion}
         onSearchOutside={searchOutside}
         onJumpToChapter={() => undefined}
+        selection={selection}
+        onClearSelection={() => setSelection(undefined)}
         collapsed={right.state.collapsed}
       />
 

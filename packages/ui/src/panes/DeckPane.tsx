@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { toCaptions } from '@cairn/core/pipeline/caption';
 import type { NodeDeck, PathNode } from '@cairn/core/types';
 import { SlideView } from '../slides/SlideView';
-import { FastMark, PlayMark } from './icons';
+import { FastMark, PauseMark, PlayMark } from './icons';
 import { revealProgress } from '../slides/reveal';
 import type { Place } from './resume';
 import { startAt } from './resume';
@@ -15,7 +15,7 @@ import { RATES, useTransport } from './useTransport';
  * are both derived from it, so they can never drift apart.
  */
 export function DeckPane({
-  node, deck, audioSrc, stageTitle, resumeAt, onSelect, onEnded, onProgress,
+  node, deck, audioSrc, stageTitle, resumeAt, onSelect, onPause, onEnded, onProgress,
   build = 'pending',
 }: {
   node: PathNode;
@@ -33,6 +33,13 @@ export function DeckPane({
    */
   resumeAt?: Place;
   onSelect: (text: string) => void;
+  /**
+   * Fires when the reader pauses, carrying the line that was on screen. Pausing
+   * is nearly always "wait, what does this mean" — so the current caption is
+   * what the question is about, and the ask pane can offer it without the
+   * reader re-selecting a line they just heard.
+   */
+  onPause?: (caption: string | undefined) => void;
   onEnded: () => void;
   /** Fires as the audio moves, so the caller can remember the position. */
   onProgress?: (ms: number) => void;
@@ -46,6 +53,10 @@ export function DeckPane({
   // Clause-level lines, derived from the sentence cues the deck already carries,
   // so a book generated before captions existed gets them without regenerating.
   const captions = useMemo(() => toCaptions(deck?.narration ?? []), [deck]);
+
+  // The line on screen, readable from the audio element's own handlers. They
+  // are attached once, so they would otherwise close over the first caption.
+  const captionRef = useRef<string | undefined>(undefined);
 
   // Read through a ref so a changing resume point cannot re-trigger the effect
   // below: it is consumed once, on the station it belongs to.
@@ -99,6 +110,7 @@ export function DeckPane({
   const capIdx = lastIndexAtOrBefore(captions.map((c) => c.startMs), ms);
   const slide = deck.slides[slideIdx];
   const caption = captions[capIdx];
+  captionRef.current = caption?.text;
 
   // How far the voice has moved through this slide's own span. Layouts that
   // build use it to reveal in step; derived from audio time like everything
@@ -170,13 +182,26 @@ export function DeckPane({
               resumes lands on the stage, not on the badge. */}
           {!playing && (
             <div className="stage-paused" aria-hidden="true">
-              <span className="stage-paused-disc"><PlayMark size={34} /></span>
+              <span className="stage-paused-disc"><PlayMark size={38} /></span>
             </div>
           )}
         </div>
       </div>
 
       <div className="transport">
+        {/* The stage is the main pause target, but the button stays: it is the
+            only place the transport state is visible while the deck plays, and
+            a reader reaching for the scrub bar expects it next to it. */}
+        <button
+          type="button"
+          className="play"
+          onClick={transport.toggle}
+          aria-label={playing ? '暂停' : '播放'}
+          title={playing ? '暂停' : '播放'}
+        >
+          {playing ? <PauseMark size={21} /> : <PlayMark size={21} />}
+        </button>
+
         <input
           className="scrub" type="range" min={0} max={deck.durationMs} value={ms}
           onChange={(e) => seek(Number(e.target.value))}
@@ -228,7 +253,10 @@ export function DeckPane({
           onProgress?.(at);
         }}
         onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPause={() => {
+          setPlaying(false);
+          onPause?.(captionRef.current);
+        }}
         onEnded={onEnded}
       />
     </main>
