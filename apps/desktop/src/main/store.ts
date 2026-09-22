@@ -1,9 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { bookFile } from '@vibe/core/store/library';
-import type { Chapter, ChapterNote, Path } from '@vibe/core/types';
+import { bookFile } from '@cairn/core/store/library';
+import type { Chapter, ChapterNote, Path } from '@cairn/core/types';
+import { library } from './library';
 
-export const DATA_DIR = process.env.VIBE_DATA_DIR ?? join(process.cwd(), 'public');
+/**
+ * Never cwd-derived: the app starts inside its own bundle, so `process.cwd()`
+ * pointed at `Cairn.app/Contents/MacOS` and every generated book landed
+ * somewhere the webview could not read and the next build deleted.
+ */
+export const DATA_DIR = library().dir;
 
 const cache = new Map<string, unknown>();
 

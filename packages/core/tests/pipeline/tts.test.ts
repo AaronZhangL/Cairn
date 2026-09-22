@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { alignSentences, parseSrt } from '../../src/pipeline/tts';
+import { alignSentences, candidateDirs, findEdgeTts, parseSrt } from '../../src/pipeline/tts';
 
 const SRT = `1
 00:00:00,100 --> 00:00:05,937
@@ -85,5 +85,25 @@ describe('语速常数', () => {
     const { targetChars, estimateMs } = await import('../../src/pipeline/tts');
     const ms = estimateMs('甲'.repeat(targetChars(3)));
     expect(ms / 1000 / 60).toBeCloseTo(3, 1);
+  });
+});
+
+describe('edge-tts discovery', () => {
+  test('looks beyond PATH, where a pip-installed tool actually lands', () => {
+    const dirs = candidateDirs('/Users/x');
+    expect(dirs).toContain('/Users/x/.local/bin');
+    expect(dirs).toContain('/opt/homebrew/bin');
+    expect(dirs).toContain('/Users/x/.pyenv/shims');
+  });
+
+  test('an explicit override wins over discovery', async () => {
+    const before = process.env.CAIRN_EDGE_TTS;
+    process.env.CAIRN_EDGE_TTS = '/custom/edge-tts';
+    try {
+      expect(await findEdgeTts()).toBe('/custom/edge-tts');
+    } finally {
+      if (before === undefined) delete process.env.CAIRN_EDGE_TTS;
+      else process.env.CAIRN_EDGE_TTS = before;
+    }
   });
 });

@@ -1,4 +1,4 @@
-import type { BudgetId } from '@vibe/core/pipeline/budget';
+import type { BudgetId } from '@cairn/core/pipeline/budget';
 
 /** Parse-only summary shown before any model call, so the budget choice is informed. */
 export interface BookPreview {

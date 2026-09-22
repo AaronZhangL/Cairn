@@ -1,5 +1,5 @@
 {
-  "name": "@vibe/desktop",
+  "name": "@cairn/desktop",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "package": "electrobun prepare && vite build && electrobun build --env=stable"
   },
   "dependencies": {
-    "@vibe/core": "workspace:*",
-    "@vibe/ui": "workspace:*",
+    "@cairn/core": "workspace:*",
+    "@cairn/ui": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "electrobun": "^2.0.1"

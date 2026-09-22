@@ -1,7 +1,7 @@
 import {useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Answer } from '@vibe/core/pipeline/ask';
-import type { OutsideAnswer } from '@vibe/core/pipeline/ask-outside';
+import type { Answer } from '@cairn/core/pipeline/ask';
+import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 
 export interface Turn {
   readonly id: string;
@@ -19,14 +19,18 @@ export interface Turn {
  * a blended answer would leave them unable to tell which claim came from where.
  */
 export function AskPane({
-  turns, onAsk, onSearchOutside, onJumpToChapter,
+  turns, onAsk, onSearchOutside, onJumpToChapter, collapsed = false,
 }: {
   turns: readonly Turn[];
   onAsk: (question: string) => void;
   onSearchOutside: (turnId: string) => void;
   onJumpToChapter: (chapter: number) => void;
+  /** Collapsed panes keep their grid slot, or the columns would shift. */
+  collapsed?: boolean;
 }): ReactElement {
   const [draft, setDraft] = useState('');
+
+  if (collapsed) return <aside className="pane ask-pane collapsed" />;
 
   return (
     <aside className="pane ask-pane">

@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { BudgetId } from '@vibe/core/pipeline/budget';
-import type { LibraryEntry } from '@vibe/core/store/library';
-import { generateBook, onProgress, pickBook } from './bridge';
+import type { BudgetId } from '@cairn/core/pipeline/budget';
+import type { LibraryEntry } from '@cairn/core/store/library';
+import { generateBook, onProgress, pickBook, progressNow } from './bridge';
 import type { BookPreview, Progress } from './shared/types';
+
+/** Slow enough to be free, fast enough that a finished batch shows up promptly. */
+const POLL_MS = 1500;
 
 const STAGE_LABEL: Record<Progress['stage'], string> = {
   map: '逐章压缩',
@@ -28,23 +31,44 @@ export function AddBook({
 }): ReactElement {
   const [preview, setPreview] = useState<BookPreview>();
   const [progress, setProgress] = useState<Progress>();
+  const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string>();
+  /** The native dialog is not idempotent: opening it twice stacks two windows. */
+  const picked = useRef(false);
+
+  const polling = progress !== undefined && progress.stage !== 'done';
 
   useEffect(() => onProgress(setProgress), []);
 
+  // A run takes minutes; one dropped message would freeze the bar for all of it
   useEffect(() => {
-    if (autoPick) void pick();
-    // Mount only: re-picking on every render would reopen the native dialog
+    if (!polling) return;
+    const timer = setInterval(() => {
+      void progressNow().then((p) => { if (p) setProgress(p); });
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [polling]);
+
+  useEffect(() => {
+    // Mount only, and only once: StrictMode runs mount effects twice in dev, and
+    // a second openFileDialog puts a second native window over the first.
+    if (!autoPick || picked.current) return;
+    picked.current = true;
+    void pick();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pick = async (): Promise<void> => {
     setError(undefined);
+    setParsing(true);
     try {
-      const picked = await pickBook();
-      if (picked) setPreview(picked);
+      const chosen = await pickBook();
+      // Cancelling the dialog is not an error; close rather than sit on a dead screen
+      if (chosen) setPreview(chosen); else if (autoPick) onClose();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -68,8 +92,13 @@ export function AddBook({
         {!preview && !running && (
           <>
             <h2>添加一本书</h2>
-            <p className="modal-sub">支持 EPUB / TXT / Markdown。书不会离开这台机器。</p>
-            <button type="button" className="primary" onClick={pick}>选择文件…</button>
+            <p className="modal-sub">
+              {/* A 14 MB EPUB takes a moment to parse, and a frozen dialog looks broken */}
+              {parsing ? '正在读这本书…' : '支持 EPUB / TXT / Markdown。书不会离开这台机器。'}
+            </p>
+            <button type="button" className="primary" onClick={pick} disabled={parsing}>
+              {parsing ? '读取中…' : '选择文件…'}
+            </button>
           </>
         )}
 

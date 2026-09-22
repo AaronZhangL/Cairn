@@ -8,7 +8,8 @@
  * Not the browser's SpeechSynthesis: its voice varies by operating system, so
  * the same deck would sound different on different machines.
  */
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { readdir, mkdir, readFile, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { DraftDeck, NarrationCue, NodeDeck, Slide } from '../types';
 
@@ -30,6 +31,69 @@ export function targetChars(minutes: number): number {
 /** Predicted duration before synthesis, for progress display. */
 export function estimateMs(text: string): number {
   return Math.round((text.length / CHARS_PER_SECOND) * 1000);
+}
+
+/**
+ * Where to look for the `edge-tts` binary.
+ *
+ * PATH alone is not enough: a GUI-launched app inherits a minimal environment,
+ * and a pip-installed tool usually sits in a version manager's directory that
+ * only an interactive shell puts on PATH. Getting this wrong is expensive in a
+ * way that is not obvious — synthesis runs *after* the slides call, so every
+ * missing binary costs a model call per attempt before it fails.
+ */
+export function candidateDirs(home = homedir()): readonly string[] {
+  return [
+    join(home, '.local', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    join(home, '.pyenv', 'shims'),
+  ];
+}
+
+let resolved: string | undefined;
+
+/** The binary to spawn, or nothing when it is not installed anywhere we look. */
+export async function findEdgeTts(): Promise<string | undefined> {
+  if (resolved) return resolved;
+
+  const override = process.env.CAIRN_EDGE_TTS;
+  if (override) return (resolved = override);
+
+  const onPath = Bun.which('edge-tts');
+  if (onPath) return (resolved = onPath);
+
+  for (const dir of [...candidateDirs(), ...(await pyenvBinDirs())]) {
+    const candidate = join(dir, 'edge-tts');
+    if (await Bun.file(candidate).exists()) return (resolved = candidate);
+  }
+  return undefined;
+}
+
+/** Every pyenv version's bin, because the tool may not be in the active one. */
+async function pyenvBinDirs(home = homedir()): Promise<readonly string[]> {
+  const versions = join(home, '.pyenv', 'versions');
+  try {
+    const entries = await readdir(versions);
+    return entries.map((v) => join(versions, v, 'bin'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Checked before the first model call, not at synthesis time.
+ *
+ * A run that cannot speak is worth nothing, and finding that out one station at
+ * a time means paying for the whole book first.
+ */
+export async function ensureEdgeTts(): Promise<string> {
+  const found = await findEdgeTts();
+  if (found) return found;
+  throw new Error(
+    '找不到 edge-tts，无法合成旁白。装一个（pip install edge-tts）'
+    + '，或把可执行文件路径写进 CAIRN_EDGE_TTS 环境变量。',
+  );
 }
 
 export interface TtsOptions {
@@ -75,7 +139,7 @@ async function runEdgeTts(
   options: TtsOptions,
 ): Promise<void> {
   const child = Bun.spawn(
-    ['edge-tts', '--voice', options.voice ?? DEFAULT_VOICE,
+    [await ensureEdgeTts(), '--voice', options.voice ?? DEFAULT_VOICE,
      '--write-media', audioPath, '--write-subtitles', srtPath, '--text', text],
     { stdout: 'ignore', stderr: 'pipe' },
   );

@@ -15,8 +15,8 @@ export default defineConfig({
       // The npm `electrobun` package is only a bootstrap and throws on import.
       // The real SDK is the devkit Hutch projects into .hutch/devkit.
       ...electrobunViteAliases(resolve(here, '.hutch/devkit')),
-      { find: '@vibe/ui', replacement: resolve(here, '../../packages/ui/src') },
-      { find: /^@vibe\/core\/(.*)$/, replacement: resolve(here, '../../packages/core/src') + '/$1' },
+      { find: '@cairn/ui', replacement: resolve(here, '../../packages/ui/src') },
+      { find: /^@cairn\/core\/(.*)$/, replacement: resolve(here, '../../packages/core/src') + '/$1' },
     ],
   },
   server: { port: 5173, strictPort: true },

@@ -1,7 +1,7 @@
 import type { ElectrobunConfig } from 'electrobun';
 
 export default {
-  app: { name: 'Vibe Reading', identifier: 'reading.vibe.dev', version: '0.0.1' },
+  app: { name: 'Cairn', identifier: 'dev.cairn.app', version: '0.0.1' },
   build: {
     mainProcess: 'cottontail',
     cottontail: { entrypoint: 'src/main/index.ts' },
@@ -12,6 +12,8 @@ export default {
       'public': 'views/mainview',
     },
     watchIgnore: ['dist/**'],
-    mac: { bundleCEF: false },
+    // `icons` is the default path, named here because it is generated:
+    // scripts/make-iconset.py rebuilds it from icon.src.png.
+    mac: { bundleCEF: false, icons: 'icon.iconset' },
   },
 } satisfies ElectrobunConfig;

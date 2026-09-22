@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import { ACCEPTED_EXTENSIONS } from '@vibe/core/parse';
-import type { LibraryEntry } from '@vibe/core/store/library';
+import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
+import type { LibraryEntry } from '@cairn/core/store/library';
 import { inShell } from './bridge';
 
 /**
@@ -20,7 +20,7 @@ export function Home({
   return (
     <div className="home">
       <header className="home-head">
-        <h1>Vibe Reading</h1>
+        <h1>Cairn</h1>
         <p>把一本你已经有的电子书，变成一条可以走到头的路。</p>
       </header>
 

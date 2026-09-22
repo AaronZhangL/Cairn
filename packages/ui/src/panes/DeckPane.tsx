@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { toCaptions } from '@vibe/core/pipeline/caption';
-import type { NodeDeck, PathNode } from '@vibe/core/types';
+import { toCaptions } from '@cairn/core/pipeline/caption';
+import type { NodeDeck, PathNode } from '@cairn/core/types';
 import { SlideView } from '../slides/SlideView';
 import { RATES, useTransport } from './useTransport';
 

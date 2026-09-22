@@ -30,7 +30,7 @@ export function codexCliProvider(options: CodexOptions = {}): LlmProvider {
     overheadTokens: 18_000,
 
     async complete(request: LlmRequest): Promise<string> {
-      const dir = await mkdtemp(join(tmpdir(), 'vibe-codex-'));
+      const dir = await mkdtemp(join(tmpdir(), 'cairn-codex-'));
       const outPath = join(dir, 'out.txt');
 
       try {

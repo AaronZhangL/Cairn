@@ -11,24 +11,114 @@ body {
   overflow: hidden;
 }
 
-.shell { display: grid; grid-template-columns: 264px 1fr 340px; height: 100vh; }
+.shell { position: relative; display: grid; grid-template-columns: 264px 1px 1fr 1px 340px; height: 100vh; }
 .pane { min-width: 0; overflow-y: auto; }
+/* A collapsed pane keeps its grid slot: removing the element would slide every
+   later column one place to the left. */
+.pane.collapsed { overflow: hidden; }
 
-/* ---- left ---- */
+/* ---- splitters ---- */
+
+/* One pixel, the same colour as every other divider. The grab area is a
+   transparent overlay, because widening the line to catch the pointer is what
+   made it look like a toolbar. */
+.splitter {
+  position: relative;
+  background: var(--line);
+  cursor: col-resize;
+  z-index: 4;
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 11px;
+  transform: translateX(-50%);
+}
+.splitter:hover { background: var(--dim); }
+.splitter.dragging { background: var(--accent); }
+
+/* ---- sidebar switches ---- */
+
+/* One placement, never two. An inline copy for the open state and a pinned copy
+   for the folded one had to agree on a pixel by hand, and they did not — the
+   icon shifted every time a pane folded. The switch is pinned to a point in the
+   window and the panes make room for it, so folding one cannot move it.
+   `--head-*` are shared with the pane header below: the switch sits exactly on
+   that row rather than guessing where it is. */
+.shell { --head-pad: 14px; --head-row: 24px; --head-x: 18px; }
+
+.panel-toggle {
+  position: absolute;
+  top: var(--head-pad);
+  z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+  width: var(--head-row); height: var(--head-row); padding: 0; cursor: pointer;
+  border: 1px solid transparent; border-radius: 6px;
+  background: none; color: var(--dim);
+  opacity: .75;
+  transition: opacity .12s ease, color .12s ease;
+}
+.panel-toggle.left { left: var(--head-x); }
+.panel-toggle.right { right: var(--head-x); }
+.panel-toggle:hover { opacity: 1; color: var(--ink); background: var(--soft); border-color: var(--line); }
+.panel-toggle.off { opacity: 1; }
+
+/* A folded pane hands its corner to the deck, which then needs room for it */
+.shell.left-off .deck-head { padding-left: 22px; }
+.shell.right-off .deck-head { padding-right: 22px; }
+
 .stage-pane { background: var(--panel); border-right: 1px solid var(--line); padding-bottom: 24px; }
-.stage-head { padding: 16px 14px 13px 18px; border-bottom: 1px solid var(--line); }
-.stage-head-row { display: flex; align-items: center; gap: 8px; }
-.stage-title { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; }
+/* padding-left clears the pinned switch: --head-x + the switch + a gap. */
+.stage-head {
+  padding: var(--head-pad) 14px 13px calc(var(--head-x) + var(--head-row) + 8px);
+  border-bottom: 1px solid var(--line);
+}
+.stage-head-row { display: flex; align-items: center; gap: 8px; height: var(--head-row); }
+/* ---- book switcher ---- */
 
-.book-switch {
-  flex: 1; min-width: 0; font: inherit; font-size: 14px; font-weight: 700;
-  border: 0; background: none; color: var(--ink); cursor: pointer; padding: 0;
+.book-menu-wrap { position: relative; flex: 1; min-width: 0; }
+
+/* The title is the trigger, so it carries no button chrome until hovered. */
+.book-trigger {
+  display: flex; align-items: center; gap: 5px; width: 100%;
+  font: inherit; font-size: 15px; font-weight: 700; color: var(--ink);
+  background: none; border: 0; border-radius: 5px; cursor: pointer;
+  text-align: left; margin-left: -4px;
+  /* 20 + 2*2 = the row's 24px: a taller trigger would push the row past the
+     switch it is meant to line up with. */
+  line-height: 20px; padding: 2px 4px;
 }
-.add-book {
-  flex: 0 0 auto; width: 26px; height: 26px; font-size: 16px; line-height: 1; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--dim);
+.book-trigger:hover { background: #8080801a; }
+.book-trigger.open { background: #80808026; }
+.book-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-chev { flex: 0 0 auto; color: var(--dim); font-size: 10px; }
+
+/* Floating, so the station list underneath never moves when a book is picked. */
+.book-menu {
+  position: absolute; left: -6px; right: -6px; top: calc(100% + 6px); z-index: 30;
+  padding: 5px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--card); box-shadow: 0 10px 28px #00000045;
 }
-.add-book:hover { border-color: var(--accent); color: var(--accent); }
+.book-list { max-height: min(320px, 46vh); overflow-y: auto; }
+.book-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  font: inherit; font-size: 13px; color: var(--ink); text-align: left;
+  background: none; border: 0; border-radius: 6px; padding: 7px 9px; cursor: pointer;
+}
+/* One highlight for both hover and the arrow keys, so they cannot disagree */
+.book-item.active { background: var(--soft); }
+.book-item.on { font-weight: 600; }
+.book-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.book-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-item-meta { font-size: 11px; color: var(--dim); margin-top: 1px; }
+.book-check {
+  flex: 0 0 12px; font-size: 11px; color: var(--accent); text-align: center;
+}
+.book-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.book-item.action { color: var(--accent); font-weight: 600; }
+.book-item.quiet { color: var(--dim); }
 
 .shell.empty { display: flex; align-items: center; justify-content: center; }
 .shell.empty .deck-empty { display: flex; flex-direction: column; gap: 16px; align-items: center; }
@@ -128,7 +218,7 @@ body {
 
 /* ---- centre ---- */
 .deck-pane { display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 22px; overflow: hidden; }
-.deck-head { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
+.deck-head { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .deck-kicker { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
 .deck-title { font-size: 16px; font-weight: 600; }
 .deck-empty { margin: auto; color: var(--dim); }
@@ -178,7 +268,12 @@ body {
 
 /* ---- right ---- */
 .ask-pane { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
-.ask-scroll { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 18px; }
+/* padding-top clears the corner switch, using the same values it is pinned by */
+.ask-scroll {
+  flex: 1; overflow-y: auto;
+  padding: calc(var(--head-pad) + var(--head-row) + 8px) 16px 18px;
+  display: flex; flex-direction: column; gap: 18px;
+}
 .ask-hint { color: var(--dim); font-size: 13px; }
 
 .sel { border-left: 2px solid var(--accent); padding: 4px 0 4px 9px; font-size: 12.5px; color: var(--dim); margin-bottom: 7px; }

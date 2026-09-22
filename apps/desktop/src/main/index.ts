@@ -7,7 +7,8 @@
  */
 import { BrowserView, BrowserWindow, Updater } from 'electrobun/main';
 import { handlers, onProgress } from './rpc';
-import type { VibeRPC } from '../shared/schema';
+import { installMenu } from './menu';
+import type { CairnRPC } from '../shared/schema';
 
 const DEV_SERVER = 'http://localhost:5173';
 
@@ -21,10 +22,13 @@ async function viewUrl(): Promise<string> {
   }
 }
 
-const rpc = BrowserView.defineRPC<VibeRPC>({ handlers: { requests: handlers, messages: {} } });
+// Without an application menu macOS has nowhere to route ⌘C / ⌘V / ⌘A
+installMenu();
+
+const rpc = BrowserView.defineRPC<CairnRPC>({ handlers: { requests: handlers, messages: {} } });
 
 const win = new BrowserWindow({
-  title: 'Vibe Reading',
+  title: 'Cairn',
   url: await viewUrl(),
   frame: { width: 1400, height: 900, x: 80, y: 60 },
   rpc,

@@ -1,4 +1,4 @@
-# Vibe Reading — 产品 Spec
+# Cairn — 产品 Spec
 
 2026-09-21 · 取代 [PRD-v0.md](./PRD-v0.md) 作为当前产品定义
 

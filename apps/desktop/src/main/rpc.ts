@@ -6,15 +6,16 @@
  * would let the model decide to leave the book on its own.
  */
 import { openFileDialog } from 'electrobun/main/utils';
-import { askAnchored, askBook, noteIndexLocator } from '@vibe/core/pipeline/ask';
-import { askOutside as askWeb } from '@vibe/core/pipeline/ask-outside';
-import { codexCliProvider } from '@vibe/core/llm';
-import { ACCEPTED_EXTENSIONS } from '@vibe/core/parse';
-import type { Answer } from '@vibe/core/pipeline/ask';
-import type { OutsideAnswer } from '@vibe/core/pipeline/ask-outside';
-import type { BudgetId } from '@vibe/core/pipeline/budget';
-import type { LibraryEntry } from '@vibe/core/store/library';
+import { askAnchored, askBook, noteIndexLocator } from '@cairn/core/pipeline/ask';
+import { askOutside as askWeb } from '@cairn/core/pipeline/ask-outside';
+import { codexCliProvider } from '@cairn/core/llm';
+import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
+import type { Answer } from '@cairn/core/pipeline/ask';
+import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
+import type { BudgetId } from '@cairn/core/pipeline/budget';
+import type { LibraryEntry } from '@cairn/core/store/library';
 import { tavily } from './tavily';
+import { library } from './library';
 import { loadChapter, loadNotes, loadPath } from './store';
 import type { BookPreview, Progress } from '../shared/types';
 import { generate, inspect } from './generate';
@@ -27,7 +28,26 @@ export function onProgress(fn: (p: Progress) => void): void {
   emitProgress = fn;
 }
 
+/**
+ * The last progress of the run in flight.
+ *
+ * Pushed messages are the fast path, but they are fire-and-forget: a reloaded
+ * window, or a dropped message, leaves the modal frozen for the rest of a run
+ * that takes minutes. Keeping the value here lets the window ask instead.
+ */
+let latest: Progress | undefined;
+
 export const handlers = {
+  /** Where the webview reads generated books from. Token included; do not log it. */
+  async libraryBase(): Promise<string> {
+    return library().base;
+  },
+
+  /** Where the run in flight has got to, or nothing when none is running. */
+  async progressNow(): Promise<Progress | null> {
+    return latest ?? null;
+  },
+
   /** Native picker, then a parse-only preview so the budget choice is informed. */
   async pickBook(): Promise<BookPreview | null> {
     const [picked] = await openFileDialog({
@@ -39,7 +59,15 @@ export const handlers = {
   },
 
   async generateBook(params: { filePath: string; budgetId: BudgetId }): Promise<LibraryEntry> {
-    return generate(params.filePath, params.budgetId, emitProgress);
+    latest = { stage: 'map', done: 0, total: 1 };
+    try {
+      return await generate(params.filePath, params.budgetId, (p) => {
+        latest = p;
+        emitProgress(p);
+      });
+    } finally {
+      latest = undefined;
+    }
   },
 
   async ask(params: {

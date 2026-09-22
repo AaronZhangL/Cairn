@@ -14,14 +14,17 @@ import { mapChapters } from '../packages/core/src/pipeline/map';
 import { classifyBook } from '../packages/core/src/pipeline/classify';
 import { reduceToPath } from '../packages/core/src/pipeline/reduce';
 import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
+import { ensureEdgeTts } from '../packages/core/src/pipeline/tts';
 import { BUDGETS, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
 import { fileStore } from '../packages/core/src/store/file-store';
 import { codexCliProvider } from '../packages/core/src/llm/providers/codex-cli';
 import { bookSlug, LIBRARY_INDEX, type LibraryEntry } from '../packages/core/src/store/library';
+import { libraryDir } from '../apps/desktop/src/main/library';
 import type { ChapterNote, NodeDeck, Path } from '../packages/core/src/types';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const PUBLIC = join(ROOT, 'apps/desktop/public');
+/** The same library the app reads, so a book added here shows up there. */
+const LIBRARY = libraryDir();
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -47,6 +50,9 @@ async function main(): Promise<void> {
     console.log(`  ${mark} ${c.honest ? '  ' : '⚠ '}${c.budget.label}${c.note ? `\n        ${c.note}` : ''}`);
   }
   console.log(`\n使用：${budget.label}\n`);
+
+  // Fail before spending anything if the narration cannot be synthesized
+  await ensureEdgeTts();
 
   const provider = codexCliProvider();
 
@@ -90,7 +96,7 @@ async function main(): Promise<void> {
   );
 
   console.log(`\n真实总时长 ${built.totalMinutes} 分钟（预估 ${path.totalMinutes}）`);
-  console.log(`已装载到应用。运行 \`cd apps/desktop && bun run dev\` 查看。`);
+  console.log(`已装载到 ${LIBRARY}。运行 \`cd apps/desktop && bun run start\` 查看。`);
 }
 
 /** One directory per book, plus an index the app reads at startup. */
@@ -103,7 +109,7 @@ async function install(
   budgetId: string,
   author?: string,
 ): Promise<void> {
-  const dir = join(PUBLIC, 'books', path.bookId);
+  const dir = join(LIBRARY, 'books', path.bookId);
   await rm(dir, { recursive: true, force: true });
   await mkdir(join(dir, 'audio'), { recursive: true });
 
@@ -123,7 +129,7 @@ async function install(
     stations: path.nodes.length, minutes: path.totalMinutes,
     budgetId, generatedAt: path.generatedAt,
   };
-  const indexPath = join(PUBLIC, LIBRARY_INDEX);
+  const indexPath = join(LIBRARY, LIBRARY_INDEX);
   const existing = await Bun.file(indexPath).json().catch(() => []) as LibraryEntry[];
   await writeFile(indexPath, JSON.stringify([entry, ...existing.filter((b) => b.id !== entry.id)]));
 }

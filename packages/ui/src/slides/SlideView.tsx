@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { Slide } from '@vibe/core/types';
+import type { Slide } from '@cairn/core/types';
 import './slide.css';
 
 /**

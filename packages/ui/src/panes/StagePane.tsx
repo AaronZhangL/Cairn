@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
-import type { NodeDeck, Path, PathNode } from '@vibe/core/types';
-import type { LibraryEntry } from '@vibe/core/store/library';
+import type { NodeDeck, Path, PathNode } from '@cairn/core/types';
+import type { LibraryEntry } from '@cairn/core/store/library';
+import { BookMenu } from './BookMenu';
 
 /**
  * Left pane: stages and their stations.
@@ -8,6 +9,7 @@ import type { LibraryEntry } from '@vibe/core/store/library';
  */
 export function StagePane({
   path, decks, currentId, onPick, books = [], onSwitchBook, onAdd, onHome,
+  collapsed = false,
 }: {
   path: Path;
   decks: ReadonlyMap<string, NodeDeck>;
@@ -19,37 +21,28 @@ export function StagePane({
   onAdd?: () => void;
   /** Back to the shelf. */
   onHome?: () => void;
+  /** Collapsed panes keep their grid slot, or the columns would shift. */
+  collapsed?: boolean;
 }): ReactElement {
+  if (collapsed) return <nav className="pane stage-pane collapsed" />;
+
   const byId = new Map(path.nodes.map((n) => [n.id, n]));
   const currentIdx = byId.get(currentId)?.idx ?? 0;
 
   return (
     <nav className="pane stage-pane">
       <header className="stage-head">
+        {/* The fold switch is pinned to the window corner over this row's left
+            padding, so folding the pane cannot move it. */}
         <div className="stage-head-row">
-          {onHome && (
-            <button type="button" className="add-book" onClick={onHome} title="返回书架">
-              ‹
-            </button>
-          )}
-          {books.length > 1 && onSwitchBook ? (
-            <select
-              className="book-switch"
-              value={path.bookId}
-              onChange={(e) => onSwitchBook(e.target.value)}
-            >
-              {books.map((b) => (
-                <option key={b.id} value={b.id}>{b.title}</option>
-              ))}
-            </select>
-          ) : (
-            <div className="stage-title">{path.title}</div>
-          )}
-          {onAdd && (
-            <button type="button" className="add-book" onClick={onAdd} title="添加一本书">
-              ＋
-            </button>
-          )}
+          <BookMenu
+            title={path.title}
+            books={books}
+            currentId={path.bookId}
+            onSwitch={onSwitchBook}
+            onAdd={onAdd}
+            onHome={onHome}
+          />
         </div>
         <div className="stage-meta">
           {path.nodes.length} 站 · 约 {path.totalMinutes} 分钟

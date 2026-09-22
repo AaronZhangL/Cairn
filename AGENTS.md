@@ -1,4 +1,4 @@
-# Vibe Reading
+# Cairn
 
 Turn an ebook you already own into a path you can walk to the end.
 
@@ -53,6 +53,11 @@ These are load-bearing. Breaking one silently undoes a decision that took real w
    that only runs when the user has answered "yes, go look it up" (`pipeline/ask-outside.ts`).
    Book content is never sent to the search API — only the user's question.
 
+   One local exception, added deliberately: the main process serves the library over
+   `127.0.0.1` on a random port behind a per-launch token (`main/library.ts`), because
+   `<audio>` needs a URL it can range-request. It binds loopback only, answers GET only,
+   and exposes one directory. Nothing is reachable from outside the machine.
+
 2. **The reading budget is the constraint; the node count is the result.** The user picks a
    budget (10 min / 30 min / 1 h / 2 h) and `budget.ts` derives station count and coverage from
    it. A tighter budget drops whole stations rather than making each one shallower — a station
@@ -82,7 +87,8 @@ These are load-bearing. Breaking one silently undoes a decision that took real w
 ## Out of scope
 
 PDF parsing · MP4 rendering · image generation · spaced repetition · user accounts · telemetry ·
-any server component at all.
+any *networked* server component. (The loopback file server in invariant 1 is the only
+process that listens, and only on 127.0.0.1.)
 
 Novels are **in** scope. They were previously deferred only because mixing them with knowledge
 books would have blurred the completion-rate experiment. With no experiment, the narrative
@@ -128,7 +134,7 @@ bun run typecheck         # tsc --noEmit, strict
   clean typechecks.
 - **Done** — `packages/ui`: six slide layouts and the three panes.
 - **Done** — `apps/desktop`: Electrobun shell, RPC bridge, Tavily search, and a
-  `Vibe Reading-dev.app` that builds and runs.
+  `Cairn-dev.app` that builds and runs.
 - **Verified end to end** on Pro Git zh (13.9 MB EPUB, 201k words, 86 chapters):
   at the 10-minute budget, 4 stations / 1 stage / 13 minutes of real narrated audio;
   at 1 hour, 18 stations / 5 stages / 70 minutes. Zero fabricated chapter references.
@@ -149,8 +155,14 @@ bun run package # a distributable .app
 `TAVILY_API_KEY` in the environment. `bun run dev` needs neither and says so in
 the answer pane rather than faking a reply.
 
-Generating a path for a new book is not yet wired to a UI; the pipeline is driven
-from scripts while the shape of that flow is still settling.
+Adding a book is wired to the UI: the app opens on a shelf with a drop zone, and
+picking a file gives a parse-only preview (title, chapters, words) before any
+model call, then a budget choice, then the run. `bun run add-book <file>` drives
+the same pipeline from the terminal.
+
+Generated books live in `~/Library/Application Support/Cairn/` — never
+beside the app, whose cwd is inside its own bundle and is rebuilt on every
+`electrobun dev`. `CAIRN_DATA_DIR` overrides it.
 
 ### Chosen dependencies
 

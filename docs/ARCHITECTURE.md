@@ -1,4 +1,4 @@
-# Vibe Reading — v0 架构
+# Cairn — v0 架构
 
 2026-09-21 · 实现形态：桌面优先的 Web 应用，后续以 Electrobun 打包 Mac / Windows 桌面端
 

@@ -1,4 +1,4 @@
-import type { SearchResult, WebSearch } from '@vibe/core/pipeline/ask-outside';
+import type { SearchResult, WebSearch } from '@cairn/core/pipeline/ask-outside';
 
 const ENDPOINT = 'https://api.tavily.com/search';
 

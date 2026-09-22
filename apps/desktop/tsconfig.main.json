@@ -155,7 +155,7 @@
       "electrobun/browser/ui/jsx-dev-runtime": [
         "./.hutch/devkit/api/browser/ui/jsx-dev-runtime.ts"
       ],
-      "@vibe/core/*": [
+      "@cairn/core/*": [
         "../../packages/core/src/*"
       ]
     }

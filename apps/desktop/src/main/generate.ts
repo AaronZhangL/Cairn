@@ -7,16 +7,17 @@
  */
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { parseBook } from '@vibe/core/parse';
-import { mapChapters } from '@vibe/core/pipeline/map';
-import { classifyBook } from '@vibe/core/pipeline/classify';
-import { reduceToPath } from '@vibe/core/pipeline/reduce';
-import { buildDecks, withRealDuration } from '@vibe/core/pipeline/build';
-import { BUDGETS, suggestBudgets, type BudgetId } from '@vibe/core/pipeline/budget';
-import { fileStore } from '@vibe/core/store/file-store';
-import { bookSlug, LIBRARY_INDEX, type LibraryEntry } from '@vibe/core/store/library';
-import { codexCliProvider } from '@vibe/core/llm';
-import type { ChapterNote, NodeDeck, ParsedBook, Path } from '@vibe/core/types';
+import { parseBook } from '@cairn/core/parse';
+import { mapChapters } from '@cairn/core/pipeline/map';
+import { classifyBook } from '@cairn/core/pipeline/classify';
+import { reduceToPath } from '@cairn/core/pipeline/reduce';
+import { buildDecks, withRealDuration } from '@cairn/core/pipeline/build';
+import { BUDGETS, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
+import { ensureEdgeTts } from '@cairn/core/pipeline/tts';
+import { fileStore } from '@cairn/core/store/file-store';
+import { bookSlug, LIBRARY_INDEX, type LibraryEntry } from '@cairn/core/store/library';
+import { codexCliProvider } from '@cairn/core/llm';
+import type { ChapterNote, NodeDeck, ParsedBook, Path } from '@cairn/core/types';
 import type { BookPreview, Progress } from '../shared/types';
 import { DATA_DIR, forget } from './store';
 
@@ -49,6 +50,10 @@ export async function generate(
   budgetId: BudgetId,
   onProgress: (p: Progress) => void,
 ): Promise<LibraryEntry> {
+  // Before the first model call: synthesis runs last, so a missing binary would
+  // otherwise be discovered only after paying for every station's slides.
+  await ensureEdgeTts();
+
   const book = await read(filePath);
   const id = bookSlug(book.title, (s) => Bun.hash(s).toString(16), filePath);
   const budget = BUDGETS[budgetId];

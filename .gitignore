@@ -23,6 +23,11 @@ apps/desktop/public/books.json
 .env
 .env.*
 
+# Icon previews. scripts/make-iconset.py regenerates them from icon.src.png;
+# only icon.iconset/ is a build input, and that one is tracked.
+apps/desktop/icon.png
+apps/desktop/icon.icns
+
 # macOS
 .DS_Store
 

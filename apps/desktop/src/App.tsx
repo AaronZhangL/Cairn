@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { audioFile } from '@vibe/core/store/library';
-import type { LibraryEntry } from '@vibe/core/store/library';
-import { AskPane, DeckPane, StagePane, type Turn } from '@vibe/ui';
+import { audioFile } from '@cairn/core/store/library';
+import type { LibraryEntry } from '@cairn/core/store/library';
+import {
+  AskPane, DeckPane, StagePane, Splitter, PanelToggle, useSplit, columnWidth,
+  DEFAULT_LEFT, DEFAULT_RIGHT, LEFT_LIMITS, RIGHT_LIMITS,
+  type Turn,
+} from '@cairn/ui';
 import { AddBook } from './AddBook';
 import { Home } from './Home';
-import { ask, askOutside, inShell, listBooks } from './bridge';
+import { ask, askOutside, inShell, libraryBase, listBooks } from './bridge';
 import { useBundle } from './useBundle';
 
 export function App(): ReactElement {
   const [books, setBooks] = useState<readonly LibraryEntry[]>([]);
   const [bookId, setBookId] = useState<string>();
   const [adding, setAdding] = useState(false);
-  const { bundle, error, reload } = useBundle(bookId);
+  /** Port and token are new on every launch, so every URL is built from this. */
+  const [base, setBase] = useState<string>();
+  const { bundle, error, reload } = useBundle(bookId, base);
+
+  const left = useSplit('pane.left', DEFAULT_LEFT, LEFT_LIMITS, 'left');
+  const right = useSplit('pane.right', DEFAULT_RIGHT, RIGHT_LIMITS, 'right');
 
   const [currentId, setCurrentId] = useState<string>();
   const [turns, setTurns] = useState<readonly Turn[]>([]);
@@ -20,6 +29,7 @@ export function App(): ReactElement {
 
   useEffect(() => {
     void (async () => {
+      setBase(await libraryBase().catch(() => '.'));
       // The shelf is listed, but nothing is opened: the entry point is the drop zone
       setBooks(await listBooks().catch(() => []));
     })();
@@ -40,13 +50,19 @@ export function App(): ReactElement {
   // Stations only. Transport keys (← → space) belong to the deck.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // ⌘B / ⌘J fold the side panes, as they do in an editor
+      if (e.metaKey && (e.key === 'b' || e.key === 'j')) {
+        e.preventDefault();
+        (e.key === 'b' ? left : right).toggleCollapsed();
+        return;
+      }
       if (e.target instanceof HTMLInputElement) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); step(1); }
       if (e.key === 'ArrowUp') { e.preventDefault(); step(-1); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step]);
+  }, [step, left, right]);
 
   const askQuestion = useCallback(async (question: string) => {
     if (!node || !bookId) return;
@@ -109,7 +125,33 @@ export function App(): ReactElement {
   }
 
   return (
-    <div className="shell">
+    <div
+      className={[
+        'shell',
+        left.state.collapsed ? 'left-off' : '',
+        right.state.collapsed ? 'right-off' : '',
+      ].filter(Boolean).join(' ')}
+      style={{
+        gridTemplateColumns:
+          `${columnWidth(left.state)}px 1px 1fr 1px ${columnWidth(right.state)}px`,
+      }}
+    >
+      {/* Both switches are pinned to the shell, not to the panes they control:
+          a switch that moves when its pane folds is a switch you have to find
+          again, and one that lives inside the pane vanishes with it. */}
+      <PanelToggle
+        control={{ collapsed: left.state.collapsed, toggle: left.toggleCollapsed }}
+        side="left"
+        label="站点栏"
+        hint="⌘B"
+      />
+      <PanelToggle
+        control={{ collapsed: right.state.collapsed, toggle: right.toggleCollapsed }}
+        side="right"
+        label="提问栏"
+        hint="⌘J"
+      />
+
       <StagePane
         path={path}
         decks={bundle.decks}
@@ -119,21 +161,27 @@ export function App(): ReactElement {
         onSwitchBook={(id) => { setBookId(id); setCurrentId(undefined); setTurns([]); }}
         onAdd={inShell ? () => setAdding(true) : undefined}
         onHome={goHome}
+        collapsed={left.state.collapsed}
       />
+
+      <Splitter split={left} label="站点栏" />
 
       <DeckPane
         node={node}
         deck={bundle.decks.get(node.id)}
-        audioSrc={`./${audioFile(path.bookId, node.id)}`}
+        audioSrc={`${base ?? '.'}/${audioFile(path.bookId, node.id)}`}
         onSelect={setSelection}
         onEnded={() => step(1)}
       />
+
+      <Splitter split={right} label="提问栏" />
 
       <AskPane
         turns={turns}
         onAsk={askQuestion}
         onSearchOutside={searchOutside}
         onJumpToChapter={() => undefined}
+        collapsed={right.state.collapsed}
       />
 
       {modal}
