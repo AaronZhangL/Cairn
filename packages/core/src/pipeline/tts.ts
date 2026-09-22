@@ -224,6 +224,8 @@ export function alignSentences(
   });
 }
 
-export function deckAudioPath(outDir: string, nodeId: string): string {
-  return join(outDir, `${nodeId}.mp3`);
+/** `key` is a content fingerprint (see `build.ts`), not a station id: one audio
+ *  directory is shared by every budget, so a positional name collides. */
+export function deckAudioPath(outDir: string, key: string): string {
+  return join(outDir, `${key}.mp3`);
 }

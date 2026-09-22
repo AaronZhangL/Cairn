@@ -6,7 +6,13 @@
 body {
   background: var(--page);
   color: var(--ink);
-  font: 15px/1.65 -apple-system, 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+  font: 15px/1.55 -apple-system, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
+        system-ui, sans-serif;
+  /* Body sits at zero tracking; larger type tightens and smaller type opens up.
+     One letter-spacing for every size is wrong somewhere — see docs/DESIGN.md. */
+  letter-spacing: 0;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
   height: 100vh;
   overflow: hidden;
 }
@@ -22,11 +28,14 @@ body {
 /* One pixel, the same colour as every other divider. The grab area is a
    transparent overlay, because widening the line to catch the pointer is what
    made it look like a toolbar. */
+/* Nearly invisible at rest: the surfaces already mark the boundary, so the line
+   only needs to exist when the pointer is looking for it. */
 .splitter {
   position: relative;
-  background: var(--line);
+  background: transparent;
   cursor: col-resize;
   z-index: 4;
+  transition: background .12s ease;
 }
 .splitter::after {
   content: '';
@@ -69,11 +78,22 @@ body {
 .shell.left-off .deck-head { padding-left: 22px; }
 .shell.right-off .deck-head { padding-right: 22px; }
 
-.stage-pane { background: var(--panel); border-right: 1px solid var(--line); padding-bottom: 24px; }
+/* Chrome recedes: a quiet surface, no border. The region reads from the surface
+   difference itself — a 1px rule here would be a line competing with the slide. */
+.stage-pane { background: var(--chrome); color: var(--ink-quiet); padding-bottom: 24px; }
 /* padding-left clears the pinned switch: --head-x + the switch + a gap. */
+/* Sticky rather than static, with a fade where the list passes beneath it:
+   a scroll edge effect instead of a hard divider. */
 .stage-head {
+  position: sticky; top: 0; z-index: 6;
   padding: var(--head-pad) 14px 13px calc(var(--head-x) + var(--head-row) + 8px);
-  border-bottom: 1px solid var(--line);
+  background: var(--chrome);
+}
+.stage-head::after {
+  content: '';
+  position: absolute; left: 0; right: 0; top: 100%; height: 14px;
+  background: linear-gradient(var(--chrome), transparent);
+  pointer-events: none;
 }
 .stage-head-row { display: flex; align-items: center; gap: 8px; height: var(--head-row); }
 /* ---- book switcher ---- */
@@ -83,7 +103,8 @@ body {
 /* The title is the trigger, so it carries no button chrome until hovered. */
 .book-trigger {
   display: flex; align-items: center; gap: 5px; width: 100%;
-  font: inherit; font-size: 15px; font-weight: 700; color: var(--ink);
+  font: inherit; font-size: 15px; font-weight: 640; letter-spacing: -.011em;
+  color: var(--ink);
   background: none; border: 0; border-radius: 5px; cursor: pointer;
   text-align: left; margin-left: -4px;
   /* 20 + 2*2 = the row's 24px: a taller trigger would push the row past the
@@ -131,7 +152,7 @@ body {
 .drop-zone {
   font: inherit; color: var(--ink); cursor: pointer; text-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 42px 24px; border-radius: 12px; background: var(--panel);
+  padding: 42px 24px; border-radius: 12px; background: var(--chrome);
   border: 1.5px dashed var(--line);
 }
 .drop-zone:hover:not(:disabled) { border-color: var(--accent); background: var(--soft); }
@@ -179,7 +200,7 @@ body {
 .budget-list { display: flex; flex-direction: column; gap: 8px; }
 .budget {
   font: inherit; text-align: left; cursor: pointer; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); color: var(--ink);
   display: flex; flex-direction: column; gap: 5px;
 }
 .budget:hover { border-color: var(--accent); }
@@ -193,8 +214,9 @@ body {
 
 .prog { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .prog i { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
-.stage-meta { font-size: 12px; color: var(--dim); margin-top: 3px; }
-.stage-name { font-size: 10.5px; letter-spacing: .1em; color: var(--dim); padding: 16px 18px 6px; font-weight: 600; }
+.stage-meta { font-size: 11.5px; letter-spacing: .004em; color: var(--dim); margin-top: 2px; }
+/* Small type opens up rather than tightening */
+.stage-name { font-size: 10px; letter-spacing: .075em; color: var(--dim); padding: 18px 18px 6px; font-weight: 620; }
 
 .station {
   display: flex; align-items: flex-start; gap: 9px; width: 100%;
@@ -202,10 +224,12 @@ body {
   background: none; color: var(--ink); font: inherit; font-size: 13px;
   text-align: left; cursor: pointer; line-height: 1.45;
 }
-.station:hover { background: #00000008; }
-.station.done { opacity: .5; }
-.station.ahead { opacity: .62; }
-.station.current { background: var(--soft); border-left-color: var(--accent); font-weight: 600; opacity: 1; }
+.station:hover { background: #80808014; }
+.station.done { opacity: .52; }
+.station.ahead { opacity: .72; }
+/* No painted block: the current station is marked by weight, full ink, and the
+   accent dot. A filled bar here competes with the slide for attention. */
+.station.current { color: var(--ink); font-weight: 620; opacity: 1; }
 .station-mark {
   flex: 0 0 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line);
   display: flex; align-items: center; justify-content: center;
@@ -217,10 +241,10 @@ body {
 .station-min { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* ---- centre ---- */
-.deck-pane { display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 22px; overflow: hidden; }
+.deck-pane { background: var(--page); display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 22px; overflow: hidden; }
 .deck-head { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.deck-kicker { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
-.deck-title { font-size: 16px; font-weight: 600; }
+.deck-kicker { font-size: 10px; font-weight: 620; color: var(--accent); letter-spacing: .075em; }
+.deck-title { font-size: 15px; font-weight: 640; letter-spacing: -.011em; color: var(--ink); }
 .deck-empty { margin: auto; color: var(--dim); }
 
 /* The slide takes whatever room is left. The caption lives inside the frame
@@ -230,6 +254,8 @@ body {
 .deck-pane .slide-stage-fit { flex: 1 1 auto; min-height: 0; display: flex; justify-content: center; }
 .deck-pane .slide-stage-fit .slide-stage {
   width: auto; height: 100%; max-width: 100%; aspect-ratio: 16 / 9; margin: auto;
+  /* The one real elevation in the window. Bigger surfaces read as thicker. */
+  box-shadow: var(--elev-stage);
 }
 
 .transport { display: flex; align-items: center; gap: 13px; flex: 0 0 auto; }
@@ -267,7 +293,7 @@ body {
 .rate-item.on { color: var(--accent); font-weight: 700; background: var(--soft); }
 
 /* ---- right ---- */
-.ask-pane { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+.ask-pane { background: var(--chrome); color: var(--ink-quiet); display: flex; flex-direction: column; overflow: hidden; }
 /* padding-top clears the corner switch, using the same values it is pinned by */
 .ask-scroll {
   flex: 1; overflow-y: auto;

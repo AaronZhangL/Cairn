@@ -1,236 +1,279 @@
-# Cairn — v0 架构
+# Cairn — v0 architecture
 
-2026-09-21 · 实现形态：桌面优先的 Web 应用，后续以 Electrobun 打包 Mac / Windows 桌面端
+2026-09-21 · originally: a desktop-first web app, later packaged for Mac and Windows with
+Electrobun
 
-> 前置文档：[PRD-v0.md](./PRD-v0.md)。v0 是实验不是产品，唯一交付物是「10 个陌生人的第一本书完读率」。
-> 本文所有取舍都服务于这一件事。
+> **Decision record.** This describes the v0 that was planned, not the tool that exists. Its
+> product framing — BYOK, two entry points, ten strangers, completion rate as the only
+> deliverable — has been superseded by [SPEC.md](./SPEC.md). The *reasoning* below still holds
+> and is why several things are the way they are: why nothing renders to mp4, why there is no
+> image generation, why the pipeline is a resumable state machine, why `sourceChapters` exists.
+> Read it for the arguments, not for the plan.
 >
-> **不做移动端适配。** 两小时的学习是桌前行为，不是地铁行为——桌前会话的完读率本就显著更高。
+> Prior document: [PRD-v0.md](./PRD-v0.md).
+>
+> **No mobile layout.** Two hours of study is something you do at a desk, not on a train, and
+> desk sessions have markedly higher completion rates anyway.
 
-## 一、核心结论：零后端
+## 1. The core conclusion: no backend
 
-BYOK 推出了整条架构：
+BYOK forced the whole architecture:
 
 ```
-用户自带 LLM key
-  → key 不能上服务器（保管责任 + 用户不会粘贴）
-  → key 留在浏览器
-  → LLM 调用从浏览器直接发出
-  → 不需要后端
+the user brings their own LLM key
+  → the key must not reach a server (custody liability, and users will not paste it)
+  → the key stays in the browser
+  → LLM calls go out from the browser
+  → there is no backend
 ```
 
-连锁收益：
+What follows from it:
 
-| 收益 | 说明 |
+| Benefit | Detail |
 | --- | --- |
-| 版权风险消失 | 书在浏览器里解析，永不上传。PRD 的「不存原文、不跨用户复用」由架构保证，不靠自律 |
-| 无密钥托管责任 | key 只进 localStorage，不出设备 |
-| 零运维 | 纯静态资源，Cloudflare Pages 免费额度足够 |
-| 开发快 | v0 的目的是一周内拿到数据，不是建系统 |
+| Copyright risk disappears | The book is parsed in the browser and never uploaded. The PRD's "store no source text, never reuse across users" is guaranteed by the architecture rather than by discipline |
+| No key custody | The key only ever reaches localStorage |
+| No operations | Static assets; the Cloudflare Pages free tier is enough |
+| Fast to build | v0 exists to get data within a week, not to build a system |
 
-**唯一的服务端**是埋点收集，因为完读率无法在客户端自证。它是一个无状态 Worker，
-**只接收匿名进度事件，永远看不到书名、书的内容或用户身份**。
+**The only server-side component** is analytics collection, because completion rate cannot prove
+itself on the client. It is a stateless Worker that **receives anonymous progress events only,
+and never sees a book title, book content, or a user identity.**
 
-唯一的例外是 TTS：`edge-tts` 跑在 Bun 里，浏览器调不了。它以本地脚本形式存在
-（`scripts/tts.ts`），只有我们自己在制作端用，不是线上服务。见第六节。
+The single exception is TTS: `edge-tts` runs under Bun and the browser cannot call it. It lives
+as a local script (`scripts/tts.ts`) that only we run on the authoring side — never a hosted
+service. See §6.
 
-## 二、两个入口，一份代码
+## 2. Two entry points, one codebase
 
-### 为什么
+### Why
 
-**10 个陌生人不该为了走一遍路径去申请一个 LLM API key。**
+**Ten strangers should not have to apply for an LLM API key in order to walk a path.**
 
-若阅读端要求 BYOK，完读率数据会被注册漏斗污染——测到的是「有多少人愿意配 key」，
-不是「有多少人愿意走完」。而 PRD 明确：v0 只验证完读率，不验证获客。
+If the reading side required BYOK, the completion-rate data would be contaminated by the signup
+funnel — it would measure "how many people will configure a key", not "how many people will walk
+to the end". The PRD is explicit: v0 validates completion, not acquisition.
 
-### 怎么分
+### The split
 
-| | `/studio` 制作端 | `/p/:id` 阅读端 |
+| | `/studio` (authoring) | `/p/:id` (reading) |
 | --- | --- | --- |
-| 使用者 | 我们自己 | 受测陌生人 |
-| 需要 API key | 是 | **否** |
-| 需要上传 | 是 | **否** |
-| 职责 | 传书 → 解析 → 压缩 → 生成路径与幻灯 → 导出 bundle | 加载 bundle → 走完 → 埋点 |
+| Who uses it | Us | The strangers being tested |
+| Needs an API key | Yes | **No** |
+| Needs an upload | Yes | **No** |
+| Job | Upload → parse → compress → generate path and slides → export a bundle | Load the bundle → walk it → emit events |
 
-陌生人的完整流程是：**点链接 → 直接开始**。零 onboarding。
+A stranger's whole flow is: **click a link, start.** No onboarding at all.
 
-节点展开、口播音频全部在制作端预生成并打进 bundle，**阅读端永远不需要 key**。
+Node expansion and narration audio are pre-generated on the authoring side and baked into the
+bundle, so **the reading side never needs a key.**
 
-## 三、固定的是时间预算，不是节点数
+## 3. The constraint is the time budget, not the node count
 
-**产品承诺是「两小时走完」，完读率直接受总时长支配。所以时长是约束，节点数是结果。**
+**The promise is "walk it in two hours", and completion rate is governed directly by total
+length. So length is the constraint and the node count is the result.**
 
-节点数由**目录结构 + map 阶段产出的逐章摘要**共同决定，二者都来自真实正文。
+The node count comes from **the table of contents plus the per-chapter summaries produced by the
+map stage** — both derived from the real text.
 
-> **不使用模型的预训练记忆来判断结构。**
-> PRD 记录了放弃原方案的原因：依赖预训练记忆，头部名著尚可，长尾书变成自信的编造。
-> 若让记忆决定路径有几个节点、怎么切，这个依赖就从内容层回到结构层，且更隐蔽——
-> 内容编错还能被读过的人抓到，**结构编错看起来和真的一模一样**。
+> **The model's pretraining memory is never used to decide structure.**
+> The PRD records why the original approach was abandoned: memory works for famous books and
+> turns into confident fabrication on the long tail. Letting memory decide how many nodes a path
+> has, or where it cuts, moves that dependency from the content layer back to the structural
+> layer — and hides it better. **A wrong fact can be caught by someone who read the book; a
+> fabricated structure looks exactly like a real one.**
 
-### 约束参数
+### Constraint parameters
 
-- 目标总时长 **100–120 分钟**
-- 每站 3–5 页幻灯，口播 2–4 分钟
-- reduce 必须为每个节点输出 `estMinutes` 和 `sourceChapters`
-- **硬上限：总时长 > 150 分钟 → 强制合并后重跑一次 reduce**
+- Target total length: **100–120 minutes**
+- Three to five slides per station, two to four minutes of narration
+- `reduce` must emit `estMinutes` and `sourceChapters` for every node
+- **Hard ceiling: over 150 minutes total → force a merge and re-run reduce once**
 
-上限不是产品洁癖，是实验设计：若某本书生成出 5 小时的路径，完读率必然趋近于零，
-**那测到的是「太长了」，不是「路径设计好不好」**。长度会污染 v0 唯一的指标。
+The ceiling is experimental design, not fastidiousness. If a book produced a five-hour path,
+completion would approach zero and **the measurement would be "too long", not "is this path
+well designed"**. Length would contaminate v0's only metric.
 
-## 四、内容形态：幻灯 + 口播，不是纯文字
+## 4. The form: slides and narration, not plain text
 
-PRD 的核心判断是「大部分人更愿意消费图和视频，文字门槛高」。
-所以**一站的主界面是一组自动播放的幻灯配口播**，文字是备选视图，不是主视图。
+The PRD's central judgement is that most people would rather consume pictures and video, and
+that text is a higher barrier. So **a station's main view is a set of auto-playing slides with
+narration**, and text is the alternate view, not the primary one.
 
-### 视频是播放体验，不是文件格式
+### Video is a playback experience, not a file format
 
-**不渲染 mp4，做幻灯 + 音频的同步播放器。** 四个理由：
+**No mp4 rendering; a synchronised slide-and-audio player instead.** Four reasons:
 
-1. **零后端渲不了。** 浏览器里 ffmpeg.wasm 渲 100 分钟视频不现实；放服务端渲染则书必须上传，版权风险全部回来。
-2. **改一页要重渲整条。** 幻灯是数据，改一页就是改一条 JSON。
-3. **完读率会失真。** 一条长 mp4 里「走完」退化成「播到底」，拖进度条即可作弊。按站计数的埋点是唯一指标，不能含糊。
-4. **视频的观感不需要 mp4。** 自动翻页 + 口播 + 自动进入下一站，体验上就是在看视频，但可跳、可搜、可复制、可切文字模式。
+1. **A zero-backend app cannot render it.** ffmpeg.wasm rendering 100 minutes of video in a
+   browser is not realistic, and rendering server-side means uploading the book — which brings
+   every copyright risk back.
+2. **Changing one page would mean re-rendering everything.** Slides are data; changing a page is
+   changing one piece of JSON.
+3. **Completion rate would become meaningless.** In one long mp4, "finished" degrades into
+   "played to the end", and dragging the scrubber is enough to fake it. Per-station events are
+   the only metric and cannot be fuzzy.
+4. **The feel of video does not require mp4.** Auto-advancing slides, narration, and moving into
+   the next station on its own *is* watching a video — except it can be skipped, searched,
+   copied, and switched to text.
 
-真要 mp4（引流到 B 站 / 小红书）是以后的**导出功能**，服务端渲一次，不是核心形态。
+If mp4 is ever genuinely needed (to drive traffic on Bilibili or Xiaohongshu) it becomes an
+**export feature**, rendered once server-side, not the core form.
 
-### 不做文生图
+### No image generation
 
-AI 生成插图对抽象概念基本无效——「锚定效应」画出来只会是漂亮但无信息量的图。
-真实的好 PPT 本来就主要是字和图表。
+Generated illustrations are close to useless for abstract ideas — draw "the anchoring effect"
+and you get something pretty and uninformative. A good deck is mostly type and diagrams anyway.
 
-幻灯是**结构化生成的版式**，用 React / SVG 渲染，不调图像模型：零成本、零延迟、风格统一、每页可溯源。
+Slides are **structurally generated layouts** rendered with React and SVG, with no image model:
+free, instant, stylistically consistent, and traceable page by page.
 
-| 版式 `layout` | 用途 | 适用 |
+| `layout` | Used for | Applies to |
 | --- | --- | --- |
-| `title` | 每站开场 | 通用 |
-| `points` | 3 条以内核心论断 | 通用 |
-| `number` | 实验数据、关键比例对比 | 知识类 |
-| `quote` | 原文金句（接微信读书热门划线） | 通用 |
-| `compare` | A vs B | 知识类 |
-| `flow` | 推导链、因果链 | 知识类 |
-| `relation` | 人物关系图 | 小说 |
-| `timeline` | 故事线 | 小说 |
-| `world` | 世界观设定 | 小说 |
+| `title` | Opening each station | Both |
+| `points` | Three claims at most | Both |
+| `number` | Experimental data, key ratios | Knowledge |
+| `quote` | A line from the book | Both |
+| `compare` | A versus B | Knowledge |
+| `flow` | A chain of reasoning or cause | Knowledge |
+| `relation` | Character relationships | Novels |
+| `timeline` | Storyline | Novels |
+| `world` | Worldbuilding | Novels |
 
-## 五、导航模型：专注模式为主干，路径总览为辅
+## 5. Navigation: focus mode as the spine, overview as support
 
-三个方案对比后选定（见设计评审）：
+Chosen after comparing three options (see the design review):
 
-- **主干：专注模式。** 一次只见一站，无侧栏。键盘 `←` `→` 翻页、`↓` 下一站、`空格` 暂停、`O` 呼出总览。
-  没有跳读入口，**「走完」的定义不含糊，埋点最干净**。
-- **辅助：路径总览。** 独立页面，按 `O` 呼出，在开始时、每走完一部时、全部走完时出现。
-  承担专注模式缺的两样：位置感，和「走完一条路」的画面。
-- **排除：左栏路径 + 右栏内容。** 侧栏邀请跳读，与唯一指标冲突；且长得像每一个文档站。
+- **Spine: focus mode.** One station at a time, no sidebar. `←` `→` to move through slides, `↓`
+  for the next station, `space` to pause, `O` for the overview. There is no way to skip ahead,
+  so **"finished" is unambiguous and the analytics stay clean.**
+- **Support: path overview.** A separate page, summoned with `O`, shown at the start, after each
+  part, and at the end. It supplies the two things focus mode lacks: a sense of place, and the
+  picture of a path walked.
+- **Rejected: left-pane path, right-pane content.** A sidebar invites skipping, which conflicts
+  with the only metric — and it looks like every documentation site.
 
-## 六、管道
+> Superseded: the current app uses exactly the rejected layout. With no experiment to protect,
+> a sidebar costs nothing and jumping around is a feature, not a leak.
+
+## 6. The pipeline
 
 ```
-parse     电子书 → Chapter[]                纯本地，无 LLM
+parse     ebook → Chapter[]                 local only, no LLM
   ↓
-map       每章 → ChapterNote                N 次 LLM 调用，全文只读一遍
+map       each chapter → ChapterNote        N LLM calls; the text is read exactly once
   ↓
-classify  全部 gist → 书籍类型               1 次调用
+classify  all gists → book type             1 call
   ↓
-reduce    全部 ChapterNote → PathNode[]      1-2 次调用，受时间预算约束
+reduce    all ChapterNotes → PathNode[]     1–2 calls, bound by the time budget
   ↓
-slides    每站 → Slide[] + 口播稿            N 次调用
+slides    each station → Slide[] + script   N calls
   ↓
-tts       口播稿 → mp3 + 字幕时间轴          本地 bun 脚本，edge-tts，免费
+tts       script → mp3 + caption timeline   local bun script, edge-tts, free
   ↓
-bundle    Path JSON + mp3 → 阅读端可加载的包
+bundle    Path JSON + mp3 → a package the reading side can load
 ```
 
-一本 30 万字的书约 50–100 章，map 阶段即 50–100 次调用。这是整个系统最脆弱的地方，
-必须按**可恢复的任务状态机**来写，不能写成一个 `await Promise.all`：
+A 300k-word book is 50–100 chapters, so the map stage is 50–100 calls. This is the most fragile
+part of the system and has to be written as a **resumable task state machine**, never as one
+`await Promise.all`:
 
-- **每章摘要一落地就写 IndexedDB**，刷新页面不丢
-- **并发上限 4**，失败指数退避重试，单章失败不影响整体
-- **进度逐章可见**（第 37/82 章），不是一个转圈的 loading
-- 中断后可从断点继续
+- **Each chapter's summary is persisted the moment it lands**, so a refresh loses nothing
+- **Concurrency capped at 4**, exponential backoff on failure, one chapter's failure isolated
+- **Progress visible per chapter** (chapter 37 of 82), not a spinner
+- An interrupted run resumes from where it stopped
 
 ### TTS
 
-`edge-tts` 白嫖微软 Edge 朗读服务：**免费、无需 key、中文音色接近真人**。
-音色用 `zh-CN-YunjianNeural`（云健，微软为有声书与解说调校）或 `zh-CN-XiaoxiaoNeural`（晓晓，偏知识讲解）。
+`edge-tts` rides Microsoft Edge's read-aloud service: **free, no key, and Chinese voices close
+to human.** Use `zh-CN-YunjianNeural` (tuned for audiobooks and commentary) or
+`zh-CN-XiaoxiaoNeural` (better for explanatory material).
 
-不使用浏览器自带的 `SpeechSynthesis`：音色随用户操作系统而变，**10 个受测者听到的东西不同，完读率不可比**，会污染实验。
+Not the browser's own `SpeechSynthesis`: its voice varies with the user's operating system, so
+**ten testers would hear different things and their completion rates would not be comparable.**
 
-用量参考：34 站 × 3 分钟 ≈ 2.5 万字符/本。edge-tts 为 ¥0；若改用阿里云约 ¥7.5/本。
+Volume: 34 stations × 3 minutes ≈ 25k characters per book. Free on edge-tts; roughly ¥7.5 per
+book on Alibaba Cloud.
 
-风险：非官方接口，可能被限流或关闭。届时切换到阿里云 / 火山，成本可接受。
+Risk: an unofficial endpoint that could be rate-limited or shut off. Switching to Alibaba Cloud
+or Volcano at that point costs acceptably little.
 
-## 七、数据模型
+## 7. Data model
 
 ```
 Book        { id, title, author, type: 'knowledge'|'narrative', chapterCount, createdAt }
-Chapter     { id, bookId, idx, title, text, wordCount }     // text 只进 IndexedDB，不进 bundle
-ChapterNote { chapterId, gist, keyPoints[], quotes[] }       // map 产物
+Chapter     { id, bookId, idx, title, text, wordCount }   // text only in IndexedDB, never in a bundle
+ChapterNote { chapterId, gist, keyPoints[], quotes[] }     // map output
 
 Path        { id, bookId, title, type, nodes[], totalMinutes, generatedAt }
 PathNode    {
   id, idx, title, kind,
   slides: Slide[],
-  narration: NarrationCue[],     // 字幕时间轴，驱动幻灯翻页与高亮
+  narration: NarrationCue[],     // caption timeline; drives slide changes and highlighting
   audio: { src, durationMs },
-  text,                          // 文字模式正文，同一份数据的另一个视图
-  sourceChapters: number[],      // 溯源
+  text,                          // the text view: the same data, another rendering
+  sourceChapters: number[],      // provenance
   estMinutes,
-  children: PathNode[]           // 展开的子节点，制作端预生成一层
+  children: PathNode[]           // one pre-generated level of expansion
 }
-Slide         { id, layout, data, atMs }        // atMs = 在口播时间轴上的出现时刻
+Slide         { id, layout, data, atMs }        // atMs = when it appears on the audio timeline
 NarrationCue  { text, startMs, endMs }
 Progress      { pathId, currentIdx, doneIds[], startedAt, finishedAt }
 ```
 
-**`sourceChapters` 是防幻觉的关键**，代价极低：每一站都能跳回原文验证。
+**`sourceChapters` is the key hedge against hallucination**, and it costs almost nothing: every
+station can be traced back to the text.
 
-**`Chapter.text` 永不进入导出的 bundle。** 导出物只含衍生内容，不含原文。
+**`Chapter.text` never enters an exported bundle.** Exports carry derived content only.
 
-**幻灯是数据不是视频**，所以同一份内容能渲成播放器、渲成文字模式、以后也能在服务端渲成 mp4。
+**Slides are data, not video**, so one piece of content renders as a player, as text, and later
+server-side as mp4.
 
-## 八、工程结构
+## 8. Project structure
 
-参考 [deer-flow/llm-space](https://github.com/deer-flow/llm-space) 的 monorepo 边界——
-它是「先 Web、后桌面」该有的形状。**抄它的目录边界，不抄它的工程规模**
-（我们跳过 husky / lint-staged / 发布脚本 / 插件体系，那些会吃掉验证完读率的时间）。
+Borrowed from [deer-flow/llm-space](https://github.com/deer-flow/llm-space)'s monorepo
+boundaries — the right shape for "web first, desktop later". **Copy its directory boundaries,
+not its engineering scale** (we skip husky, lint-staged, release scripts and a plugin system;
+those would eat the time that validates completion rate).
 
 ```
 packages/
-  core/          领域类型、解析、管道、LLM 客户端、存储 —— 无框架依赖
+  core/          Domain types, parsing, pipeline, LLM clients, storage — no framework deps
     parse/       epub.ts  txt.ts  markdown.ts
     llm/         client.ts  providers/
     pipeline/    job.ts  map.ts  classify.ts  reduce.ts  slides.ts  prompts/
     store/       Dexie schema
-  ui/            共享 React 组件与设计 token（幻灯版式渲染器在此）
+  ui/            Shared React components and design tokens (slide renderers live here)
 apps/
   web/
-    studio/      制作端
-    reader/      阅读端
-  desktop/       Electrobun 壳 —— 留位，v0 不实现
+    studio/      Authoring
+    reader/      Reading
+  desktop/       Electrobun shell — a placeholder; not built in v0
 scripts/
-  tts.ts         本地 edge-tts 批量生成
+  tts.ts         Local batch generation with edge-tts
 ```
 
-**边界约束：`apps/web/reader` 不得 import `core/parse`、`core/llm`、`core/pipeline`。**
-这条用 ESLint 规则强制。它保证阅读端永远无需 key、包体最小。
+**Boundary rule: `apps/web/reader` must not import `core/parse`, `core/llm` or
+`core/pipeline`.** Enforced with an ESLint rule. It is what guarantees the reading side never
+needs a key and stays small.
 
-### 技术选型
+### Technology choices
 
-| 层 | 选择 | 理由 |
+| Layer | Choice | Why |
 | --- | --- | --- |
-| 语言/工具 | TypeScript + Bun | 与参考项目一致，起手快 |
-| 构建 | Vite | H5 产物小 |
-| UI | React + Tailwind + shadcn/ui | 制作端直接抄现成组件；阅读端只用 token，不用组件库 |
-| 动效 | Motion | 成就感是动画做出来的。幻灯转场、完成反馈 |
-| 本地存储 | Dexie（IndexedDB） | 原文可达几 MB |
-| EPUB 解析 | JSZip + DOMParser | 只需抽文本；epub.js 带整套渲染机制，过重 |
-| 桌面壳 | **Electrobun**（后续） | 与参考项目一致。v0 只留目录位，不实现 |
-| 部署 | Cloudflare Pages | 静态托管 + 埋点 Worker 同平台 |
+| Language and tooling | TypeScript + Bun | Matches the reference project; quick to start |
+| Build | Vite | Small output |
+| UI | React + Tailwind + shadcn/ui | Authoring can lift components directly; reading uses tokens only |
+| Motion | Motion | A sense of achievement is made of animation — slide transitions, completion feedback |
+| Local storage | Dexie (IndexedDB) | Source text runs to several MB |
+| EPUB parsing | JSZip + DOMParser | We only need the text; epub.js brings a whole rendering engine |
+| Desktop shell | **Electrobun** (later) | Matches the reference project; v0 only reserves the directory |
+| Deployment | Cloudflare Pages | Static hosting and the analytics Worker on one platform |
 
-阅读端不引入组件库：默认审美是「表单 + 表格」，而我们要做的是一条让人想走完的路；
-且完整移动端组件库压缩后 200KB 起步，阅读端本可控制在 50KB 以内。
+The reading side takes no component library: their default aesthetic is "forms and tables", and
+what we need is a path someone wants to walk. A full mobile component library also starts at
+200KB compressed, where the reading side can stay under 50KB.
 
-## 九、埋点（v0 的唯一交付物）
+## 9. Analytics (v0's only deliverable)
 
 ```
 path_opened    { sessionId, pathId, ts }
@@ -240,69 +283,82 @@ mode_switched  { sessionId, pathId, nodeIdx, to: 'audio'|'text', ts }
 path_finished  { sessionId, pathId, ts }
 ```
 
-- `sessionId` 为设备本地生成的随机串，不含任何身份信息
-- **不上报书名、节点标题、任何书的内容**
-- 完读率 = `path_finished` 独立 sessionId 数 / `path_opened` 独立 sessionId 数
-- `node_done` 的分布同样重要：**人在第几站掉队**，比最终那个百分比更有指导意义
-- `mode_switched` 验证 PRD 的核心假设：人是否真的更愿意听而不是读
+- `sessionId` is a random string generated on the device and carries no identity
+- **No book title, node title, or book content is ever reported**
+- Completion rate = distinct `path_finished` sessions / distinct `path_opened` sessions
+- The distribution of `node_done` matters just as much: **which station people drop at** is more
+  instructive than the final percentage
+- `mode_switched` tests the PRD's central assumption: would people genuinely rather listen than
+  read
 
-## 十、待验证的技术风险
+## 10. Technical risks to verify
 
-1. ~~国内 LLM 厂商是否支持浏览器直连（CORS）。~~ **已验证通过，2026-09-21。**
-   对各厂商发 CORS 预检（`OPTIONS` + `Origin` + `Access-Control-Request-Headers: authorization`）：
+1. ~~Whether Chinese LLM vendors allow direct browser calls (CORS).~~ **Verified 2026-09-21.**
+   A CORS preflight against each vendor (`OPTIONS` + `Origin` +
+   `Access-Control-Request-Headers: authorization`):
 
-   | 厂商 | 预检状态 | `Authorization` 头 |
+   | Vendor | Preflight | `Authorization` header |
    | --- | --- | --- |
-   | DeepSeek | 200 | 允许 |
-   | 月之暗面 Kimi | 204 | 允许 |
-   | 通义 DashScope | 200（`*`） | 允许 |
-   | 智谱 GLM | 200 | 允许 |
-   | OpenAI | 200 | 允许 |
+   | DeepSeek | 200 | allowed |
+   | Moonshot Kimi | 204 | allowed |
+   | Tongyi DashScope | 200 (`*`) | allowed |
+   | Zhipu GLM | 200 | allowed |
+   | OpenAI | 200 | allowed |
 
-   四家国内厂商均回显 `Access-Control-Allow-Origin` 并放行 `authorization` 头。
-   **零后端成立，不需要转发 Worker，key 不经过我们的服务器。**
-   残留项：预检通过不完全等于实际 `POST` 响应也带 CORS 头。带 key 发一次真实请求即可终验。
+   All four Chinese vendors echo `Access-Control-Allow-Origin` and permit the `authorization`
+   header. **Zero-backend holds: no forwarding Worker is needed and no key touches our servers.**
+   Remaining: a passing preflight does not strictly guarantee the actual `POST` response carries
+   CORS headers. One real request with a key settles it.
 
-2. ~~微信内置浏览器对文件选择的限制。~~ **不适用**——v0 不在微信内打开，且不做移动端。
+2. ~~WeChat's in-app browser and its file-picker restrictions.~~ **Not applicable** — v0 is not
+   opened inside WeChat, and there is no mobile layout.
 
-3. **edge-tts 的稳定性。** 非官方接口。若被限流，切阿里云 / 火山，约 ¥7.5/本，可接受。
+3. **edge-tts stability.** An unofficial endpoint. If rate-limited, switch to Alibaba Cloud or
+   Volcano at roughly ¥7.5 per book.
 
-4. **IndexedDB 在 Safari 的容量与稳定性。** 原文丢失可接受（可重传），
-   但**进度不能丢**——进度同时写埋点，以服务端为准。
+4. **IndexedDB capacity and stability on Safari.** Losing source text is acceptable — it can be
+   re-uploaded — but **progress must not be lost**; progress is also written to analytics, and
+   the server copy wins.
 
-## 十一、v0 明确不做
+## 11. Explicitly out of scope for v0
 
-- PDF 解析
-- mp4 渲染（幻灯播放器代替；导出视频是后续功能）
-- 文生图
-- **小说模式**——版式已在数据模型中留位，但 v0 不实现。理由见下
-- 平台代付 LLM
-- 产物跨用户复用
-- 遗忘曲线复习
-- 微信读书划线叠加（第二批，懒加载；`quote` 版式已为它留好位置）
-- 用户账号体系
-- Electrobun 桌面端（只留目录位）
-- 服务端存储书籍内容（架构上不存在这条路径）
+- PDF parsing
+- mp4 rendering (the slide player replaces it; video export is a later feature)
+- Image generation
+- **Novel mode** — the layouts are reserved in the data model, but v0 does not build them. See
+  below
+- The platform paying for LLM calls
+- Reusing output across users
+- Spaced repetition
+- Overlaying WeChat Reading highlights (second batch, lazy-loaded; the `quote` layout already
+  has a place for it)
+- User accounts
+- The Electrobun desktop build (directory placeholder only)
+- Storing book content server-side (the architecture has no such path)
 
-### 为什么小说不进 v0
+### Why novels are not in v0
 
-小说速读有真实需求，且比 PRD 最初判断的大——**剧在播、大家在聊、想知道剧情但不想读**。
-对一个明确不打算读的人，剧透就是产品本身，不是副作用。
+Speed-reading novels is a real need, and a bigger one than the PRD first judged — **the show is
+airing, everyone is discussing it, and you want the plot without reading the book.** For someone
+who has decided not to read it, spoilers *are* the product, not a side effect.
 
-但它和知识类是**两个产品，指标不同**：
+But it is **a different product with a different metric**:
 
-| | 知识类 | 长篇连载 |
+| | Knowledge | Long serials |
 | --- | --- | --- |
-| 单位 | 一本书 | **一段进度**（追到第 X 卷） |
-| 用户目标 | 走完 | **够聊天就行** |
-| 结束条件 | 完读 | **满足** |
-| 人物关系 | — | 需按当前进度裁剪 |
+| Unit | A book | **A stretch of progress** (caught up to volume X) |
+| Goal | Finish it | **Enough to join the conversation** |
+| Done when | Completed | **Satisfied** |
+| Character relations | — | Must be trimmed to current progress |
 
-以《凡人修仙传》为例：700 万字、2400 余章，是《思考，快与慢》的 25 倍。
-管道跑得完（map 约 50 分钟、几十元），但「两小时走完」的承诺直接破产。
+*A Record of a Mortal's Journey to Immortality* is 7 million words across 2,400+ chapters — 25×
+*Thinking, Fast and Slow*. The pipeline can process it (roughly 50 minutes of map, a few tens of
+yuan), but the "walk it in two hours" promise collapses outright.
 
-**混进同一个 v0，完读率会变成两种行为的混合，什么也证明不了。**
+**Mixed into the same v0, completion rate becomes a blend of two behaviours and proves
+nothing.**
 
-处置：v0 只测知识类；小说由我们自己 dogfood（凡人修仙传），不进实验数据。
-附带提醒——该书在起点有 DRM，只能用盗版 txt，这是 PRD「核心用户是手上有盗版书库的人」
-那条风险的第一个具体案例。
+Resolution: v0 measures knowledge books only; novels get dogfooded by us and stay out of the
+experiment data. A side note — that book is DRM-protected on its original platform, so only a
+pirated txt is usable, which is the first concrete instance of the PRD's risk that "the core
+user is someone with a library of pirated books".

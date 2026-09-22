@@ -1,38 +1,76 @@
+/**
+ * Design tokens. The full rationale lives in docs/DESIGN.md — read it before
+ * changing a value here, because several of these are load-bearing for contrast.
+ *
+ * The strategy is "stage-led": chrome is a quiet surface that recedes, and the
+ * slide is the one object in the window with real elevation. Nothing else gets
+ * a heavy shadow, and the current station is marked with weight and a dot rather
+ * than a painted block — a highlight that shouts competes with the content.
+ *
+ * Every pair below has been measured; the numbers are recorded in docs/DESIGN.md.
+ */
 :root {
-  --page: #f4f1ec;
-  --panel: #fbf9f6;
+  /* Surfaces, from back to front */
+  --page: #f4f4f7;
+  /* Chrome sits just behind the page, not in front: 1.12 against --page, enough
+     to read as a region without drawing a border around it. */
+  --chrome: #e7e7ec;
   --card: #ffffff;
-  --ink: #1c1917;
-  --dim: #78716c;
-  --line: #e2ddd5;
-  --accent: #b45309;
-  --soft: #fdf0dc;
-  --done: #4d7c0f;
-  --lock: #c8c2b8;
+
+  /* Text. --ink-quiet is the chrome's default: chrome recedes by being quieter,
+     never by dropping below 4.5:1. */
+  --ink: #1c1c1e;
+  --ink-quiet: #3a3a3e;
+  --dim: #616168;
+  --line: #dcdce2;
+
+  --accent: #b03a0b;
+  --soft: #fbeadf;
+  --done: #3f7d37;
+  --lock: #c6c6cc;
+
   /* The slide surface is dark in both themes: a deck reads as a stage, not a document. */
-  --stage: #26231d;
-  --stage-ink: #f7f3ea;
-  --stage-dim: #a8a096;
-  --stage-accent: #e0a458;
+  --stage: #1f1d1b;
+  --stage-ink: #f8f6f2;
+  --stage-dim: #a5a099;
+  --stage-accent: #f0a44f;
+
+  /* Elevation. Only three levels exist, and --elev-stage is reserved for the
+     slide: a bigger surface reads as a thicker one, so it gets the deepest
+     shadow and nothing else competes. */
+  --elev-low: 0 1px 2px #0000000f, 0 0 0 .5px #0000000d;
+  --elev-mid: 0 4px 14px #00000014, 0 0 0 .5px #00000012;
+  --elev-stage: 0 18px 44px #0000001f, 0 2px 8px #00000014;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --page: #16140f;
-    --panel: #1b1914;
-    --card: #211f19;
-    --ink: #f0ece4;
-    --dim: #a49c92;
-    --line: #332f28;
-    --accent: #e09b3d;
-    --soft: #382913;
-    --done: #8fb339;
-    --lock: #4a4640;
+    --page: #0e0e10;
+    --chrome: #0a0a0c;
+    --card: #1a1a1e;
+    --ink: #ececf0;
+    --ink-quiet: #c6c6cd;
+    --dim: #8d8d96;
+    --line: #26262b;
+    --accent: #f0a44f;
+    --soft: #3a2415;
+    --done: #7fb36f;
+    --lock: #45454b;
+    /* Lighter than the page here, unlike in light mode: in the dark the stage
+       cannot separate by being darker, so it separates by being lifted (1.47). */
+    --stage: #33302b;
+    --elev-low: 0 1px 2px #00000052, 0 0 0 .5px #ffffff0f;
+    --elev-mid: 0 4px 14px #00000066, 0 0 0 .5px #ffffff12;
+    --elev-stage: 0 18px 44px #00000080, 0 2px 8px #00000059;
   }
 }
 
 :root[data-theme='dark'] {
-  --page: #16140f; --panel: #1b1914; --card: #211f19; --ink: #f0ece4;
-  --dim: #a49c92; --line: #332f28; --accent: #e09b3d; --soft: #382913;
-  --done: #8fb339; --lock: #4a4640;
+  --page: #0e0e10; --chrome: #0a0a0c; --card: #1a1a1e;
+  --ink: #ececf0; --ink-quiet: #c6c6cd; --dim: #8d8d96; --line: #26262b;
+  --accent: #f0a44f; --soft: #3a2415; --done: #7fb36f; --lock: #45454b;
+  --stage: #33302b;
+  --elev-low: 0 1px 2px #00000052, 0 0 0 .5px #ffffff0f;
+  --elev-mid: 0 4px 14px #00000066, 0 0 0 .5px #ffffff12;
+  --elev-stage: 0 18px 44px #00000080, 0 2px 8px #00000059;
 }
