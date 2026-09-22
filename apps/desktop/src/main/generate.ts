@@ -20,7 +20,7 @@ import { parseBook } from '@cairn/core/parse';
 import { mapChapters } from '@cairn/core/pipeline/map';
 import { classifyBook } from '@cairn/core/pipeline/classify';
 import { reduceToPath } from '@cairn/core/pipeline/reduce';
-import { buildNode, notesByChapter, realMinutes } from '@cairn/core/pipeline/build';
+import { buildNode, deckKey, notesByChapter, realMinutes } from '@cairn/core/pipeline/build';
 import { BUDGETS, suggestBudgets, type BudgetId } from '@cairn/core/pipeline/budget';
 import {
   type DeckScheduler, startDeckScheduler, type SchedulerProgress,
@@ -222,6 +222,9 @@ async function startBuilding(
   const scheduler = startDeckScheduler({
     nodes: path.nodes,
     store,
+    // Content-keyed, never positional: `reduce` re-runs per generation and `n0`
+    // is routinely a different station than it was last time.
+    keyOf: (node) => deckKey(node),
     build: (node) => buildNode(node, byChapter, audioDir, provider, narrator),
     onReady: async (deck, progress) => {
       decks.push(deck);

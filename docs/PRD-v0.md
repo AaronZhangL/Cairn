@@ -1,226 +1,296 @@
-# Cairn — v0 产品文档
+# Cairn — v0 product document
 
 2026-09-21
 
-## 一句话
+> **Decision record.** This is the original pitch, written when the project was still going to
+> be a product with users. Its framing — a moat, ten strangers, completion rate as the kill
+> criterion, BYOK — has been superseded by [SPEC.md](./SPEC.md), which starts from "one person,
+> one machine, nothing published".
+>
+> What survives is the *reasoning*: why the WeChat Reading API was dropped, why the pipeline
+> reads the full text exactly once, why spaced repetition is out of scope, why node expansion
+> replaced a git-branch metaphor. Those arguments are still load-bearing. The business case is
+> not.
 
-给「买了书但读不完」的人，把一本电子书变成两小时能走完、走完有交代的学习路径。
+## In one sentence
 
-注意这句话里没有「快」。我们卖的不是速度——视频和讲解比纯文字读起来更慢。我们卖的是**完成**。
+For people who buy books and never finish them: turn an ebook into a learning path you can walk
+in two hours, with something to show at the end.
 
-凭什么是我们：
+Note what that sentence does not say: *fast*. We are not selling speed — video and narration are
+slower to get through than plain text. We are selling **completion**.
 
-> NotebookLM 给你一个工具，我们给你一条路。
+Why us:
 
-「上传文档 → AI 生成摘要和讲解」这一步，NotebookLM、Kimi、秘塔都做得到，而且免费。生成不是壁垒。**路径设计才是**：章节怎么切、节点怎么排、走到哪里给什么反馈、读完的「交代」长什么样。这决定了我们接下来的力气花在哪里——不是花在 prompt 和 PPT 模板上。
+> NotebookLM hands you a tool. We hand you a path.
 
-## 问题：不是读得慢，是读不完
+"Upload a document, have an AI summarise and explain it" is something NotebookLM, Kimi and Metaso
+already do, for free. Generation is not the barrier. **Path design is**: how chapters are cut,
+how nodes are ordered, what feedback arrives where, what "something to show" actually looks like.
+That decides where the effort goes — not into prompts and slide templates.
 
-买书的人很多，读完的人很少。痛点不在速度，在三件事：
+## The problem: not reading slowly, not finishing
 
-1. **纯文字门槛高。** 大部分人现在习惯消费图和视频，连续读三十万字是一件越来越难的事。
-2. **没有路径。** 一本书打开就是第一页，没有「今天走到哪」、没有进度、没有阶段性反馈。
-3. **没有交代。** 读完也不知道自己得到了什么，没有任何成就感的落点。
+Many people buy books; few finish them. The pain is not speed. It is three things:
 
-所以我们优化的指标是**完读率**，不是「节省了多少时间」，也不是「记住了多少」。
+1. **Plain text is a high barrier.** Most people now consume pictures and video, and reading
+   300,000 words continuously gets harder every year.
+2. **There is no path.** A book opens on page one. There is no "where do I get to today", no
+   progress, no feedback at a stage boundary.
+3. **There is nothing to show.** Finish it and you still cannot say what you got. No landing
+   place for a sense of achievement.
 
-这是一个明确的取舍：**我们做的是成就感机器，不是学习工具。** 记住是好事，但不是产品承诺。得到、樊登读书、各类读书打卡做的都是这门生意，而且它们都活得不错。
+So the metric being optimised is **completion rate** — not time saved, not how much was retained.
 
-承认这一点的代价是：遗忘曲线复习这类「真学会」功能，不在第一版里（见下文决策记录）。
+This is a deliberate trade: **we are building an achievement machine, not a learning tool.**
+Retention is good, but it is not the promise. Dedao, Fandeng and every reading-streak app are in
+that business, and they do fine.
 
-## 产品形态：用户走一遍
+The price of admitting this: features aimed at genuine retention, such as spaced repetition, are
+not in v1 (see the decision record).
 
-1. **上传一本书**。EPUB / Markdown / TXT。
-2. **解析与分类**。拆章节，判定是知识类还是叙事类。
-3. **压缩**。全文逐章摘要（map），之后所有产物只读摘要（reduce）。全文只读一遍。
-4. **按类型呈现**。知识类 → 脉络谱（脑图）；小说散文 → 故事线 + 人物关系。
-5. **降低阅读门槛**。每个节点以图文为主，配讲解（PPT 式分页 + 口播）。
-6. **节点可展开**。某个点没懂 → 展开讲细一点。不是分支，就是展开。
-7. **走完给交代**。完读反馈 + 金句回顾。
-8. **金句回顾**（可选增强）。叠加微信读书全网热门划线——「这句话，N 万人划过线」。
+## The shape: the user walks it once
 
-关于第 6 步：原本设计是仿 git 的 branch / checkout。**已放弃**。branch 的价值在于并行演化、merge、diff，而书是静态的，没有 merge 也没有冲突。剔掉隐喻，真实需求就是一个折叠面板。
+1. **Upload a book.** EPUB / Markdown / TXT.
+2. **Parse and classify.** Split into chapters, decide knowledge or narrative.
+3. **Compress.** Summarise every chapter (map); everything downstream reads the summaries
+   (reduce). The full text is read once.
+4. **Present by type.** Knowledge → a map of the argument. Novels and essays → storyline and
+   character relationships.
+5. **Lower the barrier.** Each node is mostly visual, with narration (slide-style pages plus
+   voice).
+6. **Nodes expand.** Did not follow a point → expand it. Not a branch, just an expansion.
+7. **Something to show at the end.** Completion feedback and a review of the best lines.
+8. **Quote review** (optional enhancement). Overlay WeChat Reading's most-highlighted passages —
+   "this sentence, highlighted by N thousand readers".
 
-关于第 8 步：这是微信读书 API 在新方案里唯一保留的用途，也是它真正的独家资产：几千万读者的集体注意力分布。NotebookLM 给不了，LLM 也编不出。**它必须是懒加载的**：用户点「看看大家划了什么」时才要 key，绝不在注册时要。
+On step 6: the original design imitated git's branch and checkout. **Abandoned.** Branching earns
+its keep through parallel evolution, merge and diff; a book is static, with no merge and no
+conflict. Drop the metaphor and the real requirement is a disclosure panel.
 
-## 技术地基：为什么改成用户上传
+On step 8: this is the only surviving use for the WeChat Reading API, and it is the one thing
+that API genuinely owns — the collective attention of tens of millions of readers. NotebookLM
+cannot supply it and an LLM cannot invent it. **It must be lazy-loaded**: ask for a key when the
+user clicks "see what everyone highlighted", never at signup.
 
-原方案是用微信读书 API 拿书。查证后放弃，原因是一个硬约束。
+## The foundation: why users upload
 
-### Skill 是真的，但拿不到正文
+The original plan pulled books from the WeChat Reading API. Dropped after investigation, because
+of one hard constraint.
 
-`Tencent/WeChatReading` 确实是腾讯官方仓库，Apache-2.0，v1.0.4，网关 `https://i.weread.qq.com/api/agent/gateway`。仓库创建于 2026-09-20，很新。
+### The skill is real, but it cannot reach the text
 
-全部 14 个接口，**没有任何一个返回章节正文**：
+`Tencent/WeChatReading` is genuinely Tencent's own repository: Apache-2.0, v1.0.4, gateway
+`https://i.weread.qq.com/api/agent/gateway`, created 2026-09-20.
 
-| 接口 | 返回内容 |
+Across all 14 endpoints, **not one returns chapter text**:
+
+| Endpoint | Returns |
 | --- | --- |
-| `/store/search` | 书名、作者、评分 |
-| `/book/info` | 简介、分类、ISBN、字数 |
-| `/book/chapterinfo` | 章节标题、字数、是否付费 |
-| `/book/bestbookmarks` | 热门划线，服务端固定前 20 条，不分页 |
-| `/book/bookmarklist` | 用户自己的划线 |
-| `/book/readreviews`、`/review/*` | 公开点评、个人想法 |
-| `/shelf/sync`、`/user/notebooks`、`/readdata/detail` | 书架、笔记概览、阅读统计 |
-| `/book/recommend`、`/book/similar`、`/book/underlines`、`/book/getprogress` | 推荐、相似书、划线热度、进度 |
+| `/store/search` | Title, author, rating |
+| `/book/info` | Blurb, category, ISBN, word count |
+| `/book/chapterinfo` | Chapter titles, word counts, paywall flags |
+| `/book/bestbookmarks` | Popular highlights — server-fixed top 20, no pagination |
+| `/book/bookmarklist` | The user's own highlights |
+| `/book/readreviews`, `/review/*` | Public reviews, personal notes |
+| `/shelf/sync`, `/user/notebooks`, `/readdata/detail` | Shelf, notebook overview, reading stats |
+| `/book/recommend`, `/book/similar`, `/book/underlines`, `/book/getprogress` | Recommendations, similar books, highlight density, progress |
 
-全文搜「正文 / 全文 / content / contents」，`content` 字段只出现在**点评文本**和**用户想法**里。
+Searching every response shape for `content`, it appears only inside **review text** and **user
+notes**.
 
-一本 30 万字的书，能拿到的文本总量约为：简介 200 字 + 目录 + 20 条划线，**不到 2000 字，而且不连续**。
+For a 300,000-word book, the total retrievable text is roughly: a 200-word blurb, the table of
+contents, and 20 highlights — **under 2,000 words, and not contiguous.**
 
-### 为什么这一点致命
+### Why that is fatal
 
-若坚持原方案，输出内容就只能来自模型预训练记忆，微信读书实际上只是个搜索框。而这会把产品切成两半，切线正好落在护城河上：
+Sticking with the original plan means the output can only come from the model's pretraining
+memory, with WeChat Reading reduced to a search box. That splits the product in half, and the
+split lands exactly on the moat:
 
-| | 头部名著 | 长尾 / 新书 |
+| | Famous books | Long tail / new |
 | --- | --- | --- |
-| 模型知道吗 | 知道，输出尚可 | 不知道 |
-| 需要微信读书吗 | 不需要 | 需要，但只给目录 + 20 条划线 |
-| 输出质量 | 免费内容已饱和 | 自信的编造 |
-| 用户能发现错吗 | 能 | 不能——他没读过，这正是他来的原因 |
+| Does the model know it | Yes, output is passable | No |
+| Is WeChat Reading needed | No | Yes, but it only gives contents and 20 highlights |
+| Output quality | Free alternatives already saturate this | Confident fabrication |
+| Can the user catch an error | Yes | No — they have not read it, which is why they came |
 
-向无法验证的人批量输出看起来很对的内容，能跑一阵子，但失败模式很确定：某天有人发现书里根本没这个观点，然后截图。小说更惨：故事线和人物关系必须来自正文，而正文一条都没有。
+Shipping plausible-looking content at volume to people who cannot verify it works for a while,
+but the failure mode is certain: one day someone notices the book says no such thing, and
+screenshots it. Novels are worse — storyline and character relationships must come from the text,
+and there is none.
 
-### 用户上传解决了什么
+### What user uploads fix
 
-有了真正的全文，就不会编。「任何书都能生成」从此是真话。而且用户主动传的书 = 高意图，比在书城里随便点一本强得多。
+With the real text, nothing is invented. "Any book works" becomes true. And a book someone
+uploads on purpose signals far higher intent than one tapped in a store.
 
-代价是地基换了，对手也换了（见下文风险）。
+The cost is a different foundation and a different set of competitors (see risks).
 
-## 决策记录：砍掉了什么
+## Decision record: what was cut
 
-| 原计划 | 现状 | 理由 |
+| Originally | Now | Why |
 | --- | --- | --- |
-| 用微信读书 API 取书本全文 | **改为用户上传** | API 没有任何正文接口，压缩无从谈起 |
-| git branch / checkout 深入知识点 | **改为节点展开** | 没有 merge 和 diff，隐喻只借了个壳，徒增心智负担 |
-| 遗忘曲线定时提醒复习 | **砍掉** | 它服务「记住」，和成就感定位冲突；Anki 已经免费且更强 |
-| 费曼学习法：每个 checkpoint 强制输出 | **改为用户可选** | 速读用户不愿写作业，但代价很大（见风险） |
-| PDF 解析 | **延后** | 扫描件 OCR、双栏、无章节结构，吃掉三个月还做不好 |
-| 多用户复用同一本书的产物 | **不做** | 复用 = 缓存并分发盗版书衍生内容，风险只是延后 |
-| 平台代付 LLM 费用 | **v0 改为 BYOK** | 一刀砍掉成本、版权分发、缓存去重三个问题 |
+| Fetch full text from the WeChat Reading API | **User uploads** | No endpoint returns text; compression has nothing to work on |
+| git branch / checkout for going deeper | **Node expansion** | No merge, no diff — the metaphor borrowed a shell and added mental load |
+| Scheduled spaced-repetition reminders | **Cut** | It serves retention, which conflicts with the achievement framing; Anki is free and better |
+| Feynman method: forced output at each checkpoint | **Optional** | Speed readers will not do homework — but the cost is real (see risks) |
+| PDF parsing | **Deferred** | Scanned pages, OCR, two-column layouts, no chapter structure: three months and still bad |
+| Reusing one book's output across users | **No** | Reuse = caching and distributing derivatives of pirated books; it only defers the risk |
+| The platform paying for LLM calls | **BYOK in v0** | Removes cost, copyright distribution and cache deduplication in one cut |
 
-关于成本：30 万字中文约 45–50 万 token。关键是读几遍。
+On cost: 300,000 Chinese characters is roughly 450–500k tokens. What matters is how many times
+you read them.
 
 ```
-错误做法：分类、章纲、脑图、讲稿、PPT 文案 —— 每步都重读全文
-  50万 × 5 = 250万 token / 本
+Wrong: classify, outline, mind map, script, slide copy — each re-reads the whole book
+  500k × 5 = 2.5M tokens per book
 
-正确做法：全文只读一次
-  map：   逐章摘要（全文过一遍）    50万 token
-  reduce：后续所有产物只读摘要    ~3万 token
-  合计                           ≈ 53万 token
+Right: read the full text exactly once
+  map:     per-chapter summaries (one pass)   500k tokens
+  reduce:  everything downstream reads notes   ~30k tokens
+  total                                       ≈ 530k tokens
 ```
 
-按国产模型输入 ¥1–4 / 百万 token 算，**单本 ¥3–10 量级**（含 TTS 讲解）；用 Claude / GPT 级别模型则 ×10–20。v0 由用户自带 key，这笔钱我们不出。
+At ¥1–4 per million input tokens for Chinese models, that is **¥3–10 per book** including TTS;
+with Claude- or GPT-class models, 10–20× that. In v0 the user brings the key, so we do not pay it.
 
-## 第一版：这是实验，不是产品
+## v1 is an experiment, not a product
 
-**这一条是全文最重要的前提，请先认同它再看其他。**
+**This is the most important premise in the document. Agree with it before reading the rest.**
 
-v0 采用 BYOK（用户自带 LLM API key）。这干净地解决了成本、版权分发、缓存去重三个问题。
+v0 uses BYOK. That cleanly removes cost, copyright distribution, and cache deduplication.
 
-但它同时删掉了我们最初的差异化理由。原本的论证是：用户不愿意自己充 LLM 费用、不愿意写 prompt，所以我们直接提供服务更方便。而 BYOK 正好是让用户自己搞。
+It also deletes our original reason for existing. The argument was: users will not top up an LLM
+account and will not write prompts, so providing the service directly is more convenient. BYOK is
+precisely making them do it themselves.
 
-新用户的实际流程是：
+A new user's actual flow:
 
-1. 上传 EPUB（得先有 DRM-free 的 EPUB）
-2. 去某平台注册、实名、充值、拿 LLM API key，粘贴
-3. （可选）去微信读书网页复制 wrk- key，粘贴
+1. Upload an EPUB (which first requires having a DRM-free EPUB)
+2. Register somewhere, verify identity, add credit, get an LLM API key, paste it
+3. (Optional) copy a `wrk-` key from WeChat Reading's website, paste it
 
-这是**开发者工具的 onboarding**，不是「想到快速学习就想到它」的国民 App 的 onboarding。
+That is **developer-tool onboarding**, not the onboarding of an app people reach for when they
+think "I want to learn this quickly".
 
-所以口径必须明确：**v0 不是产品，是验证。** 跑通之后要做的第一件事，是把 key 换成平台代付，否则永远只有能自己配 API key 的那一小撮人。
+So the framing has to be explicit: **v0 is not a product, it is validation.** The first thing to
+do once it works is replace the key with platform-paid calls; otherwise the audience is forever
+the small set of people who can configure an API key.
 
-### 做
+### In
 
-- EPUB / Markdown / TXT 解析 + 章节切分
-- 逐章 map-reduce 压缩（全文只读一遍）
-- 书籍类型判定（知识类 / 叙事类）
-- 图文学习路径 + 节点展开
-- 完读反馈
-- BYOK 配置页
+- EPUB / Markdown / TXT parsing and chapter splitting
+- Per-chapter map-reduce compression (the full text read once)
+- Book type classification (knowledge / narrative)
+- Visual learning path with node expansion
+- Completion feedback
+- A BYOK settings page
 
-### 不做
+### Out
 
 - PDF
-- 平台代付 LLM
-- 产物跨用户复用
-- 遗忘曲线复习
-- 视频渲染（先做图文 + 讲解稿，验证完再说）
-- 微信读书划线叠加（第二批，懒加载）
+- Platform-paid LLM calls
+- Reusing output across users
+- Spaced repetition
+- Video rendering (do visuals and a script first; revisit after validation)
+- WeChat Reading highlight overlay (second batch, lazy-loaded)
 
-## 判据：什么数字出现就停
+## Kill criteria
 
-没有 kill criteria 的项目不会失败，它会一直半死不活地拖着——那比失败贵得多。
+A project without kill criteria does not fail; it drags on half-alive, which costs more than
+failing.
 
-**唯一指标：10 个陌生人上传的第一本书的完读率。**
+**One metric: the completion rate of the first book uploaded by ten strangers.**
 
-- 必须是陌生人。朋友会给面子，数据没有价值。
-- 低于 **30%** → 「人会想走完」这个前提是假的，整个产品得重想，不是调 prompt 能救的。
-- 高于 30% → 继续，下一步解决代付和用户资产。
+- They must be strangers. Friends are polite and their data is worthless.
+- Below **30%** → the premise that people want to finish is false, and the product needs
+  rethinking, not prompt tuning.
+- Above 30% → continue, and solve paid calls and user-owned assets next.
 
-这个实验一周内能拿到结果，**不需要写完所有功能，甚至可以先不写代码**——手动给 10 个人生成学习路径，看他们走不走得完。
+This experiment returns a result within a week and **does not require finishing the features, or
+even writing code** — generate ten paths by hand and see whether people walk them.
 
-整个产品赌的就是「人会想走完」。这一个数字直接验证它。
+The whole product bets on "people want to finish". This one number tests it directly.
 
-## 风险与未解问题
+## Risks and open questions
 
-### 1. 护城河论证已失效，需要重新回答
+### 1. The moat argument is dead and needs a new answer
 
-原本的论证是：微信自己不会做，因为会分走微信读书的 DAU。改成用户上传后，我们不再站在微信读书的地盘上，这条论证完全失效。对手全换了：
+The original argument was that WeChat would not build this itself, because it would cannibalise
+WeChat Reading's DAU. Once users upload their own books, we are no longer on WeChat Reading's
+territory and the argument collapses entirely. The competitors are different now:
 
-| 对手 | 已经能做什么 | 价格 |
+| Competitor | Already does | Price |
 | --- | --- | --- |
-| NotebookLM | 传文档 → 双人播客讲解 + 脑图 | 免费 |
-| Kimi | 20 万字长文档，直接问 | 免费 |
-| 秘塔 / 豆包 / WPS AI | 文档解析 + 摘要 | 免费 |
-| ChatPDF / Humata | 同赛道，海外 | 付费 |
+| NotebookLM | Upload a document → two-host podcast explanation + mind map | Free |
+| Kimi | 200k-character documents, ask directly | Free |
+| Metaso / Doubao / WPS AI | Document parsing and summaries | Free |
+| ChatPDF / Humata | Same lane, overseas | Paid |
 
-NotebookLM 的 Audio Overview 本质就是我们要做的「PPT + 讲解」，而且免费、Google 做的、已经上线两年了。
+NotebookLM's Audio Overview *is* the "slides plus narration" we intend to build — free, from
+Google, and shipping for two years.
 
-用「大厂有内部矛盾」答这个问题已经不行了——Google 没有。现在能成立的回答只剩一个：**路径设计**。这个回答尚未被验证。
+"Big companies have internal conflicts" no longer answers this; Google has none here. One answer
+is left: **path design.** That answer is unvalidated.
 
-### 2. 用户手上的 EPUB 从哪来
+### 2. Where the user's EPUB comes from
 
-正版电子书都有 DRM（微信读书、Kindle、掌阅、多看），用户手上**基本拿不到 DRM-free 的 EPUB**。实际来源只有三类：盗版资源、自己扫描、公版书。
+Legitimate ebooks all carry DRM (WeChat Reading, Kindle, iReader, Duokan), so users **essentially
+cannot obtain a DRM-free EPUB**. In practice there are three sources: pirated files, personal
+scans, and public-domain books.
 
-这意味着我们的核心用户画像会是「手上有盗版书库的人」。v0 不复用、不存原文，风险可控；但**用户上传从来不是免责，只是把责任延后到有流量的那天**。所有网盘都走过这条路。
+Which means the core user is "someone with a library of pirated books". With no reuse and no
+stored source text the risk is contained in v0 — but **user uploads have never been a
+disclaimer, only a deferral of responsibility to the day there is traffic.** Every file-sharing
+service has walked this road.
 
-中间方案（待定）：只对**公版书**和**出版社直采**做产物复用，用户上传的书产物只对上传者可见、只存摘要不存原文。
+Possible middle ground (undecided): reuse output only for public-domain books and direct
+publisher deals; for uploads, keep output visible to the uploader alone and store summaries
+rather than text.
 
-### 3. 用户在我们这里不留下任何东西
+### 3. The user leaves nothing behind
 
-费曼输出改成可选，实际等于不做。加上 BYOK 连账单关系都没有，**产品目前的迁移成本是 0**。换个工具用户零损失。
+Making Feynman-style output optional means, in practice, not doing it. Add BYOK, which removes
+even a billing relationship, and **switching cost is currently zero.** A user loses nothing by
+using something else.
 
-而目标是「想到快速学习就想到它」——那是心智目标，心智需要重复使用，重复使用需要用户在里面攒下东西。可以晚点解决，但欠着。
+The goal is to be what people think of when they want to learn something fast — a position in
+someone's head. That requires repeat use, and repeat use requires having accumulated something
+here. This can be solved later, but it is owed.
 
-可能的轻量解法：把输出改得不像作业——一句话、语音、选择题，或者「AI 故意讲错一处，你找出来」。都能拿到用户产出，都不需要写小作文。
+A lighter possible answer: make the output not feel like homework — one sentence, a voice note, a
+multiple-choice question, or "the AI got one thing wrong on purpose, find it". All produce user
+output; none require writing an essay.
 
-### 4. onboarding 漏斗
+### 4. The onboarding funnel
 
-见上节。v0 实验可以手动绕过（我们替用户配），但这意味着 v0 的漏斗数据不具备参考价值。**v0 只验证完读率，不验证获客。**
+See above. The v0 experiment can bypass it by hand (we configure it for them), but that means
+v0's funnel data is worthless. **v0 validates completion, not acquisition.**
 
-## 下一步
+## Next steps
 
-实验分两段，第一段不写代码。
+Two phases; the first has no code.
 
-### 第一段：验证前提（约一周，无代码）
+### Phase 1: validate the premise (about a week, no code)
 
-- [ ] 选 2–3 本代表性的书（1 知识类 + 1 叙事类）
-- [ ] 手工跑一遍流程，产出完整学习路径，确认输出质量达标
-- [ ] 找 10 个陌生人（不是朋友），发给他们走
-- [ ] 统计完读率，对照 30% 阈值
+- [ ] Pick two or three representative books (one knowledge, one narrative)
+- [ ] Run the flow by hand, produce complete paths, confirm the output is good enough
+- [ ] Find ten strangers (not friends) and send it to them
+- [ ] Measure completion rate against the 30% threshold
 
-### 第二段：过阀后才写（主干）
+### Phase 2: build it, only after passing
 
-- [ ] EPUB / MD / TXT 解析 + 章节切分
-- [ ] 逐章 map-reduce 压缩管道
-- [ ] 书籍类型判定 + 分支呈现（脑图 / 故事线）
-- [ ] 学习路径 UI + 节点展开
-- [ ] BYOK 配置页
+- [ ] EPUB / MD / TXT parsing and chapter splitting
+- [ ] Per-chapter map-reduce compression pipeline
+- [ ] Type classification and branching presentation (mind map / storyline)
+- [ ] Learning path UI with node expansion
+- [ ] BYOK settings page
 
-### 需要先确认的
+### To settle first
 
-1. **v0 是实验不是产品这个口径，合伙人认不认同。** 不认同的话后面所有取舍都要重谈。
-2. **30% 这个阈值合不合理。** 宁可订高，不要订了之后再往下调。
-3. **「路径设计」到底长什么样。** 这是唯一剩下的差异化，目前还是个词，不是个设计。第一段手工跑的时候必须把它做具体。
+1. **Whether "v0 is an experiment, not a product" is agreed.** If not, every trade-off below it
+   is back open.
+2. **Whether 30% is the right threshold.** Better to set it high than to lower it afterwards.
+3. **What "path design" actually is.** It is the only differentiation left and it is currently a
+   word, not a design. Phase 1 has to make it concrete.

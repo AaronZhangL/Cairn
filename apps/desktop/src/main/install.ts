@@ -11,7 +11,7 @@
  * representable now, which is the actual fix.
  */
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   audioFile, bookDir, bookFile, type DeckIndex, deckFile, deckIndexFile,
   LIBRARY_INDEX, type LibraryEntry, normalizeEntry,
@@ -82,7 +82,10 @@ export async function installDeck(
 ): Promise<void> {
   const target = at(audioFile(bookId, deck.nodeId));
   await mkdir(join(at(bookDir(bookId)), 'audio'), { recursive: true });
-  await Bun.write(target, Bun.file(join(audioDir, `${deck.nodeId}.mp3`)));
+  // Source name is content-keyed (see `deckKey`), destination is the station id
+  // the player builds its URL from. Reconstructing the source from the id is
+  // what shipped one budget's audio with another budget's subtitles.
+  await Bun.write(target, Bun.file(join(audioDir, basename(deck.audioPath))));
 
   // The deck points at the copy the player can reach, not the cache it was built in
   await mkdir(join(at(bookDir(bookId)), 'decks'), { recursive: true });

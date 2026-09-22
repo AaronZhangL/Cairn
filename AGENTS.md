@@ -9,7 +9,7 @@ two — and the station count and coverage follow from that.
 
 Slides are data, not video. The same station renders as a player and as plain text.
 
-## This is a personal tool
+## Project overview
 
 **One user, one machine, nothing published.** No accounts, no telemetry, no server, no sharing.
 The owner feeds it books they already have and walks the generated path themselves.
@@ -22,10 +22,94 @@ NotebookLM, it only has to suit how its owner wants to read.
 What it does *not* remove: the honest self-test. With no metric, the only signal is whether the
 owner reaches for it again on a second book. Build so that answer can be yes.
 
-**[`docs/SPEC.md`](docs/SPEC.md) is the current product definition.** Read it before changing
-scope. [`docs/PRD-v0.md`](docs/PRD-v0.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) are
-kept as decision records — their reasoning (why the WeChat Reading API was dropped, why no MP4,
-why no image generation) still holds, but their product framing does not.
+### Documents
+
+| Document | Read it when |
+| --- | --- |
+| [`docs/SPEC.md`](docs/SPEC.md) | Before changing scope. This is the current product definition. |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching `tokens.css` or any CSS that affects appearance. Several values there are load-bearing for contrast and for the elevation hierarchy; changing one silently breaks it. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Decision record. Its reasoning still holds; its product framing does not. |
+| [`docs/PRD-v0.md`](docs/PRD-v0.md) | Decision record — why the WeChat Reading API was dropped, why no MP4, why no image generation. |
+
+## Setup and commands
+
+```bash
+bun install
+
+bun test                  # every package
+bun test packages/core    # one package
+bun run typecheck         # all four projects, strict
+bun run replay <bookId>   # list recorded model calls; add a file name to re-send one
+
+cd apps/desktop
+bun run dev               # Vite only: the three panes, no model, no shell
+bun run start             # the real desktop app
+bun run package           # a distributable .app
+
+bun run add-book <file>   # drive the same pipeline from the terminal
+```
+
+`bun run start` needs `codex` on PATH, `edge-tts` reachable (see below), and — only for
+outside-the-book search — `TAVILY_API_KEY` in the environment. `bun run dev` needs none of them
+and says so in the answer pane rather than faking a reply.
+
+`typecheck` covers `core`, `ui` and both desktop projects. The desktop two extend a tsconfig
+that `electrobun prepare` projects into `apps/desktop/.hutch/` (gitignored), so on a fresh
+checkout they are **skipped with a message** until you run
+`cd apps/desktop && bunx electrobun prepare` once.
+
+`CAIRN_TRACE=1` records every model call (prompt, schema, raw reply, ms) under the book's cache
+dir, and `bun run replay` re-sends one on its own without re-running map. Off by default: a
+trace of the map stage is the book's text a second time.
+
+`edge-tts` is looked up beyond PATH (`~/.local/bin`, Homebrew, every pyenv version); set
+`CAIRN_EDGE_TTS` to override. It is checked **before the first model call**, because synthesis
+runs last and a missing binary would otherwise be discovered only after paying for every
+station's slides.
+
+Generated books live in `~/Library/Application Support/Cairn/` — never beside the app, whose
+cwd is inside its own bundle and is rebuilt on every `electrobun dev`. `CAIRN_DATA_DIR`
+overrides it.
+
+## Testing
+
+- `bun test` for everything; `bun test <path>` for one file or package.
+- Tests mirror source paths: `src/parse/chunk.ts` → `tests/parse/chunk.test.ts`.
+- Four separate typechecks must pass, not one: `packages/core`, `packages/ui`,
+  `apps/desktop/tsconfig.json`, `apps/desktop/tsconfig.main.json`. `bun run typecheck` runs all
+  four and says which it had to skip; a script that silently checks one of four is how the
+  desktop projects went unchecked.
+- Pure logic is extracted so it can be tested without a browser or a model — `caption.ts`,
+  `split.ts`, `fingerprint.ts`, `budget.ts`, `scheduler.ts` and `trace.ts` are all directly
+  testable. This is why `runtime/` exists: a stage that shells out cannot be tested without the
+  tool installed.
+- A change to cache keys, budgets, or caption timing needs a regression test that would have
+  caught the original bug, not just a test that the new code runs.
+
+## Code style
+
+- TypeScript strict, `noUncheckedIndexedAccess` on. No `any`, no non-null assertions on
+  external data.
+- Immutable data. Functions return new objects; `readonly` on domain types.
+- Small focused files. Extract rather than grow past ~400 lines.
+- Errors are explicit and typed (`ParseError` carries a `code` so the UI can show something a
+  human understands). Never swallow an error.
+- Comments explain *why*, especially where a simpler approach was rejected for a reason that is
+  not obvious from the code.
+- **Code and documentation are written in English** — comments, doc comments, identifiers, test
+  names, and everything under `docs/`.
+- **Product-facing strings are Chinese** — `ParseError` messages, UI copy, and the LLM prompts
+  that generate Chinese content. An English UI is a later iteration, not now.
+- Word counting treats CJK per character and Latin per word.
+- Quality signals are recorded, not recomputed: `PathQuality` on each `LibraryEntry` carries
+  `dropped` (stations citing chapters that do not exist), `retries`, `failed` and
+  `unsourcedQuotes`. All four should be 0; with no completion metric they are the only objective
+  way to tell whether a prompt change helped.
+- **Follow `karpathy-guidelines`**: state assumptions before coding, write the minimum that
+  solves the problem, keep changes surgical, and define a verifiable success check per step.
+- **Visual changes follow [`docs/DESIGN.md`](docs/DESIGN.md)**: the shadow budget belongs to the
+  slide alone, regions separate by surface rather than by rules, and letter-spacing is tiered by
+  size. Re-measure the contrast tables there after changing any colour.
 
 ## Layout
 
@@ -103,6 +187,12 @@ These are load-bearing. Breaking one silently undoes a decision that took real w
    reader, in the order they are walking. A station with no deck yet is shown as pending, never
    hidden.
 
+8. **Cache keys derive from content, never from position.** `reduce` re-runs on every generation
+   and the model is not deterministic, so station `n0` routinely means a different station than
+   it did last time — and one audio directory is shared by every budget. A positional key let
+   one budget's synthesis overwrite another's, then shipped the right subtitles over the wrong
+   voice track. `deckKey()` in `pipeline/build.ts` fingerprints the node's content instead.
+
 ## Out of scope
 
 PDF parsing · MP4 rendering · image generation · spaced repetition · user accounts · telemetry ·
@@ -119,42 +209,29 @@ pipeline does not ask — it sweeps every chapter exactly once in a fixed order.
 model fetch outside material, which directly breaks the invariant that structure comes only from
 the book's real text.
 
-## Commands
+## Security
 
-```bash
-bun install
-bun test                  # all packages
-bun test packages/core    # one package
-bun run typecheck         # all four projects, strict
-bun run replay <bookId>   # list recorded model calls; add a file name to re-send one
-```
+The threat model is small — one machine, one user, no network service — but three rules hold:
 
-`typecheck` covers `core`, `ui` and both desktop projects. The desktop two extend a tsconfig
-that `electrobun prepare` projects into `apps/desktop/.hutch/` (gitignored), so on a fresh
-checkout they are **skipped with a message** until you run it — run
-`cd apps/desktop && bunx electrobun prepare` once and all four check.
+- **No secret is ever hardcoded.** `TAVILY_API_KEY` comes from the environment and is read in
+  the main process only; the webview never holds a key. That boundary is the reason the RPC
+  bridge exists.
+- **The loopback server is scoped, not open.** It binds `127.0.0.1`, answers GET and HEAD only,
+  serves exactly one directory, and every request must carry a per-launch token as its first
+  path segment. Traversal is rejected before the join and the result is re-checked against the
+  root afterwards, because a decoded segment can contain a separator.
+- **Generated books are derived content and stay local.** `.gitignore` keeps the library and the
+  pipeline cache out of the repository; they contain full chapter text from books the owner
+  bought.
 
-## Conventions
+## Commits and pull requests
 
-- TypeScript strict, `noUncheckedIndexedAccess` on. No `any`, no non-null assertions on
-  external data.
-- Immutable data. Functions return new objects; `readonly` on domain types.
-- Small focused files. Extract rather than grow past ~400 lines.
-- Errors are explicit and typed (`ParseError` carries a `code` so the UI can show something a
-  human understands). Never swallow an error.
-- Tests mirror source paths: `src/parse/chunk.ts` → `tests/parse/chunk.test.ts`.
-- Comments explain *why*, especially where a simpler approach was rejected for a reason that is
-  not obvious from the code.
-- Quality signals are recorded, not recomputed: `PathQuality` on each `LibraryEntry` carries
-  `dropped` (stations citing chapters that do not exist), `retries`, `failed` and
-  `unsourcedQuotes`. All four should be 0; they are how a prompt change is judged, since there
-  is no completion metric.
-- **Code is written in English** — comments, doc comments, identifiers, test names.
-- **Product-facing strings are Chinese** — `ParseError` messages, UI copy, and the LLM prompts
-  that generate Chinese content. An English UI is a later iteration, not now.
-- **Follow `karpathy-guidelines`**: state assumptions before coding, write the minimum that
-  solves the problem, keep changes surgical, and define a verifiable success check per step.
-- Word counting treats CJK per character and Latin per word.
+- Conventional commits: `<type>: <description>`, where type is one of
+  `feat` `fix` `refactor` `docs` `test` `chore` `perf` `ci`.
+- One reason per commit. A formatting sweep and a behaviour change do not belong together.
+- Before committing: `bun test` and all four typechecks pass, and no generated book, audio file,
+  or cache entry is staged.
+- A commit that fixes a silent bug names the invariant it restores.
 
 ## Status
 
@@ -163,8 +240,10 @@ checkout they are **skipped with a message** until you run it — run
 - **Done** — `packages/ui`: six slide layouts and the three panes. Each layout carries a
   graphic skeleton (proportional bars, node chains, quote watermark) and builds in step with
   the narration; pictograms come from a fixed local glyph set, never from image generation.
-- **Done** — `apps/desktop`: Electrobun shell, RPC bridge, Tavily search, and a
-  `Cairn-dev.app` that builds and runs.
+- **Done** — `apps/desktop`: Electrobun shell, RPC bridge, Tavily search, library server,
+  and a `Cairn-dev.app` that builds and runs.
+- **Done** — adding a book from the UI: a shelf with a drop zone, a parse-only preview before
+  any model call, a budget choice, then the run with live progress.
 - **Verified end to end** on Pro Git zh (13.9 MB EPUB, 201k words, 86 chapters):
   at the 10-minute budget, 4 stations / 1 stage / 13 minutes of real narrated audio;
   at 1 hour, 18 stations / 5 stages / 70 minutes. Zero fabricated chapter references.
@@ -178,34 +257,10 @@ checkout they are **skipped with a message** until you run it — run
 - **Done** — `CAIRN_TRACE=1` records every model call (prompt, schema, raw reply, ms) under the
   book's cache; `bun run replay <bookId> <file>` re-sends one on its own. Off by default,
   because a trace of the map stage is the book's text a second time.
-- **296 tests, four clean typechecks.**
+- **315 tests, four clean typechecks.**
 - **Next** — pick a book, walk it, and fix what annoys you.
 
-## Running it
-
-```bash
-bun install
-cd apps/desktop
-
-bun run dev     # Vite only: the three panes with the bundled sample, no model
-bun run start   # the real desktop app, with codex-backed question answering
-bun run package # a distributable .app
-```
-
-`bun run start` needs `codex` on PATH and, for outside-the-book search,
-`TAVILY_API_KEY` in the environment. `bun run dev` needs neither and says so in
-the answer pane rather than faking a reply.
-
-Adding a book is wired to the UI: the app opens on a shelf with a drop zone, and
-picking a file gives a parse-only preview (title, chapters, words) before any
-model call, then a budget choice, then the run. `bun run add-book <file>` drives
-the same pipeline from the terminal.
-
-Generated books live in `~/Library/Application Support/Cairn/` — never
-beside the app, whose cwd is inside its own bundle and is rebuilt on every
-`electrobun dev`. `CAIRN_DATA_DIR` overrides it.
-
-### Chosen dependencies
+## Chosen dependencies
 
 | Need | Choice |
 | --- | --- |
@@ -214,7 +269,7 @@ beside the app, whose cwd is inside its own bundle and is rebuilt on every
 | Desktop shell | Electrobun, built directly (no web-first step) |
 | Chat surface | assistant-ui — its shell only; message bodies are ours, because answers are structured objects (`Answer`, `OutsideAnswer`) rather than markdown streams |
 
-### A note on the LLM provider
+## A note on the LLM provider
 
 Generation runs through the locally installed `codex exec` CLI as a subprocess, so there is no
 API spend. For a personal tool on the owner's own machine this is simply using a tool they

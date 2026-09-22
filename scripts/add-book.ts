@@ -148,8 +148,13 @@ async function install(
   await writeFile(join(dir, 'chapters.json'), JSON.stringify(chapters));
 
   for (const deck of decks) {
-    const name = `${deck.nodeId}.mp3`;
-    await Bun.write(join(dir, 'audio', name), Bun.file(join(audioDir, name)));
+    // Source name is content-keyed (see `deckKey`), destination is the station id
+    // the player builds its URL from. Reconstructing the source from the id is
+    // what shipped one budget's audio with another budget's subtitles.
+    await Bun.write(
+      join(dir, 'audio', `${deck.nodeId}.mp3`),
+      Bun.file(join(audioDir, basename(deck.audioPath))),
+    );
   }
 
   const entry: LibraryEntry = {

@@ -35,6 +35,15 @@ export interface DeckSchedulerOptions {
   readonly build: (node: PathNode) => Promise<NodeDeck>;
   readonly store: JobStore<NodeDeck>;
   /**
+   * The store key for a station, which is NOT its id.
+   *
+   * `reduce` re-runs on every generation and the model is not deterministic, so
+   * `n0` routinely means a different station than it did last time. Keying the
+   * cache on position would hand the reader a previous run's deck. `deckKey`
+   * in `build.ts` is the fingerprint this takes; the default is only for tests.
+   */
+  readonly keyOf?: (node: PathNode) => string;
+  /**
    * In-flight cap. Two is deliberate: a station is three to five minutes of
    * audio and a build is far quicker than that, so a deeper queue buys no
    * comfort and takes provider slots away from the reader's questions.
@@ -70,6 +79,7 @@ export interface DeckScheduler {
 export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler {
   const {
     nodes, build, store, onReady, onFailed, signal,
+    keyOf = (node) => node.id,
     lookahead = DEFAULT_LOOKAHEAD,
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     baseDelayMs = DEFAULT_BASE_DELAY_MS,
@@ -127,7 +137,8 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
     if (!node) return;
 
     // Store-first, exactly like runJob: a deck the CLI already built is free
-    const existing = await store.get(nodeId);
+    const key = keyOf(node);
+    const existing = await store.get(key);
     if (existing !== undefined) {
       decks.set(nodeId, existing);
       settle(nodeId, existing);
@@ -138,7 +149,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
     running += 1;
     try {
       const deck = await attempt(node);
-      await store.put(nodeId, deck);
+      await store.put(key, deck);
       decks.set(nodeId, deck);
       running -= 1;
       settle(nodeId, deck);

@@ -308,3 +308,42 @@ describe('startDeckScheduler', () => {
     expect([...s.ready()]).toEqual(['n0', 'n1']);
   });
 });
+
+describe('store 键与站点 id 分开', () => {
+  test('按 keyOf 读写缓存，而不是按站点位置', async () => {
+    const store = memoryStore<NodeDeck>([['n0-abc', deck('n0')]]);
+    const built: string[] = [];
+    const s = startDeckScheduler({
+      nodes: nodes(2), store, lookahead: 1,
+      keyOf: (n) => `${n.id}-abc`,
+      build: async (n) => { built.push(n.id); return deck(n.id); },
+    });
+    await s.done;
+
+    // n0 came from the cache under its fingerprint key; only n1 was built
+    expect(built).toEqual(['n1']);
+    expect(store.data.has('n1-abc')).toBe(true);
+  });
+
+  test('位置相同但内容不同的站不会命中上一次的缓存', async () => {
+    const store = memoryStore<NodeDeck>([['n0-old', deck('n0')]]);
+    const built: string[] = [];
+    const s = startDeckScheduler({
+      nodes: nodes(1), store, lookahead: 1,
+      keyOf: () => 'n0-new',
+      build: async (n) => { built.push(n.id); return deck(n.id); },
+    });
+    await s.done;
+    expect(built).toEqual(['n0']);
+  });
+
+  test('对外仍以站点 id 标识，UI 不需要知道指纹', async () => {
+    const s = startDeckScheduler({
+      nodes: nodes(2), store: memoryStore<NodeDeck>(), lookahead: 1,
+      keyOf: (n) => `${n.id}-xyz`,
+      build: async (n) => deck(n.id),
+    });
+    await s.done;
+    expect([...s.ready()]).toEqual(['n0', 'n1']);
+  });
+});

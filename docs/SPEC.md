@@ -1,96 +1,109 @@
-# Cairn — 产品 Spec
+# Cairn — product spec
 
-2026-09-21 · 取代 [PRD-v0.md](./PRD-v0.md) 作为当前产品定义
+2026-09-21 · supersedes [PRD-v0.md](./PRD-v0.md) as the current product definition
 
-> PRD-v0.md 与 ARCHITECTURE.md 保留为**决策记录**：其中「为什么放弃微信读书 API」「为什么不渲染 mp4」
-> 「为什么不用文生图」等论证仍然有效。但它们的产品框架（护城河、完读率判据、10 个陌生人）已作废——
-> 那是写给合伙人的创业论证，而这是一个自用工具。
-
----
-
-## 一、这是什么
-
-**把一本电子书变成一条能走完的路，自己走。**
-
-一个人用，一台机器，不分享，不发布，没有账号，没有埋点，没有服务端。
-
-### 不是什么
-
-- 不是学习平台。不做知识库、不做 RAG 基建、不做 MCP 工具生态（DeepTutor 已经做得很好，但那需要你当一个认真的学生）
-- 不是聊天式阅读助手。提问是支线，**走完是主线**
-- 不是视频生成器。幻灯是数据，播放器只是它的一种渲染
-
-### 判断标准
-
-没有指标。唯一诚实的信号：**做完之后，会不会主动拿它读第二本书。**
+> PRD-v0.md and ARCHITECTURE.md are kept as **decision records**: their arguments — why the
+> WeChat Reading API was dropped, why nothing renders to mp4, why there is no image generation —
+> still hold. Their product framing (moat, completion-rate criterion, ten strangers) does not.
+> That was a pitch written for a co-founder; this is a tool its owner uses alone.
 
 ---
 
-## 二、主界面：三栏
+## 1. What this is
+
+**Turn an ebook into a path you can walk to the end, and walk it yourself.**
+
+One user, one machine. No sharing, no publishing, no accounts, no telemetry, no server.
+
+### What it is not
+
+- **Not a learning platform.** No knowledge base, no RAG infrastructure, no MCP tool ecosystem.
+  DeepTutor does that well, but it asks you to be a serious student.
+- **Not a chat-based reading assistant.** Asking questions is a side path; **finishing the walk
+  is the main line.**
+- **Not a video generator.** Slides are data; the player is one way of rendering them.
+
+### How success is judged
+
+There is no metric. The only honest signal: **after it is built, does its owner reach for it
+again on a second book.**
+
+---
+
+## 2. The main window: three panes
 
 ```
 ┌──────────┬────────────────────────────┬──────────────┐
-│  进度     │         幻灯（16:9）        │   与 AI 对话  │
+│ Progress │        Slide (16:9)        │     Ask      │
 │          │                            │              │
-│ 建立模型  │                            │  ┌────────┐  │
-│  ✓ 第1站  │      锚定效应               │  │划中的原文│  │
-│  ✓ 第2站  │                            │  └────────┘  │
-│  ● 第3站  │   先听到的数字会绑架         │  这是什么意思？│
-│    第4站  │   你之后的每个判断           │              │
-│          │                            │  答：…       │
-│ 展开论证  ├────────────────────────────┤  溯源 第11章  │
-│    第5站  │ 口播字幕（逐句高亮）          │              │
-│    …     │ ▶ ━━━━━━━──────  1:14/3:12 │  [输入框]     │
+│ Model    │                            │  ┌────────┐  │
+│  ✓ 1     │        Anchoring           │  │ quoted │  │
+│  ✓ 2     │                            │  └────────┘  │
+│  ● 3     │   The first number you      │  What does   │
+│    4     │   hear hijacks every        │  this mean?  │
+│          │   judgement after it        │              │
+│ Argument ├────────────────────────────┤  A: …        │
+│    5     │ Caption (one line at a time)│  ch. 11      │
+│    …     │ ▶ ━━━━━━━──────  1:14/3:12 │  [input]     │
 └──────────┴────────────────────────────┴──────────────┘
 ```
 
-| 栏 | 内容 | 行为 |
+| Pane | Contents | Behaviour |
 | --- | --- | --- |
-| **左：进度** | 全部站点，**按路径自己的阶段分组**（不是书的原有「部/章」），三态（已走完 / 当前 / 未走） | 点击任意站直接跳转。自用工具，不限制跳读 |
-| **中：幻灯** | 当前站的幻灯 + 下方口播字幕与播放条 | 自动播放并翻页；`←` `→` 翻页，`空格` 暂停 |
-| **右：对话** | 划线提问、自由提问、回答与溯源 | 提问时**自动暂停口播**，回答后不自动恢复 |
+| **Left: progress** | Every station, **grouped by the path's own stages** (not the book's parts and chapters), in three states: walked / current / ahead | Click any station to jump straight there. This is a personal tool; skipping is not gated |
+| **Centre: slide** | The current station's deck, with the caption and transport below | Plays and advances itself; `←` `→` seek, `space` pauses |
+| **Right: ask** | Questions from a selection or typed freely, answers, and provenance | Asking **pauses the narration**; it does not resume automatically |
 
-### 阶段由路径决定，不是书的目录
+### Stages come from the path, not from the table of contents
 
-左栏分组用**路径自己的阶段**，不沿用书的「部 / 章」。理由：路径已经重排过顺序——
-Pro Git 的第 44 章（reset 的三棵树）被提到了第 3 站，因为那是个该前置的心智模型。
-按原书结构分组会和实际顺序打架。
+The left pane groups by the path's **own** stages rather than the book's parts. The path has
+already reordered things: chapter 44 of Pro Git (reset and the three trees) becomes station 3,
+because it is a mental model that belongs early. Grouping by the original structure would fight
+the actual order.
 
-阶段名应该描述**读者此刻在做什么**（「建立模型」「展开论证」「落到实践」），
-而不是复述书的目录。
+A stage name should describe **what the reader is doing right now** — "build the model",
+"work through the argument", "put it into practice" — not restate the table of contents.
 
-> **这要求改数据模型。** `PathNode` 目前没有阶段字段，`reduce` 也只输出平铺的站点列表。
-> 需要让 reduce 多输出一层：
->
-> ```
-> Path { …, stages: Stage[] }
-> Stage { id, title, nodeIds: string[] }
-> ```
->
-> 对应 `reduce.ts` 的 schema 改动：让模型直接产出 `stages`，每个 stage 内含若干站，
-> 而不是先出站再事后归组——归组的依据只有模型自己知道。
+### The reader sets the pace
 
-### 节奏由用户控制
+- `←` `→` previous / next slide
+- `↓` `↑` previous / next station
+- `space` pause and resume
+- Click any station in the left pane to jump
+- Select text in the caption or on the slide → the right pane picks it up as a quote
 
-- `←` `→` 上一页 / 下一页幻灯
-- `↓` `↑` 下一站 / 上一站
-- `空格` 暂停 / 继续
-- 点击左栏任意站直接跳转
-- 划中中间栏的字幕或幻灯文字 → 右栏自动带入引用
+### One interaction decision
 
-### 一个交互决定
-
-**提问时口播暂停，回答完不自动继续。** 因为提问意味着注意力已经离开了主线，自动恢复会让人错过刚播的内容。恢复由用户按空格。
+**Asking a question pauses the narration, and answering does not resume it.** Asking means
+attention has already left the main line; resuming automatically would make the reader miss what
+just played. Resuming is the reader's own keypress.
 
 ---
 
-## 三、完整流程
+## 3. The whole flow
 
-1. **选书** —— 从本地选 EPUB / TXT / Markdown。文件不离开这台机器
-2. **选预算** —— 10 分钟 / 30 分钟 / 1 小时 / 2 小时。选项由书的体量决定，不诚实的档位会标注（见 `budget.ts`）
-3. **生成路径** —— 逐章可见的进度条（第 37/82 章），可中断，可从断点继续
-4. **走** —— 第一站一建好就进三栏界面开始走，其余站在后台按你走的顺序继续建
-5. **走完** —— 完读反馈 + 金句回顾
+1. **Pick a book** — a local EPUB, TXT or Markdown file. It never leaves the machine.
+2. **Pick a budget** — 10 minutes / 30 minutes / 1 hour / 2 hours. The options depend on the
+   book's size, and a budget that would distort this book is offered but labelled (`budget.ts`).
+3. **Generate the path** — per-chapter progress, interruptible, resumable from where it stopped.
+4. **Walk it** — the three-pane window opens as soon as station 1 is playable; the rest are
+   built behind you, in the order you are walking them.
+5. **Finish** — completion feedback and a review of the quotes worth keeping.
+
+### The path is decided in one go; the stations fill in behind you
+
+What you wait for after picking a budget is the **path** (map + classify + reduce), not every
+station. For a 200k-word book at the two-hour budget that is roughly 24 model calls against 36
+more for the decks — the decks are about six tenths of the wait.
+
+So `reduce` installs the path immediately and the book appears on the shelf; the first station
+follows and you start walking. Jump to station 10 and the queue re-orders to 10, 11, 12, with
+the stations you skipped moved to the end rather than dropped.
+
+**The path itself cannot be progressive.** `reduce` needs every chapter note before it can
+select and order stations; adding stations as you read would let arrival time decide the station
+count instead of the budget, which is the one thing the budget exists to decide. The station
+list is complete from the first moment, with stations that have no deck yet marked pending.
 
 ### 路径一次确定，站点渐进建成
 
@@ -105,209 +118,239 @@ Pro Git 的第 44 章（reset 的三棵树）被提到了第 3 站，因为那�
 
 ---
 
-## 四、幻灯与口播
+## 4. Slides and narration
 
-> 这是当前**唯一未实现**的管道阶段，也是整个产品形态的核心。
+### Why slides and not video
 
-### 为什么是幻灯不是视频
+Argued in ARCHITECTURE.md §4, and the conclusion stands: slides are data, so one piece of
+content renders as a player, as plain text, and later as mp4 if it ever needs to. Commit to mp4
+first and changing one page means re-rendering the whole thing — and the text view stops
+existing.
 
-已在 ARCHITECTURE.md 第四节论证，结论不变：幻灯是数据，所以同一份内容能渲成播放器、渲成文字模式、
-以后也能渲成 mp4；一旦先做成 mp4，改一页要重渲整条，文字模式也不存在了。
-
-### 数据模型
+### Data model
 
 ```
 PathNode {
-  …已有字段…
+  …existing fields…
   slides:    Slide[]
   narration: NarrationCue[]
   audio:     { src, durationMs }
-  text:      string          // 文字模式，同一份内容的另一个视图
+  text:      string          // the text view: the same content, another rendering
 }
 
-Slide        { id, layout, data, atMs }     // atMs = 在口播时间轴上出现的时刻
-NarrationCue { text, startMs, endMs }       // 字幕逐句高亮
+Slide        { id, layout, data, atMs }     // atMs = when it appears on the audio timeline
+NarrationCue { text, startMs, endMs }       // drives the caption
 ```
 
-### 版式
+### Layouts
 
-不调用图像生成模型。抽象概念画不出有信息量的插图，真实的好 PPT 本来就主要是字和图表。
+No image-generation model is called. Abstract ideas do not yield informative illustrations, and
+a good deck is mostly type and simple diagrams anyway.
 
-**但象形符号不是文生图。** `packages/core/src/icons.ts` 是一张封闭的字形名单，
-`packages/ui/src/slides/glyphs.ts` 用几条描边路径把每个名字画出来——本地、离线、零成本、
-每次渲染完全一样。`Slide` 上的 `icon` 字段只是从这张名单里挑一个名字，挑不到就留空。
+**Pictograms are not generated images.** `packages/core/src/icons.ts` is a closed list of glyph
+names, and `packages/ui/src/slides/glyphs.ts` draws each one with a few stroked paths — local,
+offline, free, and identical on every render. A slide's `icon` field only picks a name from that
+list, and leaves it empty when nothing fits.
 
-它只出现在两个地方：`title`（给这一站一个能认出来的标记）和 `compare` 的两栏
-（标明哪栏是哪栏）。**不出现在 `points` 的每一条上**——编号已经在承担节奏，
-每行再挂一个图标就是噪音。名单里也刻意没有抽象概念：「复利」「身份认同」没有诚实的
-图形，硬造一个会把幻灯变成 clipart。
+Icons appear in exactly two places: `title` (so a station has a mark you can recognise) and the
+two halves of `compare` (so it is obvious which side is which). **Never on every bullet of
+`points`** — the numbering already carries the rhythm, and an icon per line is noise. The list
+also deliberately contains no abstract concepts: "compounding" and "identity" have no honest
+glyph, and inventing one turns the deck into clipart.
 
-| `layout` | 用途 |
+| `layout` | Used for |
 | --- | --- |
-| `title` | 每站开场 |
-| `points` | 3 条以内核心论断 |
-| `number` | 实验数据、关键比例对比 |
-| `quote` | 原文金句 |
-| `compare` | A vs B |
-| `flow` | 推导链、因果链 |
+| `title` | Opening each station |
+| `points` | Three claims at most |
+| `number` | Experimental data, key ratios |
+| `quote` | A line from the book |
+| `compare` | A versus B |
+| `flow` | A chain of reasoning or cause |
 
-每站 3–5 页。`relation` / `timeline` / `world`（小说用）本版不实现。
+Three to five slides per station. `relation` / `timeline` / `world` (for novels) are not built
+in this version.
 
-### 生成与同步
+### Generating and syncing
 
 ```
-slides 阶段   PathNode + 其 sourceChapters 的 ChapterNote
-                → Slide[] + 口播稿（分句）          1 次 LLM 调用/站
-                                ↓
-tts 阶段      口播稿 → mp3 + 逐词时间戳            edge-tts，本地，免费
-                                ↓
-              时间戳聚合成 NarrationCue[]，
-              幻灯的 atMs 对齐到对应句子的 startMs
+slides stage   PathNode + the ChapterNotes of its sourceChapters
+                 → Slide[] + a narration script, split into sentences   1 LLM call per station
+                                 ↓
+tts stage      narration script → mp3 + per-sentence timing             edge-tts, local, free
+                                 ↓
+               timings become NarrationCue[], and each slide's
+               atMs aligns to the start of the sentence it belongs to
 ```
 
-`edge-tts` 会发出 WordBoundary 事件，据此可以拿到逐词时间戳——**字幕高亮与幻灯翻页都由它驱动**，
-不需要人工对轴。
+`edge-tts` emits sentence-level subtitles alongside the audio, and **both the caption and the
+slide changes are driven from them** — nothing is timed by hand.
+
+Captions are cut finer than the narration sentences: `caption.ts` splits at clause punctuation,
+drops the trailing mark, and enforces a minimum line length and on-screen time. A 40-character
+sentence is the right unit for a script and the wrong one for a subtitle.
 
 ---
 
-## 五、提问（三层，已实现）
+## 5. Asking questions — three layers
 
-| 层 | 触发 | 机制 | 调用次数 |
+| Layer | Trigger | Mechanism | Calls |
 | --- | --- | --- | --- |
-| **锚定** | 划中一段提问 | 当前站的 `sourceChapters` 直接指向原文，**无需检索** | 1 |
-| **全书** | 输入框自由提问 | 全部 `ChapterNote` 就是索引（20 万字的书约 2 万 token），让模型挑章号再加载 | 2 |
-| **书外** | 前两层答不出时，**用户显式确认**才触发 | 自己调搜索 API，结果单独成段并标注来源 | 1 + 搜索 |
+| **Anchored** | Select a passage and ask | The station's `sourceChapters` already point at the text — **no retrieval** | 1 |
+| **Whole book** | Type a question | Every `ChapterNote` *is* the index (~20k tokens for a 200k-word book); the model picks chapters, then they load | 2 |
+| **Outside** | Only when the first two cannot answer **and the user says yes** | A search API of our own, rendered as a separate block with its sources | 1 + search |
 
-### 三条铁律
+### Three hard rules
 
-1. 书里的问题只从书里答。答不出就说答不出，**绝不偷偷出去查**
-2. 出去查是用户点的，不是模型决定的
-3. **书内与书外的内容分开呈现，不揉成一段**——你没读过这本书，揉在一起就分不出哪句是哪句
+1. A question about the book is answered from the book. If it cannot be, say so —
+   **never quietly go outside.**
+2. Going outside is the reader's click, not the model's decision.
+3. **Book-sourced and web-sourced content render separately and are never merged.** The reader
+   has not read the book; merged into one paragraph, the two become indistinguishable.
 
-### 为什么不用 RAG
+### Why not RAG
 
-管道是**扫描驱动**的：每章读且只读一遍，顺序固定。RAG 解决的是"在一堆东西里找到相关的那块"，
-而我们不挑、全扫。`ChapterNote` 列表本身就是索引。
+The pipeline is **sweep-driven**: every chapter is read exactly once, in a fixed order. RAG
+solves "find the relevant piece among many", and we do not pick — we sweep. The list of
+`ChapterNote`s is the index.
 
-向量库的门槛是**索引本身塞不进上下文**——20 万字的书索引约 2 万 token，随便装；一般长篇非虚构
-（50 万字上下）约 4 万，也装得下。真正过线的是千章级的连载，约 2300 章、29 万 token。
+A vector store earns its place when **the index itself no longer fits in context**: ~18k tokens
+for a 200k-word book fits easily, and so does an ordinary long non-fiction book (500k words,
+~200 chapters, ~42k tokens). What crosses the line is a serial of a thousand chapters or more —
+around 2300 chapters and 290k tokens.
 
-但那种书的瓶颈其实**不在检索**：map 是线性于章数的，2300 章就是约 580 次调用，而 RAG 省不掉它——
-invariant 6 要的是"完整扫一遍"，RAG 给的是"只看相关的"。真用 RAG 跳过 map，reduce 就只能基于
-模型没读过的章节编排站点，撞上 invariant 4，而且失败是静默的。
+For a book that size the bottleneck is **not retrieval**. `map` is linear in chapter count, so
+2300 chapters is roughly 580 calls, and RAG cannot remove them: invariant 6 wants one complete
+sweep, RAG offers "only the relevant part". Skipping `map` would leave `reduce` ordering
+stations from chapters the model never read — invariant 4, failing silently.
 
-届时该加的是**分层摘要**而不是向量库：每 20 章的 `ChapterNote` 聚合成一条卷级摘要，reduce 读卷级列表
-（2300 章 → 115 条，重新装得下），需要细节再下钻。代价是多约 N/20 次调用，换来结构仍来自真实文本、
-书仍只读一次、溯源链完整——这三条向量库都要打折扣。而且它就是又一次 `runJob`，几乎不用新代码。
+The answer for that day is **hierarchical summarization, not embeddings**: fold every 20
+`ChapterNote`s into one volume note, let `reduce` read the volume list (2300 chapters → 115
+entries, which fits again), and drill down for detail. It costs about N/20 extra calls and keeps
+all three guarantees — structure from real text, the book read once, provenance intact — each of
+which a vector store would weaken. It is also just another `runJob`, so it is nearly no new code.
 
-`ChapterLocator` 接口已留好（现在返回 `ChapterRef`，带可选 `bookId`，为跨书提问留的口子），届时换实现即可。
+The `ChapterLocator` interface is already there for that day; it returns a `ChapterRef` carrying
+an optional `bookId`, which is also the seam for asking across several books at once.
 
-### 为什么不用 MCP
+### Why not MCP
 
-调一次网页搜索是一个函数，不是一个协议。MCP 的主场是**工具多且不可预知**（以后接 Obsidian、Zotero）。
+One web search is a function, not a protocol. MCP earns its keep when tools are many and
+unpredictable — Obsidian, Zotero, later.
 
-更要紧的是：也不用 codex 自带的搜索。让模型自己决定何时搜，我们就不知道它搜了什么、哪句话来自网络——
-而标注来源正是这个功能唯一的价值。
+More importantly, we also do not use codex's own search. Letting the model decide when to search
+means we no longer know what it searched or which sentence came from the web — and labelling the
+source is the entire value of the feature.
 
 ---
 
-## 六、管道现状
+## 6. Pipeline status
 
 ```
-parse     电子书 → Chapter[]                 ✅ 已建成，真书验证
-chunk     整形为体量均匀的 map 单元            ✅ 已建成
-map       每章 → ChapterNote                 ✅ 已建成，quotes 逐字命中 35/36
-classify  判定书籍类型                        ✅ 已建成
-reduce    ChapterNote[] → PathNode[]         ✅ 已建成，受预算约束
-ask       三层提问                            ✅ 已建成
-slides    PathNode → Slide[] + 口播稿         ✅ 已建成，引文逐句回溯到原文
-tts       口播稿 → mp3 + 时间轴               ✅ 已建成
-build     按读者走的顺序渐进建站                ✅ 已建成（scheduler.ts）
+parse     ebook → Chapter[]                      done, verified on real books
+chunk     reshaped into even map units           done
+map       each chapter → ChapterNote             done; quotes matched verbatim 35/36
+classify  book type                              done
+reduce    ChapterNote[] → PathNode[]             done, budget-constrained
+budget    budget → station count and coverage    done
+slides    PathNode → Slide[] + narration script  done
+tts       script → mp3 + timeline                done
+build     per-station decks, resumable           done; content-keyed cache
+scheduler decks in the order you walk them      done, prefetching ahead of the reader
+ask       three layers                           done
 ```
 
-真书验证（Pro Git 中文版，20.2 万字 / 86 章）：
+Verified on Pro Git (Chinese, 202k words, 86 chapters):
 
-| 预算 | 站数 | 时长 | 落在目标区间 |
+| Budget | Stations | Length | Within target |
 | --- | --- | --- | --- |
-| 10 分钟 | 4 | 12 分 | ✓ |
-| 30 分钟 | 9 | 32 分 | ✓ |
-| 2 小时 | 36 | 125 分 | 略超，容差内 |
+| 10 minutes | 4 | 12 min | yes |
+| 30 minutes | 9 | 32 min | yes |
+| 2 hours | 36 | 125 min | slightly over, within tolerance |
 
-296 个测试通过，四个项目 TypeScript strict 零报错。
+315 tests pass; four TypeScript strict typechecks are clean.
 
-每次生成记录四个质量指标（都应为 0）：`dropped`（引用了不存在的章号而被丢弃的站）、`retries`、
-`failed`、`unsourcedQuotes`（在原文里找不到出处的引文卡）。没有完读率可用时，这是判断一次 prompt
-改动是变好还是变坏的唯一客观依据。
+Every run records four quality signals, all of which should be 0: `dropped` (stations citing
+chapters that do not exist), `retries`, `failed`, and `unsourcedQuotes` (quote slides whose text
+could not be found in any chapter excerpt). With no completion metric available, these are the
+only objective way to tell whether a prompt change made things better or worse.
 
 ---
 
-## 七、技术形态
+## 7. Technical shape
 
-**Electrobun 桌面应用，Mac 优先。** 不做 Web 版——`codex exec` 和 `edge-tts` 都需要本地进程，
-而不分享就没有部署 Web 的理由。
+**An Electrobun desktop app, Mac first.** No web build: `codex exec` and `edge-tts` both need a
+local process, and with nothing being shared there is no reason to deploy one.
 
 ```
-packages/core/    领域类型、解析、管道、LLM —— 无框架依赖
-packages/ui/      React 组件与设计 token，幻灯版式渲染器
-apps/desktop/     Electrobun 壳，三栏界面
+packages/core/    Domain types, parsing, pipeline, LLM — no framework dependencies
+packages/ui/      React components and design tokens, slide layout renderers
+apps/desktop/     The Electrobun shell and the three-pane window
 ```
 
-LLM 走本地 `codex exec` 子进程。注意每次调用带约 18k token 的 agent harness 固定开销，
-远超正文本身——这是 map 阶段必须批量合并的原因。一切在 `LlmProvider` 接口之后，换 HTTP provider 是单文件改动。
+The LLM runs as a local `codex exec` subprocess. Each call carries roughly 18k tokens of agent
+harness overhead, far more than the chapter text itself — which is why the map stage batches
+chapters. Everything sits behind the `LlmProvider` interface, so swapping in an HTTP provider is
+a one-file change.
 
 ---
 
-## 八、明确不做
+## 8. Explicitly not doing
 
-| 不做 | 原因 |
+| Not doing | Why |
 | --- | --- |
-| 分享 / 发布 / 账号 / 埋点 / 服务端 | 自用工具 |
-| 小说模式（世界观 / 故事线 / 人物关系） | 本版不做。追连载的单位是「进度」不是「整本」，是另一个产品 |
-| PDF 解析 | 扫描件 OCR、双栏、无章节结构，代价过高 |
-| mp4 渲染 | 幻灯播放器代替 |
-| 文生图 | 抽象概念画不出有信息量的图 |
-| RAG 基建 / 向量库 | 索引装得下，不需要 |
-| MCP | 一个搜索不值得一套协议 |
-| 遗忘曲线复习 | 与「走完就完了」的定位冲突 |
-| 英文界面 | 下一期 |
+| Sharing / publishing / accounts / telemetry / a server | Personal tool |
+| Novel mode (world, storyline, character relations) | Not this version. Following a serial is measured in *progress*, not in *whole books* — that is a different product |
+| PDF parsing | Scanned pages, OCR, two-column layouts, no chapter structure: too expensive |
+| mp4 rendering | The slide player replaces it |
+| Image generation | Abstract ideas do not yield informative illustrations |
+| RAG infrastructure / vector store | The index fits in context |
+| MCP | One search is not worth a protocol |
+| Spaced repetition | Conflicts with "you walk it, then you are done" |
+| English UI | A later iteration |
 
 ---
 
-## 九、已定的技术选择
+## 9. Settled technical choices
 
-| 项 | 选择 |
+| Item | Choice |
 | --- | --- |
-| 搜索 API | **Tavily** |
-| 口播音色 | **`zh-CN-YunjianNeural`**（云健，微软为有声书与解说调校） |
-| 桌面壳 | **直接起 Electrobun**，不先做 Web 再套壳 |
-| 左栏分组 | **按路径自己的阶段**（需改 reduce，见第二节） |
-| 聊天框 | **assistant-ui**（12.2k star，MIT，活跃）——只用其外壳 |
+| Search API | **Tavily** |
+| Narration voice | **`zh-CN-YunjianNeural`** — Microsoft tunes it for audiobooks and commentary |
+| Desktop shell | **Electrobun directly**, with no web-first step |
+| Left-pane grouping | **The path's own stages** (see §2) |
+| Chat surface | **assistant-ui** (MIT, active) — its shell only |
 
-### 关于聊天框
+### About the chat surface
 
-用 assistant-ui 的**容器能力**：滚动、自动滚到底、输入框、流式文本、markdown 渲染。
-**消息体自己写**，因为我们的回答是结构化对象而不是 markdown 流：
+assistant-ui supplies the **container**: scrolling, stick-to-bottom, the input, streaming text,
+markdown. **The message bodies are ours**, because our answers are structured objects rather
+than a markdown stream:
 
 ```
 Answer        { text, grounded, sourceChapters, suggestion }
 OutsideAnswer { text, citations, empty }
 ```
 
-需要渲染的东西通用聊天库都没有：划中原文的引用块、可点击跳回的溯源 chip、
-**书内与书外的分区**、「要我去查吗」的确认按钮。最后两项是第五节铁律的界面落点，不能让通用组件冲掉。
+None of what we need exists in a general chat library: the quoted-selection block, the clickable
+chapter chip that jumps back, **the separation between book and web**, and the "shall I go look
+it up?" confirmation. The last two are where §5's rules land in the interface, and a generic
+component would flatten them.
 
-不需要的能力全部关掉：工具调用 UI、附件、多模态。
+Everything unneeded is turned off: tool-call UI, attachments, multimodal.
 
-为什么不用 Vercel AI SDK：它的 `useChat` 假设 LLM 在一个 HTTP 流式端点后面，
-而我们的模型来自本地 codex 子进程走 IPC。assistant-ui 的 runtime 可插拔，接得上。
-CopilotKit（37k star）是整套 agent 前端栈，自带 runtime 与后端假设，对一个自用工具过重。
+Why not the Vercel AI SDK: its `useChat` assumes the model sits behind an HTTP streaming
+endpoint, while ours is a local codex subprocess over IPC. assistant-ui's runtime is pluggable,
+so it connects. CopilotKit is a full agent frontend stack with its own runtime and backend
+assumptions — too much for a tool one person uses.
 
 ---
 
-## 下一步
+## 10. What is next
 
-1. **`reduce` 增加 `stages` 输出** —— 左栏分组的前提，改动小，先做
-2. **`slides` 阶段** —— 当前唯一挡在「能用」前面的东西。管道的终点目前是 `PathNode`
-   （标题 + brief + 要点），仍然是文字；把它变成幻灯 + 口播，产品形态才成立
-3. **`tts` 阶段** —— edge-tts 出 mp3 与逐词时间戳
-4. **Electrobun 壳 + 三栏界面**
+The pipeline and the window are built. What remains is use:
+
+1. **Walk a book end to end and fix what annoys you.** That is the only signal this project has.
+2. **Novel layouts** (`timeline`, `relation`, `world`) whenever they are wanted — no longer
+   blocked by anything but the decision to build them.
+3. **Pruning the pipeline cache.** Content-addressed keys mean every regeneration of a book adds
+   a fresh set of entries and audio; nothing removes the old ones yet.
