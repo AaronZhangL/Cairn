@@ -93,7 +93,7 @@ body {
 .book-trigger:hover { background: #8080801a; }
 .book-trigger.open { background: #80808026; }
 .book-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.book-chev { flex: 0 0 auto; color: var(--dim); font-size: 10px; }
+.book-chev { flex: 0 0 auto; display: flex; align-items: center; color: var(--dim); font-size: 10px; line-height: 1; }
 
 /* Floating, so the station list underneath never moves when a book is picked. */
 .book-menu {
@@ -113,8 +113,11 @@ body {
 .book-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .book-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-item-meta { font-size: 11px; color: var(--dim); margin-top: 1px; }
+/* A fixed 14px box, flex-centred: ＋ and ‹ are fullwidth and were wider than the
+   12px they were given, so each row's mark started at a slightly different x. */
 .book-check {
-  flex: 0 0 12px; font-size: 11px; color: var(--accent); text-align: center;
+  flex: 0 0 14px; font-size: 11px; line-height: 1; color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
 }
 .book-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .book-item.action { color: var(--accent); font-weight: 600; }
@@ -209,7 +212,9 @@ body {
 .station-mark {
   flex: 0 0 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; color: var(--lock); margin-top: 1px;
+  /* line-height 1, or the inherited 1.65 makes the line box taller than the
+     circle and the digit rides low in it. */
+  font-size: 10px; line-height: 1; color: var(--lock); margin-top: 1px;
 }
 .station.done .station-mark { background: var(--done); border-color: var(--done); color: #fff; }
 .station.current .station-mark { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -232,17 +237,20 @@ body {
   width: auto; height: 100%; max-width: 100%; aspect-ratio: 16 / 9; margin: auto;
 }
 
+/* The frame is the pause target (see DeckPane), so it reads as clickable. */
+.deck-pane .slide-stage-fit .slide-stage { cursor: pointer; }
+.deck-pane .slide-stage-fit .slide-stage:focus-visible { outline: none; }
+
 .transport { display: flex; align-items: center; gap: 13px; flex: 0 0 auto; }
-.play {
-  width: 38px; height: 38px; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--accent); color: #fff; font-size: 13px;
-}
 .scrub { flex: 1; accent-color: var(--accent); }
 .clock, .page { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Flex-centred with a fixed height: the label swaps between "1.25×" and a mark,
+   and padding alone let the box change height as it did. */
 .rate {
-  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
-  min-width: 46px; padding: 5px 9px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums;
+  min-width: 46px; height: 28px; padding: 0 9px; cursor: pointer;
   border: 1px solid var(--line); border-radius: 6px;
   background: var(--card); color: var(--dim);
 }

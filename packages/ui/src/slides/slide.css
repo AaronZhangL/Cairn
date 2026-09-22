@@ -242,3 +242,33 @@
 
 /* Reserve the caption band so a full-height slide never runs under the line. */
 .slide-stage.captioned .s { padding-bottom: 15cqw; }
+
+/* ---- paused badge ---- */
+
+/* Centred over the slide while paused. Dimming the whole frame would hide the
+   thing being read, so only a small mark appears. */
+.stage-paused {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--stage-ink);
+  background: #0f0d0a40;
+  animation: paused-in .14s ease-out;
+}
+/* The mark is drawn (see panes/icons.tsx), so the disc can centre it exactly. */
+.stage-paused-disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 7.4cqw;
+  height: 7.4cqw;
+  border-radius: 50%;
+  background: #0f0d0a8c;
+  backdrop-filter: blur(3px);
+}
+.stage-paused-disc svg { width: 55%; height: 55%; }
+@keyframes paused-in { from { opacity: 0; } to { opacity: 1; } }
