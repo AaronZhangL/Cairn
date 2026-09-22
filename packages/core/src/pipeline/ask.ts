@@ -77,6 +77,7 @@ export async function askAnchored(
 
   const raw = await provider.complete({
     system: SYSTEM,
+    label: `ask:anchored:${node.id}`,
     prompt: `读者正走到这一站：
 标题：${node.title}
 这一站要讲明白：${node.brief}
@@ -93,9 +94,33 @@ ${material}`,
   return toAnswer(raw, chapters.map((c) => c.idx));
 }
 
+/**
+ * Where a chapter lives.
+ *
+ * `bookId` is the seam for asking across several books at once — a reader with
+ * three books by one author does ask across them. Nothing sets it today, and
+ * absent means "the book being walked", so the single-book path costs nothing.
+ */
+export interface ChapterRef {
+  readonly bookId?: string;
+  readonly chapter: number;
+}
+
 export interface ChapterLocator {
-  /** Returns chapter indices relevant to a question. */
-  locate(question: string, signal?: AbortSignal): Promise<readonly number[]>;
+  /** Returns the chapters relevant to a question. */
+  locate(question: string, signal?: AbortSignal): Promise<readonly ChapterRef[]>;
+}
+
+/** One book's worth of index. `title` is only shown when there is more than one. */
+export interface NoteSource {
+  readonly bookId?: string;
+  readonly title?: string;
+  readonly notes: readonly ChapterNote[];
+}
+
+/** The common case: one book, no ids needed. */
+export function singleBook(notes: readonly ChapterNote[]): readonly NoteSource[] {
+  return [{ notes }];
 }
 
 /**
@@ -104,7 +129,7 @@ export interface ChapterLocator {
  * chapter, and for an ordinary book the whole index fits in one prompt.
  */
 export function noteIndexLocator(
-  notes: readonly ChapterNote[],
+  sources: readonly NoteSource[],
   provider: LlmProvider,
 ): ChapterLocator {
   const schema = {
@@ -114,14 +139,20 @@ export function noteIndexLocator(
     properties: { chapters: { type: 'array', items: { type: 'integer' } } },
   } as const;
 
+  const multi = sources.length > 1;
+
   return {
     async locate(question, signal) {
-      const index = notes
-        .map((n) => `[${n.idx}] ${n.title}：${n.gist}`)
-        .join('\n');
+      const index = sources
+        .map((source) => {
+          const lines = source.notes.map((n) => `[${n.idx}] ${n.title}：${n.gist}`).join('\n');
+          return multi && source.title ? `《${source.title}》\n${lines}` : lines;
+        })
+        .join('\n\n');
 
       const raw = await provider.complete({
         system: '你在为一个问题挑出最相关的章节。只输出 JSON，只返回章号。',
+        label: 'ask:locate',
         prompt: `问题：${question}
 
 从下面的章节索引中挑出最多 ${MAX_LOCATED_CHAPTERS} 个最相关的章号。宁少勿滥；确实没有相关章节就返回空数组。
@@ -132,12 +163,21 @@ ${index}`,
       });
 
       const parsed = parseJsonOutput<{ chapters?: unknown }>(raw);
-      const valid = new Set(notes.map((n) => n.idx));
+      // A chapter number is only meaningful with the book it belongs to
+      const owner = new Map<number, NoteSource>();
+      for (const source of sources) {
+        for (const note of source.notes) owner.set(note.idx, source);
+      }
+
       return Array.isArray(parsed.chapters)
         ? parsed.chapters
             .map(Number)
-            .filter((i) => Number.isInteger(i) && valid.has(i))
+            .filter((i) => Number.isInteger(i) && owner.has(i))
             .slice(0, MAX_LOCATED_CHAPTERS)
+            .map((chapter) => {
+              const bookId = owner.get(chapter)?.bookId;
+              return bookId === undefined ? { chapter } : { chapter, bookId };
+            })
         : [];
     },
   };
@@ -146,7 +186,7 @@ ${index}`,
 export interface AskBookParams {
   readonly question: string;
   readonly locator: ChapterLocator;
-  readonly loadChapter: (idx: number) => Promise<Chapter | undefined>;
+  readonly loadChapter: (ref: ChapterRef) => Promise<Chapter | undefined>;
   readonly signal?: AbortSignal;
 }
 
@@ -169,7 +209,11 @@ export async function askBook(
     .filter((c): c is Chapter => c !== undefined);
 
   if (chapters.length === 0) {
-    return { text: '相关章节的原文已不在本地。', grounded: false, sourceChapters: located };
+    return {
+      text: '相关章节的原文已不在本地。',
+      grounded: false,
+      sourceChapters: located.map((r) => r.chapter),
+    };
   }
 
   const material = chapters
@@ -178,6 +222,7 @@ export async function askBook(
 
   const raw = await provider.complete({
     system: SYSTEM,
+    label: 'ask:book',
     prompt: `读者的问题：${params.question}\n\n可用材料：\n\n${material}`,
     schema: ANSWER_SCHEMA,
     signal: params.signal,

@@ -3,7 +3,7 @@ import type { Answer } from '@cairn/core/pipeline/ask';
 import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
-import type { BookPreview, Progress } from './types';
+import type { BookPreview, DeckStatus, Progress } from './types';
 
 /**
  * The bridge contract, shared by both sides so they cannot drift.
@@ -22,6 +22,13 @@ export type BunSchema = RPCSchema<{
       response: Answer;
     };
     askOutside: { params: { question: string; bookTitle?: string }; response: OutsideAnswer };
+    /**
+     * Tell the builder which station the reader is on, so the next ones built
+     * are the next ones they will reach.
+     */
+    focusStation: { params: { bookId: string; nodeId: string }; response: null };
+    /** Pick a half-built book back up when it is opened. */
+    resumeBook: { params: { bookId: string }; response: boolean };
   };
 }>;
 
@@ -31,8 +38,8 @@ export type BunSchema = RPCSchema<{
  */
 export type WebviewSchema = RPCSchema<{
   requests: Record<never, never>;
-  messages: { progress: Progress };
+  messages: { progress: Progress; deckStatus: DeckStatus };
 }>;
 
 export type CairnRPC = { bun: BunSchema; webview: WebviewSchema };
-export type { BookPreview, Progress };
+export type { BookPreview, DeckStatus, Progress };

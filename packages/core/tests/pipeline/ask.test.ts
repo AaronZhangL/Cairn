@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { askAnchored, askBook, excerptAround, noteIndexLocator } from '../../src/pipeline/ask';
+import {
+  askAnchored, askBook, type ChapterRef, excerptAround, noteIndexLocator, singleBook,
+} from '../../src/pipeline/ask';
 import type { LlmProvider, LlmRequest } from '../../src/llm/types';
 import type { Chapter, ChapterNote, PathNode } from '../../src/types';
 
@@ -98,32 +100,32 @@ describe('askAnchored', () => {
 describe('noteIndexLocator', () => {
   test('用章节摘要当索引，不需要向量库', async () => {
     const p = stub('{"chapters":[5,44]}');
-    expect(await noteIndexLocator(notes, p).locate('reset 怎么用')).toEqual([5, 44]);
+    expect(await noteIndexLocator(singleBook(notes), p).locate('reset 怎么用')).toEqual([{ chapter: 5 }, { chapter: 44 }]);
     expect(p.seen[0]!.prompt).toContain('[44] reset 详解');
   });
 
   test('模型臆造的章号被丢弃', async () => {
     const p = stub('{"chapters":[5,999]}');
-    expect(await noteIndexLocator(notes, p).locate('q')).toEqual([5]);
+    expect(await noteIndexLocator(singleBook(notes), p).locate('q')).toEqual([{ chapter: 5 }]);
   });
 
   test('返回数量被截断', async () => {
     const p = stub('{"chapters":[0,5,44,0,5,44]}');
-    expect((await noteIndexLocator(notes, p).locate('q')).length).toBeLessThanOrEqual(4);
+    expect((await noteIndexLocator(singleBook(notes), p).locate('q')).length).toBeLessThanOrEqual(4);
   });
 
   test('无相关章节时返回空', async () => {
-    expect(await noteIndexLocator(notes, stub('{"chapters":[]}')).locate('q')).toEqual([]);
+    expect(await noteIndexLocator(singleBook(notes), stub('{"chapters":[]}')).locate('q')).toEqual([]);
   });
 });
 
 describe('askBook', () => {
-  const load = async (idx: number): Promise<Chapter | undefined> =>
+  const load = async ({ chapter: idx }: ChapterRef): Promise<Chapter | undefined> =>
     [0, 5, 44].includes(idx) ? chapter(idx, `第${idx}章正文`) : undefined;
 
   test('无锚点时先定位再回答——两次调用', async () => {
     const p = stub((r) => (r.prompt.includes('章节索引') ? '{"chapters":[5]}' : '{"text":"答案","grounded":true}'));
-    const a = await askBook({ question: 'q', locator: noteIndexLocator(notes, p), loadChapter: load }, p);
+    const a = await askBook({ question: 'q', locator: noteIndexLocator(singleBook(notes), p), loadChapter: load }, p);
     expect(p.seen).toHaveLength(2);
     expect(a.grounded).toBe(true);
     expect(a.sourceChapters).toEqual([5]);
@@ -131,7 +133,7 @@ describe('askBook', () => {
 
   test('定位不到时不再发起回答调用', async () => {
     const p = stub('{"chapters":[]}');
-    const a = await askBook({ question: 'q', locator: noteIndexLocator(notes, p), loadChapter: load }, p);
+    const a = await askBook({ question: 'q', locator: noteIndexLocator(singleBook(notes), p), loadChapter: load }, p);
     expect(p.seen).toHaveLength(1);
     expect(a.grounded).toBe(false);
   });
@@ -139,7 +141,7 @@ describe('askBook', () => {
   test('原文已不在本地时如实说明', async () => {
     const p = stub('{"chapters":[5]}');
     const a = await askBook({
-      question: 'q', locator: noteIndexLocator(notes, p), loadChapter: async () => undefined,
+      question: 'q', locator: noteIndexLocator(singleBook(notes), p), loadChapter: async () => undefined,
     }, p);
     expect(a.grounded).toBe(false);
     expect(a.text).toContain('不在本地');

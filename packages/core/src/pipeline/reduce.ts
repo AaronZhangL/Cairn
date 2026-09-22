@@ -86,6 +86,7 @@ export async function reduceToPath(
   for (let retry = 0; retry <= 1; retry += 1) {
     const raw = await provider.complete({
       system: systemPrompt(type, budget),
+      label: retry === 0 ? 'reduce' : `reduce.retry${retry}`,
       prompt: buildPrompt(notes, target, budget, retry > 0),
       schema: SCHEMA,
       signal: options.signal,

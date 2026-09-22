@@ -9,7 +9,9 @@
     "./parse": "./src/parse/index.ts",
     "./llm": "./src/llm/index.ts",
     "./pipeline/*": "./src/pipeline/*.ts",
-    "./store/*": "./src/store/*.ts"
+    "./store/*": "./src/store/*.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./runtime/*": "./src/runtime/*.ts"
   },
   "dependencies": {
     "jszip": "^3.10.1"

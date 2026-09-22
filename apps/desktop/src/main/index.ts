@@ -7,6 +7,7 @@
  */
 import { BrowserView, BrowserWindow, Updater } from 'electrobun/main';
 import { handlers, onProgress } from './rpc';
+import { onDeckStatus } from './generate';
 import { installMenu } from './menu';
 import type { CairnRPC } from '../shared/schema';
 
@@ -36,3 +37,6 @@ const win = new BrowserWindow({
 
 // Generation runs for minutes; progress streams out rather than blocking the reply
 onProgress((p) => rpc.send.progress(p));
+
+// Stations keep arriving after that modal has closed — the reader is already walking
+onDeckStatus((s) => rpc.send.deckStatus(s));

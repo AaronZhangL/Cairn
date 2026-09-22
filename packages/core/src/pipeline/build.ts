@@ -7,21 +7,56 @@
  * Also replaces the path's advertised length with the real one. `estMinutes`
  * is what the model intended; audio duration is what the reader actually gets,
  * and only the latter should be shown.
+ *
+ * This is the batch entry point, used by the CLI. The app builds the same decks
+ * through `scheduler.ts` instead, in the order the reader is walking them —
+ * both write the same JobStore, so they are interchangeable and resumable
+ * across each other.
  */
 import type { LlmProvider } from '../llm/types';
 import type { ChapterNote, NodeDeck, Path, PathNode } from '../types';
 import { type JobOptions, type JobResult, type JobStore, runJob } from './job';
 import { makeDeck } from './slides';
-import { deckAudioPath, synthesize } from './tts';
+import { deckAudioPath, type Narrator, type TtsOptions } from './tts';
 
-export interface BuildOptions extends JobOptions {
-  readonly voice?: string;
-}
+export interface BuildOptions extends JobOptions, TtsOptions {}
 
 export interface BuildResult {
   readonly decks: readonly NodeDeck[];
   readonly totalMinutes: number;
   readonly job: JobResult<NodeDeck>;
+  /** Quote slides whose text was not found verbatim in any chapter note. */
+  readonly unsourcedQuotes: number;
+}
+
+/**
+ * Build one station. Shared by the batch runner and the scheduler so the two
+ * paths cannot drift in what a deck is.
+ */
+export async function buildNode(
+  node: PathNode,
+  byChapter: ReadonlyMap<number, ChapterNote>,
+  audioDir: string,
+  provider: LlmProvider,
+  narrator: Narrator,
+  options: TtsOptions = {},
+): Promise<NodeDeck> {
+  const notes = node.sourceChapters
+    .map((idx) => byChapter.get(idx))
+    .filter((n): n is ChapterNote => n !== undefined);
+
+  if (notes.length === 0) {
+    throw new Error(`第 ${node.idx + 1} 站「${node.title}」的溯源章节不存在`);
+  }
+
+  const draft = await makeDeck(node, notes, provider, options.signal);
+  return narrator.speak(draft, deckAudioPath(audioDir, node.id), options);
+}
+
+export function notesByChapter(
+  notes: readonly ChapterNote[],
+): ReadonlyMap<number, ChapterNote> {
+  return new Map(notes.map((n) => [n.idx, n]));
 }
 
 export async function buildDecks(
@@ -29,14 +64,15 @@ export async function buildDecks(
   notes: readonly ChapterNote[],
   audioDir: string,
   provider: LlmProvider,
+  narrator: Narrator,
   store: JobStore<NodeDeck>,
   options: BuildOptions = {},
 ): Promise<BuildResult> {
-  const byChapter = new Map(notes.map((n) => [n.idx, n]));
+  const byChapter = notesByChapter(notes);
 
   const job = await runJob(
     path.nodes.map((node) => ({ id: node.id, input: node })),
-    async (node) => buildOne(node, byChapter, audioDir, provider, options),
+    async (node) => buildNode(node, byChapter, audioDir, provider, narrator, options),
     store,
     { ...options, concurrency: options.concurrency ?? provider.suggestedConcurrency },
   );
@@ -48,34 +84,32 @@ export async function buildDecks(
 
   return {
     decks,
-    totalMinutes: Math.round(decks.reduce((sum, d) => sum + d.durationMs, 0) / 60_000),
+    totalMinutes: realMinutes(decks),
     job,
+    unsourcedQuotes: countUnsourcedQuotes(decks),
   };
 }
 
-async function buildOne(
-  node: PathNode,
-  byChapter: ReadonlyMap<number, ChapterNote>,
-  audioDir: string,
-  provider: LlmProvider,
-  options: BuildOptions,
-): Promise<NodeDeck> {
-  const notes = node.sourceChapters
-    .map((idx) => byChapter.get(idx))
-    .filter((n): n is ChapterNote => n !== undefined);
+export function realMinutes(decks: readonly NodeDeck[]): number {
+  return Math.round(decks.reduce((sum, d) => sum + d.durationMs, 0) / 60_000);
+}
 
-  if (notes.length === 0) {
-    throw new Error(`第 ${node.idx + 1} 站「${node.title}」的溯源章节不存在`);
+/**
+ * A quote slide with no `source` means the model's "verbatim" line was not found
+ * in any note it was given. That is the one hallucination this pipeline cannot
+ * catch structurally, so it is counted rather than hidden.
+ */
+export function countUnsourcedQuotes(decks: readonly NodeDeck[]): number {
+  let count = 0;
+  for (const deck of decks) {
+    for (const slide of deck.slides) {
+      if (slide.layout === 'quote' && slide.source === undefined) count += 1;
+    }
   }
-
-  const draft = await makeDeck(node, notes, provider, options.signal);
-  return synthesize(draft, deckAudioPath(audioDir, node.id), {
-    voice: options.voice,
-    signal: options.signal,
-  });
+  return count;
 }
 
 /** Replace the model's estimate with the measured length. */
-export function withRealDuration(path: Path, result: BuildResult): Path {
-  return { ...path, totalMinutes: result.totalMinutes };
+export function withRealDuration(path: Path, totalMinutes: number): Path {
+  return { ...path, totalMinutes };
 }

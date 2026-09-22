@@ -8,7 +8,9 @@
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import { ICON_NAMES, toIconName } from '../icons';
-import type { ChapterNote, ComparePane, DraftDeck, DraftSlide, PathNode, Slide } from '../types';
+import type {
+  ChapterNote, ComparePane, DraftDeck, DraftSlide, PathNode, QuoteSource, Slide,
+} from '../types';
 import { targetChars } from './tts';
 
 /** A station is 2–6 minutes of narration; more than six slides turns into a flicker. */
@@ -108,6 +110,7 @@ export async function makeDeck(
 ): Promise<DraftDeck> {
   const raw = await provider.complete({
     system: SYSTEM,
+    label: `slides:${node.id}`,
     prompt: buildPrompt(node, notes),
     schema: SCHEMA,
     signal,
@@ -119,7 +122,64 @@ export async function makeDeck(
     throw new Error(`第 ${node.idx + 1} 站没有产出口播稿`);
   }
 
-  return { nodeId: node.id, sentences, slides: normalize(parsed.slides, sentences.length) };
+  const slides = normalize(parsed.slides, sentences.length).map((draft) => attachSource(draft, notes));
+  return { nodeId: node.id, sentences, slides };
+}
+
+/**
+ * Link a quote slide back to the excerpt it came from.
+ *
+ * The model is told to copy quotes verbatim, and mostly does — but "mostly" is
+ * not a property you can render. Resolving the line against the notes turns the
+ * instruction into a fact: a slide either carries a source or visibly does not.
+ */
+function attachSource(draft: DraftSlide, notes: readonly ChapterNote[]): DraftSlide {
+  if (draft.slide.layout !== 'quote') return draft;
+  const source = locateQuote(draft.slide.text, notes);
+  return source ? { ...draft, slide: { ...draft.slide, source } } : draft;
+}
+
+/**
+ * Shorter than this, a containment match is a coincidence rather than a
+ * citation — two Chinese clauses share four characters all the time.
+ */
+const MIN_MATCH_CHARS = 8;
+
+/** Punctuation and spacing vary between the note and the slide; the words do not. */
+function normalizeQuote(text: string): string {
+  return text.replace(/[\s\u3000-\u303F\uFF01-\uFF65!-/:-@\[-`{-~]+/gu, '');
+}
+
+/**
+ * Find the note excerpt a quoted line came from. Exact match first, then
+ * containment either way — the model sometimes trims a clause off an excerpt,
+ * and sometimes joins two of them.
+ */
+export function locateQuote(
+  text: string,
+  notes: readonly ChapterNote[],
+): QuoteSource | undefined {
+  const target = normalizeQuote(text);
+  if (target.length === 0) return undefined;
+
+  let best: { source: QuoteSource; overlap: number } | undefined;
+
+  for (const note of notes) {
+    for (const [index, quote] of note.quotes.entries()) {
+      const candidate = normalizeQuote(quote);
+      if (candidate.length === 0) continue;
+      if (candidate === target) return { chapter: note.idx, index };
+
+      const contained = candidate.includes(target) || target.includes(candidate);
+      const overlap = Math.min(candidate.length, target.length);
+      if (!contained || overlap < MIN_MATCH_CHARS) continue;
+      if (!best || overlap > best.overlap) {
+        best = { source: { chapter: note.idx, index }, overlap };
+      }
+    }
+  }
+
+  return best?.source;
 }
 
 function buildPrompt(node: PathNode, notes: readonly ChapterNote[]): string {

@@ -6,9 +6,8 @@
  * would let the model decide to leave the book on its own.
  */
 import { openFileDialog } from 'electrobun/main/utils';
-import { askAnchored, askBook, noteIndexLocator } from '@cairn/core/pipeline/ask';
+import { askAnchored, askBook, noteIndexLocator, singleBook } from '@cairn/core/pipeline/ask';
 import { askOutside as askWeb } from '@cairn/core/pipeline/ask-outside';
-import { codexCliProvider } from '@cairn/core/llm';
 import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
 import type { Answer } from '@cairn/core/pipeline/ask';
 import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
@@ -17,10 +16,14 @@ import type { LibraryEntry } from '@cairn/core/store/library';
 import { tavily } from './tavily';
 import { library } from './library';
 import { loadChapter, loadNotes, loadPath } from './store';
+import { plain } from './provider';
+import { recordAsk } from './asks';
 import type { BookPreview, Progress } from '../shared/types';
-import { generate, inspect } from './generate';
+import {
+  generate, inspect, listBooks, pauseBackgroundBuilds, resume, schedulerFor,
+} from './generate';
 
-const provider = codexCliProvider();
+const provider = plain;
 
 /** Set by index.ts so generation can stream progress to the open window. */
 let emitProgress: (p: Progress) => void = () => undefined;
@@ -36,6 +39,23 @@ export function onProgress(fn: (p: Progress) => void): void {
  * that takes minutes. Keeping the value here lets the window ask instead.
  */
 let latest: Progress | undefined;
+
+/**
+ * Run a reader-facing model call with background building held off.
+ *
+ * Prefetching stations and answering a question go through the same codex
+ * process pool, and the reader is watching only one of the two. Holding is
+ * per-call rather than global state so a failed question cannot wedge the
+ * builder permanently.
+ */
+async function foreground<T>(work: () => Promise<T>): Promise<T> {
+  const release = pauseBackgroundBuilds();
+  try {
+    return await work();
+  } finally {
+    release();
+  }
+}
 
 export const handlers = {
   /** Where the webview reads generated books from. Token included; do not log it. */
@@ -70,6 +90,20 @@ export const handlers = {
     }
   },
 
+  /**
+   * The reader moved. Build what they are about to reach, not what comes next
+   * in the path they have already walked past.
+   */
+  async focusStation(params: { bookId: string; nodeId: string }): Promise<null> {
+    schedulerFor(params.bookId)?.focus(params.nodeId);
+    return null;
+  },
+
+  /** Opening a half-built book restarts its builder where it stopped. */
+  async resumeBook(params: { bookId: string }): Promise<boolean> {
+    return resume(params.bookId).catch(() => false);
+  },
+
   async ask(params: {
     bookId: string; question: string; selection?: string; nodeId: string;
   }): Promise<Answer> {
@@ -77,25 +111,40 @@ export const handlers = {
     const node = nodes.find((n) => n.id === params.nodeId);
     if (!node) throw new Error(`未知站点 ${params.nodeId}`);
 
-    // A highlighted passage already points at its chapters — nothing to search for
-    if (params.selection) {
-      const chapters = (await Promise.all(
-        node.sourceChapters.map((i) => loadChapter(params.bookId, i)),
-      )).filter((c) => c !== undefined);
-      return askAnchored(
-        { question: params.question, selection: params.selection, node, chapters },
-        provider,
-      );
-    }
+    const answer = await foreground(async () => {
+      // A highlighted passage already points at its chapters — nothing to search for
+      if (params.selection) {
+        const chapters = (await Promise.all(
+          node.sourceChapters.map((i) => loadChapter(params.bookId, i)),
+        )).filter((c) => c !== undefined);
+        return askAnchored(
+          { question: params.question, selection: params.selection, node, chapters },
+          provider,
+        );
+      }
 
-    return askBook({
+      return askBook({
+        question: params.question,
+        locator: noteIndexLocator(singleBook(await loadNotes(params.bookId)), provider),
+        loadChapter: (ref) => loadChapter(params.bookId, ref.chapter),
+      }, provider);
+    });
+
+    // Where the reader stopped to ask is the closest thing to a quality signal
+    // this tool has; a station asked about repeatedly did not make itself clear.
+    await recordAsk(params.bookId, {
+      at: new Date().toISOString(),
+      nodeId: node.id,
       question: params.question,
-      locator: noteIndexLocator(await loadNotes(params.bookId), provider),
-      loadChapter: (idx) => loadChapter(params.bookId, idx),
-    }, provider);
+      grounded: answer.grounded,
+    });
+
+    return answer;
   },
 
   async askOutside(params: { question: string; bookTitle?: string }): Promise<OutsideAnswer> {
-    return askWeb(params, tavily(), provider);
+    return foreground(() => askWeb(params, tavily(), provider));
   },
 };
+
+export { listBooks };

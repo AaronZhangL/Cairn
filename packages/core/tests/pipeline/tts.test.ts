@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { alignSentences, candidateDirs, findEdgeTts, parseSrt } from '../../src/pipeline/tts';
+import { alignSentences, assembleDeck, parseSrt } from '../../src/pipeline/tts';
+import type { DraftDeck } from '../../src/types';
 
 const SRT = `1
 00:00:00,100 --> 00:00:05,937
@@ -88,22 +89,37 @@ describe('语速常数', () => {
   });
 });
 
-describe('edge-tts discovery', () => {
-  test('looks beyond PATH, where a pip-installed tool actually lands', () => {
-    const dirs = candidateDirs('/Users/x');
-    expect(dirs).toContain('/Users/x/.local/bin');
-    expect(dirs).toContain('/opt/homebrew/bin');
-    expect(dirs).toContain('/Users/x/.pyenv/shims');
+describe('assembleDeck', () => {
+  const draft: DraftDeck = {
+    nodeId: 'n0',
+    sentences: ['锚定效应是指人们过度依赖最先接触到的信息。', '受试者先转一个做过手脚的轮盘。'],
+    slides: [
+      { slide: { layout: 'title', title: '锚定' }, atSentence: 0 },
+      { slide: { layout: 'points', heading: '要点', points: ['先入为主'] }, atSentence: 1 },
+    ],
+  };
+
+  test('把幻灯钉在它那句话的起点上', () => {
+    const deck = assembleDeck(draft, parseSrt(SRT), '/tmp/n0.mp3');
+    expect(deck.slides[0]!.atMs).toBe(deck.narration[0]!.startMs);
+    expect(deck.slides[1]!.atMs).toBe(deck.narration[1]!.startMs);
+    expect(deck.slides[1]!.atMs).toBeGreaterThan(deck.slides[0]!.atMs);
   });
 
-  test('an explicit override wins over discovery', async () => {
-    const before = process.env.CAIRN_EDGE_TTS;
-    process.env.CAIRN_EDGE_TTS = '/custom/edge-tts';
-    try {
-      expect(await findEdgeTts()).toBe('/custom/edge-tts');
-    } finally {
-      if (before === undefined) delete process.env.CAIRN_EDGE_TTS;
-      else process.env.CAIRN_EDGE_TTS = before;
-    }
+  test('时长取最后一句的结尾', () => {
+    const deck = assembleDeck(draft, parseSrt(SRT), '/tmp/n0.mp3');
+    expect(deck.durationMs).toBe(deck.narration[deck.narration.length - 1]!.endMs);
+  });
+
+  test('atSentence 越界时夹到最后一句，而不是崩掉', () => {
+    const deck = assembleDeck(
+      { ...draft, slides: [{ slide: { layout: 'title', title: 'x' }, atSentence: 99 }] },
+      parseSrt(SRT), '/tmp/n0.mp3',
+    );
+    expect(deck.slides[0]!.atMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('没有字幕就报错，而不是产出一个没有时间轴的 deck', () => {
+    expect(() => assembleDeck(draft, [], '/tmp/n0.mp3')).toThrow();
   });
 });

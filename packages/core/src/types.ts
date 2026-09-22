@@ -80,9 +80,30 @@ export type Slide =
   | { readonly layout: 'title'; readonly kicker?: string; readonly title: string; readonly subtitle?: string; readonly icon?: IconName }
   | { readonly layout: 'points'; readonly heading: string; readonly points: readonly string[] }
   | { readonly layout: 'number'; readonly heading?: string; readonly items: readonly NumberItem[]; readonly note?: string }
-  | { readonly layout: 'quote'; readonly text: string; readonly cite?: string }
+  | {
+      readonly layout: 'quote';
+      readonly text: string;
+      readonly cite?: string;
+      /** Where this line was found verbatim. Absent means it was not found at all. */
+      readonly source?: QuoteSource;
+    }
   | { readonly layout: 'compare'; readonly heading?: string; readonly left: ComparePane; readonly right: ComparePane }
   | { readonly layout: 'flow'; readonly heading?: string; readonly steps: readonly string[] };
+
+/**
+ * Provenance for one quoted line, down to the excerpt it came from.
+ *
+ * `sourceChapters` already traces a station to its chapters, but a chapter is
+ * ~3000 words — too coarse to answer "where does this sentence come from?".
+ * The map stage already stores verbatim excerpts, so the finer link costs a
+ * lookup rather than another pass over the book.
+ */
+export interface QuoteSource {
+  /** Chapter index, matching ChapterNote.idx. */
+  readonly chapter: number;
+  /** Position in that chapter's `quotes`. */
+  readonly index: number;
+}
 
 export interface NumberItem {
   readonly value: string;

@@ -157,6 +157,15 @@
 }
 .s-cite { font-size: 1.6cqw; color: var(--stage-dim); padding-left: 3.45cqw; letter-spacing: .04em; }
 
+/* Provenance, down to the chapter the line was found in. The unsourced case is
+   shown rather than hidden: a "verbatim" quote nobody could locate in the text
+   is exactly the one the reader should doubt. */
+.s-source {
+  font-size: 1.35cqw; padding-left: 3.45cqw; letter-spacing: .06em;
+  color: var(--stage-dim); opacity: .72; margin-top: .6cqw;
+}
+.s-source.unsourced { color: #e0a458; opacity: .9; }
+
 /* ---- compare ---- */
 
 .s-compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 2.6cqw; align-items: stretch; }

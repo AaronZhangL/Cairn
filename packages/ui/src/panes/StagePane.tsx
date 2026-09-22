@@ -6,15 +6,26 @@ import { BookMenu } from './BookMenu';
 /**
  * Left pane: stages and their stations.
  * Jumping around is allowed — this is a personal tool, not a course with a gate.
+ *
+ * A station with no deck yet is shown as pending rather than hidden. The path is
+ * decided in one go and only the decks trickle in, so the whole walk is known
+ * from the start — showing it is honest, and a path whose end you can see is the
+ * point of the thing.
  */
 export function StagePane({
   path, decks, currentId, onPick, books = [], onSwitchBook, onAdd, onHome,
-  collapsed = false,
+  failed, heat, complete = true, collapsed = false,
 }: {
   path: Path;
   decks: ReadonlyMap<string, NodeDeck>;
   currentId: string;
   onPick: (nodeId: string) => void;
+  /** Stations that will not arrive, so waiting can stop. */
+  failed?: ReadonlySet<string>;
+  /** Questions asked per station — where the path was not clear enough. */
+  heat?: ReadonlyMap<string, number>;
+  /** False while stations are still being built. */
+  complete?: boolean;
   books?: readonly LibraryEntry[];
   onSwitchBook?: (bookId: string) => void;
   /** Absent outside the desktop shell, where generation is not possible. */
@@ -28,6 +39,7 @@ export function StagePane({
 
   const byId = new Map(path.nodes.map((n) => [n.id, n]));
   const currentIdx = byId.get(currentId)?.idx ?? 0;
+  const pending = path.nodes.length - decks.size - (failed?.size ?? 0);
 
   return (
     <nav className="pane stage-pane">
@@ -45,7 +57,8 @@ export function StagePane({
           />
         </div>
         <div className="stage-meta">
-          {path.nodes.length} 站 · 约 {path.totalMinutes} 分钟
+          {path.nodes.length} 站 · {complete ? '' : '约 '}{path.totalMinutes} 分钟
+          {!complete && pending > 0 && <span className="stage-building"> · 还在建 {pending} 站</span>}
         </div>
       </header>
 
@@ -61,6 +74,8 @@ export function StagePane({
                 node={node}
                 state={node.idx < currentIdx ? 'done' : node.idx === currentIdx ? 'current' : 'ahead'}
                 minutes={minutesOf(decks.get(id), node)}
+                build={buildStateOf(id, decks, failed)}
+                heat={heat?.get(id) ?? 0}
                 onPick={onPick}
               />
             );
@@ -71,21 +86,43 @@ export function StagePane({
   );
 }
 
+type BuildState = 'ready' | 'pending' | 'failed';
+
 function StationRow({
-  node, state, minutes, onPick,
+  node, state, minutes, build, heat, onPick,
 }: {
   node: PathNode;
   state: 'done' | 'current' | 'ahead';
   minutes: number;
+  build: BuildState;
+  heat: number;
   onPick: (nodeId: string) => void;
 }): ReactElement {
   return (
-    <button type="button" className={`station ${state}`} onClick={() => onPick(node.id)}>
+    <button
+      type="button"
+      className={`station ${state} build-${build}`}
+      onClick={() => onPick(node.id)}
+    >
       <span className="station-mark">{state === 'done' ? '✓' : node.idx + 1}</span>
       <span className="station-title">{node.title}</span>
-      <span className="station-min">{minutes}′</span>
+      {heat > 1 && (
+        <span className="station-heat" title={`这一站问过 ${heat} 次`} aria-hidden="true">·</span>
+      )}
+      <span className="station-min">
+        {build === 'ready' ? `${minutes}′` : build === 'failed' ? '建不出来' : '准备中'}
+      </span>
     </button>
   );
+}
+
+function buildStateOf(
+  nodeId: string,
+  decks: ReadonlyMap<string, NodeDeck>,
+  failed: ReadonlySet<string> | undefined,
+): BuildState {
+  if (decks.has(nodeId)) return 'ready';
+  return failed?.has(nodeId) ? 'failed' : 'pending';
 }
 
 /** Show the real audio length once it exists; fall back to the estimate before that. */

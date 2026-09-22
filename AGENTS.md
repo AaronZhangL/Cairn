@@ -31,15 +31,23 @@ why no image generation) still holds, but their product framing does not.
 
 ```
 packages/
-  core/          Domain types, parsing, pipeline, LLM clients, storage — no framework imports
+  core/          Domain types, parsing, pipeline, storage — no framework imports
     parse/       epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
-    llm/         Provider interface + implementations
-    pipeline/    job.ts (resumable state machine), map/classify/reduce/slides stages
-    store/       Local persistence (file-backed JobStore)
+    llm/         Provider *interface* + tracing wrapper. No implementations.
+    pipeline/    job.ts (batch state machine), scheduler.ts (interactive one),
+                 map/classify/reduce/slides/tts stages — all pure or interface-driven
+    store/       Path helpers, file-backed JobStore, ask log
+    runtime/     Everything that spawns a process or writes a file:
+                 codex-cli.ts, edge-tts.ts, trace-dir.ts
   ui/            Shared React components and design tokens; slide layout renderers
 apps/
   desktop/       Electrobun shell — the only app. Authoring and playback in one window.
 ```
+
+`pipeline/` and `llm/` depend on interfaces (`LlmProvider`, `Narrator`, `JobStore`,
+`TraceSink`); `runtime/` implements them. The arrow only ever points that way. The test for
+whether a file belongs in `runtime/`: does it import `node:*` for anything but path
+arithmetic?
 
 The desktop shell is not deferred: `codex exec` and `edge-tts` both need a local process, and
 with no web deployment there is nothing to gain from a browser build.
@@ -80,9 +88,20 @@ These are load-bearing. Breaking one silently undoes a decision that took real w
    downstream stage reads the notes, not the book. Re-reading the book per stage multiplies
    cost by 5x for no gain.
 
-7. **Long-running work goes through `runJob`.** Near a hundred LLM calls per book. Results
-   persist per task, concurrency is capped, failures are isolated and retried with backoff, and
-   an interrupted run resumes from where it stopped.
+7. **Long-running work goes through `runJob` or `scheduler.ts`.** Near a hundred LLM calls per
+   book. Results persist per task, concurrency is capped, failures are isolated and retried with
+   backoff, and an interrupted run resumes from where it stopped. `runJob` is the batch path
+   (fixed order, used by `add-book`); `startDeckScheduler` is the interactive one (re-orderable,
+   pausable, used by the app). They share the `JobStore`, so a book half-built by one resumes
+   under the other.
+
+8. **The path is decided in one go; only the decks arrive progressively.** `reduce` needs every
+   chapter note before it can choose and order stations, so the path cannot be streamed — a path
+   that grew as you read would let arrival time decide the station count instead of the budget,
+   which breaks invariant 2. The decks after it *are* independent, and that is where the wait
+   lives: `generate` returns once the first station is playable and the rest are built behind the
+   reader, in the order they are walking. A station with no deck yet is shown as pending, never
+   hidden.
 
 ## Out of scope
 
@@ -106,8 +125,14 @@ the book's real text.
 bun install
 bun test                  # all packages
 bun test packages/core    # one package
-bun run typecheck         # tsc --noEmit, strict
+bun run typecheck         # all four projects, strict
+bun run replay <bookId>   # list recorded model calls; add a file name to re-send one
 ```
+
+`typecheck` covers `core`, `ui` and both desktop projects. The desktop two extend a tsconfig
+that `electrobun prepare` projects into `apps/desktop/.hutch/` (gitignored), so on a fresh
+checkout they are **skipped with a message** until you run it — run
+`cd apps/desktop && bunx electrobun prepare` once and all four check.
 
 ## Conventions
 
@@ -120,6 +145,10 @@ bun run typecheck         # tsc --noEmit, strict
 - Tests mirror source paths: `src/parse/chunk.ts` → `tests/parse/chunk.test.ts`.
 - Comments explain *why*, especially where a simpler approach was rejected for a reason that is
   not obvious from the code.
+- Quality signals are recorded, not recomputed: `PathQuality` on each `LibraryEntry` carries
+  `dropped` (stations citing chapters that do not exist), `retries`, `failed` and
+  `unsourcedQuotes`. All four should be 0; they are how a prompt change is judged, since there
+  is no completion metric.
 - **Code is written in English** — comments, doc comments, identifiers, test names.
 - **Product-facing strings are Chinese** — `ParseError` messages, UI copy, and the LLM prompts
   that generate Chinese content. An English UI is a later iteration, not now.
@@ -130,8 +159,7 @@ bun run typecheck         # tsc --noEmit, strict
 ## Status
 
 - **Done** — the whole pipeline: `parse` / `chunk` / `map` / `classify` / `reduce` /
-  `budget` / `slides` / `tts` / `build`, plus `ask` and `ask-outside`. 163 tests, four
-  clean typechecks.
+  `budget` / `slides` / `tts` / `build`, plus `ask` and `ask-outside`.
 - **Done** — `packages/ui`: six slide layouts and the three panes. Each layout carries a
   graphic skeleton (proportional bars, node chains, quote watermark) and builds in step with
   the narration; pictograms come from a fixed local glyph set, never from image generation.
@@ -140,6 +168,17 @@ bun run typecheck         # tsc --noEmit, strict
 - **Verified end to end** on Pro Git zh (13.9 MB EPUB, 201k words, 86 chapters):
   at the 10-minute budget, 4 stations / 1 stage / 13 minutes of real narrated audio;
   at 1 hour, 18 stations / 5 stages / 70 minutes. Zero fabricated chapter references.
+- **Done** — progressive building: the path installs the moment `reduce` finishes, the first
+  station follows, and the rest are built in walking order by `pipeline/scheduler.ts`. Decks are
+  one file per station under `books/<id>/decks/`, with `index.json` as the readiness list the
+  player polls. Reader questions hold background building for their duration — both go through
+  the same codex pool and only one of them is being watched.
+- **Done** — quote provenance: `slides.ts` resolves each quote back to the `ChapterNote` excerpt
+  it came from and the slide renders it. A quote it cannot locate says so on the slide.
+- **Done** — `CAIRN_TRACE=1` records every model call (prompt, schema, raw reply, ms) under the
+  book's cache; `bun run replay <bookId> <file>` re-sends one on its own. Off by default,
+  because a trace of the map stage is the book's text a second time.
+- **296 tests, four clean typechecks.**
 - **Next** — pick a book, walk it, and fix what annoys you.
 
 ## Running it

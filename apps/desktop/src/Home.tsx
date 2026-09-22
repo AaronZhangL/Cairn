@@ -41,7 +41,12 @@ export function Home({
             <button key={b.id} type="button" className="shelf-item" onClick={() => onOpen(b.id)}>
               <span className="shelf-name">{b.title}</span>
               <span className="shelf-meta">
-                {b.stations} 站 · 约 {b.minutes} 分钟
+                {b.stations} 站 · {b.complete === false ? '约 ' : ''}{b.minutes} 分钟
+                {b.complete === false && (
+                  <span className="shelf-building">
+                    {' · 已建 '}{b.built ?? 0}/{b.stations} 站
+                  </span>
+                )}
                 {b.author ? ` · ${b.author}` : ''}
               </span>
             </button>

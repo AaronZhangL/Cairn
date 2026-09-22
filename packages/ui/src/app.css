@@ -216,6 +216,22 @@ body {
 .station-title { flex: 1; }
 .station-min { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 
+/* A station still being built is dimmed but still listed: the path is decided
+   in one go, and being able to see where the walk ends is the point. */
+.station.build-pending .station-title { opacity: .72; }
+.station.build-pending .station-min { font-variant-numeric: normal; letter-spacing: .02em; }
+.station.build-pending .station-mark { border-style: dashed; }
+.station.build-failed .station-min { color: var(--warn, #b4553a); }
+.station.build-failed .station-title { text-decoration: line-through; opacity: .55; }
+
+/* Where the reader stopped to ask. Deliberately a dot, not a number — it marks
+   a station worth re-reading, it is not a score. */
+.station-heat {
+  flex: 0 0 auto; color: var(--accent); font-size: 15px; line-height: 1;
+  margin-top: 2px; opacity: .75;
+}
+.stage-building { color: var(--accent); }
+
 /* ---- centre ---- */
 .deck-pane { display: flex; flex-direction: column; gap: 14px; padding: 20px 28px 22px; overflow: hidden; }
 .deck-head { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
@@ -313,3 +329,7 @@ body {
   font: inherit; font-size: 13px; padding: 8px 15px; border: 0; cursor: pointer;
   background: var(--accent); color: #fff; border-radius: 7px;
 }
+
+/* A book on the shelf that is still filling in. Shown rather than hidden: it is
+   openable and walkable already, which is the whole point of building it this way. */
+.shelf-building { color: var(--accent); }

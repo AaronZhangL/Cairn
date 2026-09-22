@@ -3,6 +3,12 @@
 export interface LlmRequest {
   readonly prompt: string;
   readonly system?: string;
+  /**
+   * Names the call for tracing: `map:12-15`, `reduce`, `slides:n3`. Purely an
+   * annotation — providers ignore it. Without it a trace directory is a pile of
+   * timestamps and you cannot replay the one call you care about.
+   */
+  readonly label?: string;
   /** When present, the response must conform to this JSON Schema. */
   readonly schema?: Readonly<Record<string, unknown>>;
   readonly signal?: AbortSignal;

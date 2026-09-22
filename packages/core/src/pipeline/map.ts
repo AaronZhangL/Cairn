@@ -99,8 +99,12 @@ async function summarizeBatch(
   provider: LlmProvider,
   signal?: AbortSignal,
 ): Promise<readonly ChapterNote[]> {
+  const first = batch[0]!;
+  const last = batch[batch.length - 1]!;
+
   const raw = await provider.complete({
     system: SYSTEM,
+    label: `map:${first.idx}-${last.idx}`,
     prompt: buildPrompt(batch),
     schema: SCHEMA,
     signal,

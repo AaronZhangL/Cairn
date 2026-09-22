@@ -2,14 +2,18 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { bookFile } from '@cairn/core/store/library';
 import type { Chapter, ChapterNote, Path } from '@cairn/core/types';
-import { library } from './library';
+import { libraryDir } from './library';
 
 /**
  * Never cwd-derived: the app starts inside its own bundle, so `process.cwd()`
  * pointed at `Cairn.app/Contents/MacOS` and every generated book landed
  * somewhere the webview could not read and the next build deleted.
+ *
+ * Taken from `libraryDir()` rather than `library()`, which would bind the
+ * loopback socket as a side effect of importing a storage module. The server is
+ * started by whoever actually needs a URL.
  */
-export const DATA_DIR = library().dir;
+export const DATA_DIR = libraryDir();
 
 const cache = new Map<string, unknown>();
 

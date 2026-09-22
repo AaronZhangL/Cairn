@@ -11,7 +11,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LlmError, type LlmProvider, type LlmRequest } from '../types';
+import { LlmError, type LlmProvider, type LlmRequest } from '../llm/types';
 
 export interface CodexOptions {
   readonly model?: string;

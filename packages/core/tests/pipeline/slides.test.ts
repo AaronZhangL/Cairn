@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { makeDeck } from '../../src/pipeline/slides';
+import { locateQuote, makeDeck } from '../../src/pipeline/slides';
 import type { LlmProvider, LlmRequest } from '../../src/llm/types';
 import type { ChapterNote, PathNode } from '../../src/types';
 
@@ -109,5 +109,45 @@ describe('makeDeck 输入输出', () => {
     const p = stub(deck([]));
     await makeDeck(node, notes, p);
     expect(p.seen[0]!.system).toContain('一个字都不能改');
+  });
+});
+
+describe('locateQuote', () => {
+  const notes: readonly ChapterNote[] = [
+    {
+      idx: 5, title: '分支', gist: '',
+      keyPoints: [],
+      quotes: ['分支本质上只是一个指向提交对象的可变指针。', '这就是 Git 分支如此轻量的原因。'],
+    },
+    {
+      idx: 12, title: '合并', gist: '',
+      keyPoints: [],
+      quotes: ['Git 会用两个分支的末端所指的快照以及这两个分支的共同祖先做一个三方合并。'],
+    },
+  ];
+
+  test('逐字命中时指到具体那一条摘句', () => {
+    expect(locateQuote('这就是 Git 分支如此轻量的原因。', notes)).toEqual({ chapter: 5, index: 1 });
+  });
+
+  test('标点与空格不同不影响匹配', () => {
+    expect(locateQuote('分支本质上只是一个指向提交对象的可变指针', notes)).toEqual({ chapter: 5, index: 0 });
+  });
+
+  test('模型截掉半句仍能溯源', () => {
+    expect(locateQuote('Git 会用两个分支的末端所指的快照', notes)).toEqual({ chapter: 12, index: 0 });
+  });
+
+  test('书里没有的句子不给来源——这才是要暴露的情况', () => {
+    expect(locateQuote('Git 是一个分布式版本控制系统。', notes)).toBeUndefined();
+  });
+
+  test('几个字的巧合不算引用', () => {
+    expect(locateQuote('分支', notes)).toBeUndefined();
+  });
+
+  test('空摘句不会被当成命中', () => {
+    expect(locateQuote('随便什么', [{ idx: 0, title: 't', gist: '', keyPoints: [], quotes: [''] }]))
+      .toBeUndefined();
   });
 });

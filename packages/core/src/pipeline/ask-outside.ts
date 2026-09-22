@@ -83,6 +83,7 @@ export async function askOutside(
 
   const raw = await provider.complete({
     system: SYSTEM,
+    label: 'ask:outside',
     prompt: `问题：${params.question}\n\n搜索结果：\n\n${material}`,
     schema: SCHEMA,
     signal: params.signal,

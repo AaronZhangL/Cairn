@@ -29,6 +29,7 @@ export async function classifyBook(
     .join('\n');
 
   const raw = await provider.complete({
+    label: 'classify',
     system: '你在判定一本书属于知识类还是叙事类。只依据给出的章节摘要，不使用任何既有印象。只输出 JSON。',
     prompt: `书名：${title}
 

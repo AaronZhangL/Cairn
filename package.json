@@ -7,8 +7,9 @@
   ],
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit -p packages/core/tsconfig.json",
-    "add-book": "bun scripts/add-book.ts"
+    "typecheck": "bun scripts/typecheck.ts",
+    "add-book": "bun scripts/add-book.ts",
+    "replay": "bun scripts/replay.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

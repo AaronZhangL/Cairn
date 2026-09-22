@@ -3,7 +3,7 @@ import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { LIBRARY_INDEX, type LibraryEntry } from '@cairn/core/store/library';
 import type { CairnRPC } from './shared/schema';
-import type { BookPreview, Progress } from './shared/types';
+import type { BookPreview, DeckStatus, Progress } from './shared/types';
 
 /**
  * Renderer side of the bridge.
@@ -29,6 +29,8 @@ type Rpc = {
     askOutside(
       p: { question: string; bookTitle?: string }, o?: RequestOptions,
     ): Promise<OutsideAnswer>;
+    focusStation(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<null>;
+    resumeBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
   };
 };
 
@@ -55,10 +57,17 @@ export const inShell =
   typeof window !== 'undefined' && '__electrobun' in (window as unknown as Record<string, unknown>);
 
 const progressListeners = new Set<(p: Progress) => void>();
+const deckStatusListeners = new Set<(s: DeckStatus) => void>();
 
 export function onProgress(fn: (p: Progress) => void): () => void {
   progressListeners.add(fn);
   return () => progressListeners.delete(fn);
+}
+
+/** Stations arriving after generation's modal has closed. */
+export function onDeckStatus(fn: (s: DeckStatus) => void): () => void {
+  deckStatusListeners.add(fn);
+  return () => deckStatusListeners.delete(fn);
 }
 
 let rpcPromise: Promise<Rpc> | undefined;
@@ -73,6 +82,9 @@ function connect(): Promise<Rpc> {
         messages: {
           progress: (p: Progress) => {
             for (const fn of progressListeners) fn(p);
+          },
+          deckStatus: (s: DeckStatus) => {
+            for (const fn of deckStatusListeners) fn(s);
           },
         },
       },
@@ -147,4 +159,26 @@ export async function ask(params: {
 export async function askOutside(question: string, bookTitle: string): Promise<OutsideAnswer> {
   if (!inShell) throw offline('联网搜索');
   return (await connect()).request.askOutside({ question, bookTitle }, ANSWER_LIMIT);
+}
+
+/**
+ * Tell the builder where the reader is.
+ *
+ * Fire-and-forget: a dropped hint costs a slightly worse build order, never
+ * correctness, and blocking navigation on an RPC round trip would be worse than
+ * the thing it is optimising.
+ */
+export function focusStation(bookId: string, nodeId: string): void {
+  if (!inShell) return;
+  void connect()
+    .then((rpc) => rpc.request.focusStation({ bookId, nodeId }, POLL_LIMIT))
+    .catch(() => undefined);
+}
+
+/** Opening a half-built book asks the main process to pick it back up. */
+export async function resumeBook(bookId: string): Promise<void> {
+  if (!inShell) return;
+  await connect()
+    .then((rpc) => rpc.request.resumeBook({ bookId }, POLL_LIMIT))
+    .catch(() => undefined);
 }

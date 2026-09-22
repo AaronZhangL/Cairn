@@ -14,11 +14,13 @@ import { mapChapters } from '../packages/core/src/pipeline/map';
 import { classifyBook } from '../packages/core/src/pipeline/classify';
 import { reduceToPath } from '../packages/core/src/pipeline/reduce';
 import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
-import { ensureEdgeTts } from '../packages/core/src/pipeline/tts';
+import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts';
 import { BUDGETS, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
 import { fileStore } from '../packages/core/src/store/file-store';
-import { codexCliProvider } from '../packages/core/src/llm/providers/codex-cli';
-import { bookSlug, LIBRARY_INDEX, type LibraryEntry } from '../packages/core/src/store/library';
+import { codexCliProvider } from '../packages/core/src/runtime/codex-cli';
+import {
+  bookSlug, LIBRARY_INDEX, type LibraryEntry, type PathQuality,
+} from '../packages/core/src/store/library';
 import { libraryDir } from '../apps/desktop/src/main/library';
 import type { ChapterNote, NodeDeck, Path } from '../packages/core/src/types';
 
@@ -52,7 +54,8 @@ async function main(): Promise<void> {
   console.log(`\n使用：${budget.label}\n`);
 
   // Fail before spending anything if the narration cannot be synthesized
-  await ensureEdgeTts();
+  const narrator = edgeTtsNarrator();
+  await narrator.ensureReady();
 
   const provider = codexCliProvider();
 
@@ -84,16 +87,28 @@ async function main(): Promise<void> {
   // --- slides + tts per station ---
   const audioDir = join(cache, 'audio');
   const deckStore = await fileStore<NodeDeck>(join(cache, `decks-${budget.id}.json`));
-  const built = await buildDecks(full, notes, audioDir, provider, deckStore, {
+  const built = await buildDecks(full, notes, audioDir, provider, narrator, deckStore, {
     onProgress: (p) => bar('decks ', p.done + p.failed, p.total, p.running, p.failed),
   });
   console.log();
   for (const f of built.job.failures) console.log(`  ✗ ${f.taskId}: ${f.error.message.slice(0, 120)}`);
 
+  const quality: PathQuality = {
+    dropped: path.dropped,
+    retries: path.retries,
+    failed: built.job.failures.length,
+    unsourcedQuotes: built.unsourcedQuotes,
+    estMinutes: path.totalMinutes,
+    budgetMaxMinutes: budget.maxMinutes,
+  };
+
   await install(
-    withRealDuration(full, built), built.decks, notes, book.chapters, audioDir,
-    budget.id, book.author,
+    withRealDuration(full, built.totalMinutes), built.decks, notes, book.chapters, audioDir,
+    budget.id, quality, book.author,
   );
+
+  // The two numbers worth watching after a prompt change; both should be 0
+  console.log(`\n虚构章号被丢弃 ${quality.dropped} 站 · 引文对不上原文 ${quality.unsourcedQuotes} 张`);
 
   console.log(`\n真实总时长 ${built.totalMinutes} 分钟（预估 ${path.totalMinutes}）`);
   console.log(`已装载到 ${LIBRARY}。运行 \`cd apps/desktop && bun run start\` 查看。`);
@@ -107,6 +122,7 @@ async function install(
   chapters: readonly unknown[],
   audioDir: string,
   budgetId: string,
+  quality: PathQuality,
   author?: string,
 ): Promise<void> {
   const dir = join(LIBRARY, 'books', path.bookId);
@@ -114,8 +130,20 @@ async function install(
   await mkdir(join(dir, 'audio'), { recursive: true });
 
   await writeFile(join(dir, 'path.json'), JSON.stringify(path));
-  await writeFile(join(dir, 'decks-ordered.json'), JSON.stringify(decks));
   await writeFile(join(dir, 'notes.json'), JSON.stringify(notes));
+
+  // One file per station, same layout the app builds into, so a book made here
+  // and a book made there are indistinguishable to the player.
+  await mkdir(join(dir, 'decks'), { recursive: true });
+  for (const deck of decks) {
+    await writeFile(join(dir, 'decks', `${deck.nodeId}.json`), JSON.stringify(deck));
+  }
+  await writeFile(join(dir, 'decks', 'index.json'), JSON.stringify({
+    total: path.nodes.length,
+    ready: decks.map((d) => d.nodeId),
+    failed: path.nodes.filter((n) => !decks.some((d) => d.nodeId === n.id)).map((n) => n.id),
+    complete: true,
+  }));
   // Anchored questions read the original text; without this the feature is mute
   await writeFile(join(dir, 'chapters.json'), JSON.stringify(chapters));
 
@@ -128,6 +156,7 @@ async function install(
     id: path.bookId, title: path.title, ...(author ? { author } : {}),
     stations: path.nodes.length, minutes: path.totalMinutes,
     budgetId, generatedAt: path.generatedAt,
+    complete: true, built: decks.length, quality,
   };
   const indexPath = join(LIBRARY, LIBRARY_INDEX);
   const existing = await Bun.file(indexPath).json().catch(() => []) as LibraryEntry[];

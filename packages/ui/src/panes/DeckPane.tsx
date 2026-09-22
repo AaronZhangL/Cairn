@@ -12,10 +12,12 @@ import { RATES, useTransport } from './useTransport';
  * are both derived from it, so they can never drift apart.
  */
 export function DeckPane({
-  node, deck, audioSrc, stageTitle, onSelect, onEnded,
+  node, deck, audioSrc, stageTitle, onSelect, onEnded, build = 'pending',
 }: {
   node: PathNode;
   deck: NodeDeck | undefined;
+  /** Why there is no deck: still being built, or it never will be. */
+  build?: 'pending' | 'failed';
   audioSrc: string;
   /** The path's own stage, shown in the slide's frame. Absent is fine. */
   stageTitle?: string;
@@ -47,7 +49,15 @@ export function DeckPane({
   }, [node.id, transport.rate]);
 
   if (!deck) {
-    return <main className="pane deck-pane"><div className="deck-empty">这一站还没生成</div></main>;
+    // Pending is the ordinary case now: the path lands whole and the stations
+    // fill in behind the reader, so arriving early at one is expected.
+    return (
+      <main className="pane deck-pane">
+        <div className="deck-empty">
+          {build === 'failed' ? '这一站没能生成' : '这一站还在生成，稍等一下'}
+        </div>
+      </main>
+    );
   }
 
   const slideIdx = lastIndexAtOrBefore(deck.slides.map((s) => s.atMs), ms);

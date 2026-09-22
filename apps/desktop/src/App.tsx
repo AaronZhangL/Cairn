@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { audioFile } from '@cairn/core/store/library';
+import { askLogFile, audioFile } from '@cairn/core/store/library';
 import type { LibraryEntry } from '@cairn/core/store/library';
+import { type AskRecord, stationHeat } from '@cairn/core/store/asks';
 import {
   AskPane, DeckPane, StagePane, Splitter, PanelToggle, useSplit, columnWidth,
   DEFAULT_LEFT, DEFAULT_RIGHT, LEFT_LIMITS, RIGHT_LIMITS,
@@ -9,7 +10,9 @@ import {
 } from '@cairn/ui';
 import { AddBook } from './AddBook';
 import { Home } from './Home';
-import { ask, askOutside, inShell, libraryBase, listBooks } from './bridge';
+import {
+  ask, askOutside, focusStation, inShell, libraryBase, listBooks, resumeBook,
+} from './bridge';
 import { useBundle } from './useBundle';
 
 export function App(): ReactElement {
@@ -26,6 +29,7 @@ export function App(): ReactElement {
   const [currentId, setCurrentId] = useState<string>();
   const [turns, setTurns] = useState<readonly Turn[]>([]);
   const [selection, setSelection] = useState<string>();
+  const [asks, setAsks] = useState<readonly AskRecord[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -34,6 +38,25 @@ export function App(): ReactElement {
       setBooks(await listBooks().catch(() => []));
     })();
   }, []);
+
+  // A book closed mid-build would otherwise sit unfinished forever
+  useEffect(() => {
+    if (bookId) void resumeBook(bookId);
+  }, [bookId]);
+
+  // Where questions piled up last time through — read over the same channel as
+  // the books themselves, so it works without the shell too.
+  useEffect(() => {
+    if (!bookId || !base) { setAsks([]); return; }
+    let live = true;
+    void fetch(`${base}/${askLogFile(bookId)}`)
+      .then((r) => (r.ok ? (r.json() as Promise<AskRecord[]>) : []))
+      .then((log) => { if (live) setAsks(Array.isArray(log) ? log : []); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [bookId, base, turns.length]);
+
+  const heat = useMemo(() => stationHeat(asks), [asks]);
 
   const path = bundle?.path;
   const node = useMemo(
@@ -46,6 +69,14 @@ export function App(): ReactElement {
     const next = path.nodes[node.idx + delta];
     if (next) setCurrentId(next.id);
   }, [path, node]);
+
+  // Build what the reader is about to reach, not what follows where they began.
+  // Keyed on the station and on whether anything is left to build — not on the
+  // bundle, which is a fresh object on every poll and would re-send every 2s.
+  const building = bundle !== undefined && !bundle.complete;
+  useEffect(() => {
+    if (bookId && node && building) focusStation(bookId, node.id);
+  }, [bookId, node, building]);
 
   // Stations only. Transport keys (← → space) belong to the deck.
   useEffect(() => {
@@ -161,6 +192,9 @@ export function App(): ReactElement {
         onSwitchBook={(id) => { setBookId(id); setCurrentId(undefined); setTurns([]); }}
         onAdd={inShell ? () => setAdding(true) : undefined}
         onHome={goHome}
+        failed={bundle.failed}
+        heat={heat}
+        complete={bundle.complete}
         collapsed={left.state.collapsed}
       />
 
@@ -169,6 +203,7 @@ export function App(): ReactElement {
       <DeckPane
         node={node}
         deck={bundle.decks.get(node.id)}
+        build={bundle.failed.has(node.id) ? 'failed' : 'pending'}
         audioSrc={`${base ?? '.'}/${audioFile(path.bookId, node.id)}`}
         stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
         onSelect={setSelection}
