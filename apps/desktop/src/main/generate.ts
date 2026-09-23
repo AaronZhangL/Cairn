@@ -14,7 +14,7 @@
  * the decks after it are independent of one another, and that is where the wait
  * actually lives.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { parseBook } from '@cairn/core/parse';
 import { mapChapters } from '@cairn/core/pipeline/map';
@@ -34,17 +34,42 @@ import type { ChapterNote, NodeDeck, ParsedBook, Path } from '@cairn/core/types'
 import type { BookPreview, DeckStatus, Progress } from '../shared/types';
 import { DATA_DIR } from './store';
 import {
-  installDeck, installPath, listBooks, patchEntry, rewritePath, writeDeckIndex,
+  deleteBook, installDeck, installPath, listBooks, patchEntry, rewritePath, writeDeckIndex,
 } from './install';
 import { traced } from './provider';
+import { CairnError } from '@cairn/core/errors';
+import { readSettings, tracingOn } from './settings';
+import { voiceFor } from '../shared/settings';
+import type { ContentLocale } from '@cairn/core/parse/language';
+import { DEFAULT_VOICE } from '@cairn/core/pipeline/tts';
 
 const CACHE_DIR = join(DATA_DIR, '.cache');
 const narrator: Narrator = edgeTtsNarrator();
+
+/**
+ * The voice a book already uses, or the one a new book should get.
+ *
+ * A book built before this was recorded was built with `DEFAULT_VOICE` — not
+ * with whatever is in settings now. Resolving those to the current setting
+ * would re-key every unbuilt station and leave one book in two voices.
+ */
+async function voiceOf(entry: LibraryEntry): Promise<string> {
+  if (entry.voice) return entry.voice;
+  if (!entry.language) return DEFAULT_VOICE;
+  return voiceFor(await readSettings(), entry.language).voice;
+}
 
 /** Parse only. No model calls, so picking a file stays instant. */
 export async function inspect(filePath: string): Promise<BookPreview> {
   const book = await read(filePath);
   const { choices, recommended } = suggestBudgets(shapeOf(book));
+  const settings = await readSettings();
+
+  // The reader's stored rung wins over the suggestion, but only if this book
+  // actually offers it — a short book does not offer every rung.
+  const preselect = choices.some((c) => c.budget.id === settings.defaultBudget)
+    ? settings.defaultBudget
+    : recommended;
 
   return {
     id: idFor(book, filePath),
@@ -53,12 +78,13 @@ export async function inspect(filePath: string): Promise<BookPreview> {
     ...(book.author ? { author: book.author } : {}),
     chapters: book.chapters.length,
     words: book.totalWords,
+    narration: voiceFor(settings, book.language),
     budgets: choices.map((c) => ({
       id: c.budget.id,
-      label: c.budget.label,
+      minutes: c.budget.targetMinutes,
       honest: c.honest,
-      ...(c.note ? { note: c.note } : {}),
-      recommended: c.budget.id === recommended,
+      ...(c.honest ? {} : { wordsPerNode: Math.round(c.wordsPerNode) }),
+      recommended: c.budget.id === preselect,
     })),
   };
 }
@@ -90,6 +116,25 @@ export function pauseBackgroundBuilds(): () => void {
   return () => { for (const release of releases) release(); };
 }
 
+/**
+ * Delete a book and everything built from it, including its pipeline cache.
+ *
+ * The scheduler is stopped and awaited first: a build still in flight would
+ * write a deck back into the directory just removed, resurrecting half a book.
+ */
+export async function removeBook(bookId: string): Promise<boolean> {
+  const scheduler = running.get(bookId);
+  if (scheduler) {
+    scheduler.stop();
+    await scheduler.done;
+    running.delete(bookId);
+  }
+
+  const removed = await deleteBook(bookId);
+  if (removed) await rm(join(CACHE_DIR, bookId), { recursive: true, force: true });
+  return removed;
+}
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -107,21 +152,30 @@ export async function generate(
   const id = idFor(book, filePath);
   const budget = budgetsFor(shapeOf(book))[budgetId];
   const cache = join(CACHE_DIR, id);
-  const provider = traced(id);
+  const provider = await traced(id, await tracingOn());
+  // Decided once, here, and then recorded: the setting may change mid-build
+  const { voice } = voiceFor(await readSettings(), book.language);
 
   const mapStore = await fileStore<readonly ChapterNote[]>(join(cache, 'map.json'));
   const { notes } = await mapChapters(book.chapters, provider, mapStore, {
+    locale: book.language,
     onProgress: (p) => onProgress({ stage: 'map', done: p.done + p.failed, total: p.total }),
   });
-  if (notes.length === 0) throw new Error('逐章摘要没有产出任何内容');
+  if (notes.length === 0) throw new CairnError('map_empty');
 
   onProgress({ stage: 'classify', done: 0, total: 1 });
-  const cls = await classifyBook(book.title, notes, provider);
+  const cls = await classifyBook(book.title, notes, provider, undefined, book.language);
 
   onProgress({ stage: 'reduce', done: 0, total: 1, note: cls.type });
   // The closing station is appended here rather than inside reduce: reduce is
   // judged against the budget, and a station it did not choose would fight that.
-  const reduced = withRecap(await reduceToPath(notes, cls.type, book.totalWords, provider, { budget }));
+  const reduced = withRecap(
+    await reduceToPath(notes, cls.type, book.totalWords, provider, {
+      budget,
+      locale: book.language,
+    }),
+    book.language,
+  );
 
   const path: Path = {
     bookId: id, title: book.title, type: cls.type,
@@ -148,9 +202,11 @@ export async function generate(
     complete: path.nodes.length === 0,
     built: 0,
     quality,
+    language: book.language,
+    voice,
   });
 
-  const scheduler = await startBuilding(path, notes, budgetId, quality);
+  const scheduler = await startBuilding(path, notes, budgetId, quality, voice, book.language);
 
   // Return as soon as one station can be played; the rest arrive behind it
   const first = path.nodes[0];
@@ -183,7 +239,10 @@ export async function resume(bookId: string): Promise<boolean> {
   ]).catch(() => [undefined, undefined] as const);
   if (!path || !notes) return false;
 
-  await startBuilding(path, notes, entry.budgetId as BudgetId, entry.quality);
+  await startBuilding(
+    path, notes, entry.budgetId as BudgetId, entry.quality,
+    await voiceOf(entry), entry.language ?? 'zh',
+  );
   return true;
 }
 
@@ -192,6 +251,10 @@ async function startBuilding(
   notes: readonly ChapterNote[],
   budgetId: BudgetId,
   quality: PathQuality | undefined,
+  /** Fixed for the life of this book — see `voiceOf`. */
+  voice: string,
+  /** The book's own language; the slides and narration come back in it. */
+  locale: ContentLocale,
 ): Promise<DeckScheduler> {
   const existing = running.get(path.bookId);
   if (existing) return existing;
@@ -199,7 +262,7 @@ async function startBuilding(
   const cache = join(CACHE_DIR, path.bookId);
   const audioDir = join(cache, 'audio');
   const byChapter = notesByChapter(notes);
-  const provider = traced(path.bookId);
+  const provider = await traced(path.bookId, await tracingOn());
 
   // The same store the CLI writes, so a book half-built by `add-book` resumes here
   const store = await fileStore<NodeDeck>(join(cache, `decks-${budgetId}.json`));
@@ -213,6 +276,9 @@ async function startBuilding(
     await writeDeckIndex(path.bookId, {
       total: path.nodes.length, ready: [...ready], failed: [...failed], complete,
     });
+    // The shelf reads the index, not this file, so a count only written at the
+    // end showed 0 of 15 for the whole run — and still did after a relaunch.
+    await patchEntry(path.bookId, { built: progress.ready });
     emitStatus({
       bookId: path.bookId,
       total: path.nodes.length,
@@ -227,8 +293,10 @@ async function startBuilding(
     store,
     // Content-keyed, never positional: `reduce` re-runs per generation and `n0`
     // is routinely a different station than it was last time.
-    keyOf: (node) => deckKey(node),
-    build: (node) => buildNode(node, path, byChapter, audioDir, provider, narrator),
+    // Content-keyed *and* voice-keyed: the same station in another voice is a
+    // different audio file, and sharing a key shipped the wrong voice once.
+    keyOf: (node) => deckKey(node, voice),
+    build: (node) => buildNode(node, path, byChapter, audioDir, provider, narrator, { voice, locale }),
     onReady: async (deck, progress) => {
       decks.push(deck);
       // Deck and audio land together: a station listed as ready must be playable

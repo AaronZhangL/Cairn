@@ -1,26 +1,14 @@
 import type { ReactElement } from 'react';
 import { fitAll, fitOf } from '@cairn/core/fit';
 import type { Slide } from '@cairn/core/types';
-import { revealCount } from '../reveal';
 
-type Props = Extract<Slide, { layout: 'flow' }> & { readonly progress: number };
+type Props = Extract<Slide, { layout: 'flow' }> & { readonly shown: number };
 
 /**
- * A chain: derivation, causal link, or sequence of steps.
- *
- * Laid out as a column of connected nodes rather than a wrapped row of pills.
- * A wrapped row breaks the chain at an arbitrary point — whichever step happens
- * to hit the right edge — and the break reads as a meaningful gap when it is
- * only a line wrap. A column has one direction and never wraps, and the steps
- * arrive in order with the narration, which is what a chain is for.
- *
- * That argument is about the chain, not about the text inside a node, and
- * nothing used to keep a long step from wrapping the node itself into two
- * lines. `data-fit` does: the whole chain steps down a size together so the
- * nodes stay single-line and evenly weighted.
+ * A causal chain, as a column that never wraps. The chain steps down one size
+ * together so a long step cannot wrap a node into two lines. See DESIGN.md.
  */
-export function Flow({ heading, steps, progress }: Props): ReactElement {
-  const shown = revealCount(steps.length, progress);
+export function Flow({ heading, steps, shown }: Props): ReactElement {
 
   return (
     <div className="s">

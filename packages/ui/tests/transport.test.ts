@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { boostedRate, nextRate, RATES, seekDistance } from '../src/panes/useTransport';
+import { boostedRate, clampVolume, nextRate, RATES, seekDistance } from '../src/panes/useTransport';
 
 describe('seekDistance', () => {
   test('1 倍速点一下跳 5 秒', () => expect(seekDistance(1)).toBe(5));
@@ -32,5 +32,23 @@ describe('nextRate', () => {
   test('档位递增且包含 1 倍速', () => {
     expect([...RATES]).toEqual([...RATES].sort((a, b) => a - b));
     expect(RATES).toContain(1);
+  });
+});
+
+describe('clampVolume', () => {
+  test('keeps a level the element can accept', () => {
+    expect(clampVolume(0)).toBe(0);
+    expect(clampVolume(0.42)).toBe(0.42);
+    expect(clampVolume(1)).toBe(1);
+  });
+
+  /** ↑ at full volume and ↓ at silence both overshoot the range by a step. */
+  test('clamps what the keyboard steps past the ends', () => {
+    expect(clampVolume(1.1)).toBe(1);
+    expect(clampVolume(-0.1)).toBe(0);
+  });
+
+  test('a non-number falls back to audible rather than silent', () => {
+    expect(clampVolume(Number.NaN)).toBe(1);
   });
 });

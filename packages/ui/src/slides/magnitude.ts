@@ -1,16 +1,10 @@
 /**
- * Reading a comparable magnitude out of a `number` slide's value string.
+ * Reading a comparable magnitude out of a slide's value string.
  *
- * The values are display strings written for a human ("110 年", "1 枚", "3.5 万",
- * "68%"), not numbers, because that is what belongs on the slide. To draw them
- * as proportional bars they have to be comparable, and comparability is all or
- * nothing: if one value in the set cannot be read, the bars would silently
- * compare unlike things, which is worse than no bars at all. `magnitudes`
- * therefore returns undefined for the whole set rather than guessing.
- *
- * Chinese scale words are the reason this is not a plain parseFloat. "3 万"
- * next to "500" is 30000 against 500; read naively it is 3 against 500, and the
- * bar would say the opposite of the truth.
+ * Values are written for a human ("3.5 万", "68%"), so comparing them means
+ * parsing both the scale word and the unit. Comparability is all or nothing:
+ * one unreadable value, or two different units, and the whole set is refused —
+ * bars that compare unlike things are worse than no bars.
  */
 const SCALES: readonly (readonly [string, number])[] = [
   ['亿', 1e8], ['万', 1e4], ['千', 1e3], ['百', 1e2],

@@ -10,7 +10,6 @@ station count and coverage follow from it.
 Slides are data, not video — the player is one rendering of them, and the only one built so far.
 A plain-text rendering is a possibility the data model leaves open.
 
-Personal tool: one owner, one machine, run locally.
 
 ## Setup and commands
 
@@ -26,6 +25,7 @@ bun run replay <bookId> [file]               # list recorded model calls, or re-
 
 cd apps/desktop
 bun run dev       # Vite only: the three panes, no model, no shell
+bun run build     # bundle the webview — catches node:* leaking into it
 bun run start     # the real desktop app
 bun run package   # a distributable .app
 ```
@@ -41,6 +41,16 @@ answer pane rather than faking a reply.
 | `CAIRN_TRACE=1` | Record every model call (prompt, schema, raw reply, ms) under the book's cache. Off by default: a trace of the map stage is the book's text a second time |
 | `TAVILY_API_KEY` | Outside-the-book search. Read in the main process only |
 
+**The settings panel writes `settings.json` beside the library**, and both sources are honoured.
+A key typed into the panel wins over `TAVILY_API_KEY`; an empty field means "read the
+environment". Tracing is on if *either* `CAIRN_TRACE=1` or the stored switch says so — a machine
+configured the old way does not silently stop working. `main/settings.ts` folds the two into one
+answer, so nothing downstream reads `process.env` for these.
+
+The reader's own preferences — interface language, theme, text size, default speed — never reach
+the main process at all. They live in `localStorage` (`packages/ui/src/settings/prefs.ts`),
+because everything they affect is drawn by the webview.
+
 `edge-tts` is checked **before the first model call**, because synthesis runs last and a missing
 binary would otherwise surface only after paying for every station's slides.
 
@@ -49,7 +59,11 @@ binary would otherwise surface only after paying for every station's slides.
 ```
 packages/
   core/          Domain types, parsing, pipeline, storage — no framework imports
-    parse/       epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+    parse/       epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts  language.ts
+    pipeline/prompts/  Every prompt, one file per language. `en` is the type's
+                 source, so a prompt added there fails the build until `zh` has it
+    errors.ts    Named failures (`CairnError`). The reader's language is the
+                 renderer's business, so nothing here writes a sentence.
     llm/         Provider *interface* + tracing wrapper. No implementations.
     pipeline/    job.ts (batch state machine), scheduler.ts (interactive one),
                  map/classify/reduce/slides/tts stages — all pure or interface-driven
@@ -57,6 +71,8 @@ packages/
     runtime/     Everything that spawns a process or writes a file:
                  codex-cli.ts, edge-tts.ts, trace-dir.ts
   ui/            Shared React components and design tokens; slide layout renderers
+    i18n/        Two dictionaries and the type that keeps them in step
+    settings/    The settings panel, and the preferences the webview owns
 apps/
   desktop/       Electrobun shell — the only app. Authoring and playback in one window.
 scripts/         add-book.ts, replay.ts, typecheck.ts
@@ -66,6 +82,13 @@ scripts/         add-book.ts, replay.ts, typecheck.ts
 (`LlmProvider`, `Narrator`, `JobStore`, `TraceSink`); `runtime/` implements them, never the
 reverse. Test for whether a file belongs in `runtime/`: does it import `node:*` for anything but
 path arithmetic?
+
+**A second, sharper rule for anything the webview also imports.** Path arithmetic is allowed in
+`core`, but a module the *renderer* pulls in may not import `node:*` at all — Vite externalises
+it and the build fails at bundle time, after every typecheck has passed. `pipeline/voice.ts`
+exists for exactly this: the player needs the voice defaults and the speech rates, and
+`pipeline/tts.ts` imports `node:path`. `bun test` and four clean typechecks will not catch this;
+`cd apps/desktop && bun run build` will.
 
 ## Code style
 
@@ -155,8 +178,11 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
    not read the book; a merged paragraph makes the two indistinguishable. A generic chat
    component will flatten this if allowed to.
 
-5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes; every
-   downstream stage reads the notes, not the book. Re-reading per stage multiplies cost ~5x for
+5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes — prose
+   plus the structured material the chart layouts need (`figures`, `contrasts`, `sequences`,
+   `relations`) — and every downstream stage reads the notes, not the book. Map's task ids are
+   positional, so notes cached before a field existed stay valid and stay thin; a book wants its
+   cache cleared to gain one. Re-reading per stage multiplies cost ~5x for
    no gain. `pipeline/recap.ts` goes further and reads the *path* — the station briefs `reduce`
    already wrote — so closing a book costs no pass over the notes either.
 
@@ -171,7 +197,11 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
    so the path cannot be streamed — a path that grew as you read would let arrival time decide
    the station count instead of the budget, breaking invariant 1. The decks *are* independent,
    and that is where the wait lives: `generate` returns once station 1 is playable, and the rest
-   build behind the reader in walking order. A station with no deck yet shows as pending, never
+   build behind the reader in walking order, one at a time at first and further ahead as they get
+   deeper (`lookaheadFor`) — a reader at station six is far likelier to finish than one at station
+   one, so buying ahead stops being speculative, and past halfway the rest is built as fast as the
+   machine sensibly allows. Progress is written to the library index on every station, not only at
+   the end: a shelf that reads 0 of 15 for a whole run is worse than no count. A station with no deck yet shows as pending, never
    hidden.
 
 8. **Cache keys derive from content, never from position.** `reduce` re-runs on every generation
@@ -179,6 +209,34 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
    last time — and one audio directory is shared by every budget. A positional key let one
    budget's synthesis overwrite another's, then shipped the right subtitles over the wrong voice
    track. `deckKey()` in `pipeline/build.ts` fingerprints the station's content instead.
+
+9. **A book keeps the voice it was built with.** The voice is part of `deckKey`, and that one
+   key protects both halves of `buildNode` — the model call that writes the script *and* the
+   synthesis that speaks it. So changing the voice does not re-synthesise a book, it rebuilds
+   it: every station is a cache miss and costs a fresh `slides` call. The voice is therefore
+   resolved **once**, when the book is added, and recorded on its `LibraryEntry` along with the
+   language it was detected as. Changing the setting only affects books added afterwards. A
+   half-built book resumed after a change keeps its original voice, or it would end up in two.
+   An entry with no recorded voice was built with `DEFAULT_VOICE`, and must be resolved to that
+   and not to the current setting.
+
+10. **The language a book is narrated in comes from the book, not from the interface.** A reader
+    with an English interface can walk a Chinese book, and it stays Chinese. `parse/language.ts`
+    counts the text and uses `dc:language` only when there is too little of it to count —
+    conversion tools routinely stamp `en` on a Chinese translation, and trusting that would
+    narrate the whole book in the wrong voice for the price of a full generation.
+
+11. **A prompt states the language it wants back.** The prompts were Chinese and said nothing
+    about output language, so the model followed the system prompt — which made an English book
+    come back in Chinese, silently. Every stage now takes the book's `ContentLocale` and loads
+    its prompts from `pipeline/prompts/`. Thread it through any new stage; a stage that defaults
+    to `zh` and is never passed a locale is the bug coming back.
+
+12. **English narration is commissioned in words, Chinese in characters.** `CHARS_PER_SECOND` is
+    per language and measured (zh 4.9, en 17.0 — three samples each, recorded in `tts.ts`).
+    English prompts ask for a word count because a model counts words far more reliably than
+    characters. Re-measure rather than adjust by feel: nothing downstream checks the length, so
+    an error here just makes every station the wrong length.
 
 ## Security
 
@@ -190,15 +248,18 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
   before the join and re-checked against the root after, because a decoded segment can contain a
   separator.
 - **Generated books stay local.** `.gitignore` keeps the library and pipeline cache out of the
-  repository; they contain full chapter text from books the owner bought.
+  repository; they contain full chapter text from books the owner bought. Planned iCloud sync
+  contradicts this sentence — see the note under Boundaries before building it.
 
 ## Commits and pull requests
 
 - Conventional commits: `<type>: <description>`, type one of
   `feat` `fix` `refactor` `docs` `test` `chore` `perf` `ci`.
 - One reason per commit. A formatting sweep and a behaviour change do not belong together.
-- Before committing: `bun test` and all four typechecks pass, and no generated book, audio file
-  or cache entry is staged.
+- Before committing: `bun test`, all four typechecks, and `cd apps/desktop && bun run build`
+  pass, and no generated book, audio file or cache entry is staged. The bundle is a separate
+  check on purpose: a `node:*` import that reaches the webview passes every typecheck and fails
+  only at bundle time.
 - A commit that fixes a silent bug names the invariant it restores.
 
 ## Boundaries
@@ -206,8 +267,25 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 **Out of scope:** PDF parsing · MP4 rendering · image generation · spaced repetition · user
 accounts · telemetry · any networked server component.
 
-**In scope, not built:** novel layouts (`timeline`, `relation`, `world`); the plain-text
-rendering of a deck; cross-book memory of what the reader has already walked
+**Planned, and the reason several decisions look the way they do:** books generated on the Mac
+sync (iCloud) and are read on an iPhone. Nothing is built for it yet, but three consequences
+already bind:
+
+1. **The phone can only be a player.** An iOS app ships through the App Store, so it *is*
+   sandboxed: no subprocess, no `codex`, no `edge-tts`. Generation stays on the Mac. This is
+   already the shape the data model implies — "slides are data, not video" — so keep the split
+   clean rather than letting anything player-side depend on a generation-side artifact.
+2. **A book must be movable.** Everything the player needs lives under `books/<id>/`, and
+   nothing persisted there may hold an absolute path — see `NodeDeck.audioPath`. `.cache/` is
+   generation-side and never travels.
+3. **Syncing changes what "stays local" means.** `chapters.json` is the full text of a book the
+   owner bought, and today the Security section below can say it never leaves the machine.
+   Putting it in iCloud makes that false. Either the synced bundle excludes it — costing
+   anchored questions on the phone — or the claim gets rewritten honestly. Decide before
+   building sync, not after.
+
+**In scope, not built:** the `world` layout (a novel's setting); the plain-text rendering of a
+deck; cross-book memory of what the reader has already walked
 ([`docs/SPEC.md`](docs/SPEC.md) §7).
 
 **Ask before:** changing `tokens.css`, cache key derivation, budget arithmetic, or anything that

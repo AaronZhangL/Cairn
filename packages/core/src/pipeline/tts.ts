@@ -12,27 +12,19 @@
  * the same deck would sound different on different machines.
  */
 import { join } from 'node:path';
+import type { ContentLocale } from '../parse/language';
 import type { DraftDeck, NarrationCue, NodeDeck, Slide } from '../types';
+import { CairnError } from '../errors';
 
-/** Microsoft tunes this voice for audiobooks and commentary. */
-export const DEFAULT_VOICE = 'zh-CN-YunjianNeural';
+// Re-exported so existing importers keep working; defined in `voice.ts`,
+// which the renderer can bundle and this file cannot.
+export { DEFAULT_VOICE, DEFAULT_VOICES, defaultVoiceFor } from './voice';
 
-/**
- * Measured, not guessed: three Chinese samples through zh-CN-YunjianNeural at
- * default rate gave 4.59 / 4.85 / 5.18 chars per second. Re-measure if the voice
- * or rate changes — station length is derived from this number.
- */
-export const CHARS_PER_SECOND = 4.9;
-
-/** How many narration characters fill a station of the given length. */
-export function targetChars(minutes: number): number {
-  return Math.round(minutes * 60 * CHARS_PER_SECOND);
-}
-
-/** Predicted duration before synthesis, for progress display. */
-export function estimateMs(text: string): number {
-  return Math.round((text.length / CHARS_PER_SECOND) * 1000);
-}
+// Speech rates and the length targets derived from them live in `voice.ts`,
+// for the same reason the default voices do: the renderer bundles them.
+export {
+  CHARS_PER_SECOND, estimateMs, targetChars, targetWords, WORDS_PER_SECOND,
+} from './voice';
 
 export interface TtsOptions {
   readonly voice?: string;
@@ -132,7 +124,7 @@ export function assembleDeck(
   cues: readonly SrtCue[],
   audioPath: string,
 ): NodeDeck {
-  if (cues.length === 0) throw new Error('没有字幕时间轴，无法对齐旁白');
+  if (cues.length === 0) throw new CairnError('tts_unaligned');
 
   const narration = alignSentences(deck.sentences, cues);
 

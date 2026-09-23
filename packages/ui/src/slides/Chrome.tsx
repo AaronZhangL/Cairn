@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useT } from '../settings/SettingsProvider';
 
 export interface SlideChrome {
   /** The path's own stage, e.g. 建立模型 — not the book's part or chapter. */
@@ -20,10 +21,11 @@ export interface SlideChrome {
  * slide and takes no pointer events so selecting slide text still works.
  */
 export function Chrome({ stageTitle, stationNo, slideIdx, slideCount }: SlideChrome): ReactElement {
+  const t = useT();
   return (
     <div className="s-chrome" aria-hidden="true">
       <div className="s-stationtag">
-        {stageTitle ? `${stageTitle} · ` : ''}第 {stationNo} 站
+        {stageTitle ? `${stageTitle} · ` : ''}{t.unit.nth(stationNo)}
       </div>
       <div className="s-dots">
         {Array.from({ length: slideCount }, (_, i) => (

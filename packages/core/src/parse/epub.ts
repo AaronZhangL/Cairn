@@ -2,6 +2,8 @@ import JSZip from 'jszip';
 import { type Chapter, type ParsedBook, ParseError } from '../types';
 import { type Block, chunkBlocks } from './chunk';
 import { decodeEntities, htmlToText } from './text';
+import { type ContentLocale, detectContentLocale } from './language';
+import { promptsFor } from '../pipeline/prompts';
 
 const CONTAINER_PATH = 'META-INF/container.xml';
 
@@ -25,12 +27,17 @@ export async function parseEpub(bytes: Uint8Array, fileName: string): Promise<Pa
 
   if (chapters.length === 0) throw new ParseError('EPUB 中没有可读正文', 'no_content');
 
+  const sample = chapters.slice(0, 3).map((c) => c.text).join('\n').slice(0, 4000);
+  const language = detectContentLocale(pickMeta(opfXml, 'language'), sample);
+
   return {
     title: pickMeta(opfXml, 'title') ?? stripExtension(fileName),
     author: pickMeta(opfXml, 'creator'),
     format: 'epub',
-    chapters,
+    chapters: nameUntitled(chapters, language),
     totalWords: chapters.reduce((sum, c) => sum + c.wordCount, 0),
+    // The manifest's claim, checked against the text — see parse/language.ts
+    language,
   };
 }
 
@@ -106,7 +113,9 @@ function splitByHeading(html: string, seq: number): readonly Block[] {
   const marks = [...html.matchAll(HEADING_TAG)];
   if (marks.length === 0) {
     const text = htmlToText(html);
-    return text.length > 0 ? [{ title: `第 ${seq + 1} 节`, text }] : [];
+    // Left blank on purpose: the language is not known until the whole book
+    // has been read, and `nameUntitled` fills these in once it is.
+    return text.length > 0 ? [{ title: '', text }] : [];
   }
 
   // The first heading is this spine item's chapter name, used as the merge group
@@ -128,7 +137,27 @@ function splitByHeading(html: string, seq: number): readonly Block[] {
 
 function cleanTitle(rawHeading: string): string {
   const title = htmlToText(rawHeading).replace(/\s+/g, ' ').trim();
-  return title.length > 0 && title.length <= 60 ? title : '（无题）';
+  return title.length > 0 && title.length <= 60 ? title : '';
+}
+
+/**
+ * Fill in the titles that parsing could not read.
+ *
+ * Done here rather than where the blanks are made, because a title has to be in
+ * the book's language and the language is only known once the text has been
+ * read — which is after every section already has, or lacks, a heading.
+ */
+function nameUntitled(
+  chapters: readonly Chapter[],
+  locale: ContentLocale,
+): readonly Chapter[] {
+  const { parse } = promptsFor(locale);
+  let seq = 0;
+  return chapters.map((c) => {
+    if (c.title.length > 0) return c;
+    seq += 1;
+    return { ...c, title: parse.section(seq) };
+  });
 }
 
 /** Resolve ../ and ./ in a relative href, which EPUBs use freely. */
@@ -142,7 +171,7 @@ function resolvePath(baseDir: string, href: string): string {
   return segments.join('/');
 }
 
-function pickMeta(opfXml: string, tag: 'title' | 'creator'): string | undefined {
+function pickMeta(opfXml: string, tag: 'title' | 'creator' | 'language'): string | undefined {
   const raw = opfXml.match(new RegExp(`<dc:${tag}[^>]*>([\\s\\S]*?)</dc:${tag}>`, 'i'))?.[1];
   const value = raw ? decodeEntities(raw).trim() : '';
   return value.length > 0 ? value : undefined;

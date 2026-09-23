@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  EMPTY_RESUME, closeBook, openBook, parseStored, placeIn, remember, shouldWrite, startAt,
-  type ResumeStore,
+  EMPTY_RESUME, closeBook, forgetBook, openBook, parseStored, placeIn, remember, shouldWrite,
+  startAt, type ResumeStore,
 } from '../src/panes/resume';
 
 const stored = (store: ResumeStore): string => JSON.stringify(store);
@@ -108,5 +108,37 @@ describe('resume 写入节流', () => {
 
   test('往回拖也算一次变化', () => {
     expect(shouldWrite({ nodeId: 'n1', ms: 60_000 }, { nodeId: 'n1', ms: 10_000 })).toBe(true);
+  });
+});
+
+describe('forgetBook', () => {
+  const store: ResumeStore = {
+    lastBookId: 'atomic-habits-ab12cd',
+    places: {
+      'atomic-habits-ab12cd': { nodeId: 'n3', ms: 40_000 },
+      'pro-git-zh-9f01ac': { nodeId: 'n1', ms: 8_000 },
+    },
+  };
+
+  test('drops that book and leaves the others alone', () => {
+    const next = forgetBook(store, 'atomic-habits-ab12cd');
+    expect(placeIn(next, 'atomic-habits-ab12cd')).toBeUndefined();
+    expect(placeIn(next, 'pro-git-zh-9f01ac')).toEqual({ nodeId: 'n1', ms: 8_000 });
+  });
+
+  /**
+   * The bug this prevents: re-adding the same file lands on the same id, so a
+   * kept position resumes the new path at a station that no longer exists.
+   */
+  test('stops the next launch reopening a book that is gone', () => {
+    expect(forgetBook(store, 'atomic-habits-ab12cd').lastBookId).toBeUndefined();
+  });
+
+  test('keeps lastBookId when a different book is deleted', () => {
+    expect(forgetBook(store, 'pro-git-zh-9f01ac').lastBookId).toBe('atomic-habits-ab12cd');
+  });
+
+  test('deleting a book with no stored position changes nothing', () => {
+    expect(forgetBook(store, 'never-opened-000000')).toEqual(store);
   });
 });

@@ -14,6 +14,8 @@ import { mapChapters } from '../packages/core/src/pipeline/map';
 import { classifyBook } from '../packages/core/src/pipeline/classify';
 import { reduceToPath } from '../packages/core/src/pipeline/reduce';
 import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
+import { defaultVoiceFor } from '../packages/core/src/pipeline/tts';
+import type { ContentLocale } from '../packages/core/src/parse/language';
 import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts';
 import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
 
@@ -65,6 +67,7 @@ async function main(): Promise<void> {
   const mapStore = await fileStore<readonly ChapterNote[]>(join(cache, 'map.json'));
   if (mapStore.size > 0) console.log(`map 缓存命中 ${mapStore.size} 批`);
   const { notes, job } = await mapChapters(book.chapters, provider, mapStore, {
+    locale: book.language,
     onProgress: (p) => bar('map   ', p.done + p.failed, p.total, p.running, p.failed),
   });
   console.log();
@@ -73,11 +76,13 @@ async function main(): Promise<void> {
 
   // --- classify + reduce: cheap, always fresh so a budget change takes effect ---
   process.stdout.write('classify… ');
-  const cls = await classifyBook(book.title, notes, provider);
+  const cls = await classifyBook(book.title, notes, provider, undefined, book.language);
   console.log(cls.type);
 
   process.stdout.write('reduce…   ');
-  const path = await reduceToPath(notes, cls.type, book.totalWords, provider, { budget });
+  const path = await reduceToPath(notes, cls.type, book.totalWords, provider, {
+    budget, locale: book.language,
+  });
   console.log(`${path.nodes.length} 站 / ${path.stages.length} 阶段 / 预估 ${path.totalMinutes} 分钟`);
 
   const full: Path = {
@@ -89,7 +94,12 @@ async function main(): Promise<void> {
   // --- slides + tts per station ---
   const audioDir = join(cache, 'audio');
   const deckStore = await fileStore<NodeDeck>(join(cache, `decks-${budget.id}.json`));
+  // Matched to the book's language: the terminal path has no settings file, so
+  // it takes the per-language default rather than the Chinese one.
+  const voice = defaultVoiceFor(book.language);
   const built = await buildDecks(full, notes, audioDir, provider, narrator, deckStore, {
+    locale: book.language,
+    voice,
     onProgress: (p) => bar('decks ', p.done + p.failed, p.total, p.running, p.failed),
   });
   console.log();
@@ -106,7 +116,7 @@ async function main(): Promise<void> {
 
   await install(
     withRealDuration(full, built.totalMinutes), built.decks, notes, book.chapters, audioDir,
-    budget.id, quality, book.author,
+    budget.id, quality, { language: book.language, voice }, book.author,
   );
 
   // The two numbers worth watching after a prompt change; both should be 0
@@ -125,6 +135,8 @@ async function install(
   audioDir: string,
   budgetId: string,
   quality: PathQuality,
+  /** Recorded so the app resumes this book in the voice it was built with. */
+  narration: { readonly language: ContentLocale; readonly voice: string },
   author?: string,
 ): Promise<void> {
   const dir = join(LIBRARY, 'books', path.bookId);
@@ -138,7 +150,12 @@ async function install(
   // and a book made there are indistinguishable to the player.
   await mkdir(join(dir, 'decks'), { recursive: true });
   for (const deck of decks) {
-    await writeFile(join(dir, 'decks', `${deck.nodeId}.json`), JSON.stringify(deck));
+    // Same rewrite the app does, so the claim above is actually true: an
+    // absolute build-cache path would not survive the book being moved.
+    await writeFile(
+      join(dir, 'decks', `${deck.nodeId}.json`),
+      JSON.stringify({ ...deck, audioPath: `audio/${deck.nodeId}.mp3` }),
+    );
   }
   await writeFile(join(dir, 'decks', 'index.json'), JSON.stringify({
     total: path.nodes.length,
@@ -164,6 +181,7 @@ async function install(
     stations: path.nodes.length, minutes: path.totalMinutes,
     budgetId, generatedAt: path.generatedAt,
     complete: true, built: decks.length, quality,
+    language: narration.language, voice: narration.voice,
   };
   const indexPath = join(LIBRARY, LIBRARY_INDEX);
   const existing = await Bun.file(indexPath).json().catch(() => []) as LibraryEntry[];

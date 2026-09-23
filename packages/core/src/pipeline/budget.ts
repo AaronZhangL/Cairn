@@ -28,14 +28,21 @@ export function shapeOf(book: ParsedBook): BookShape {
 
 export interface ReadingBudget {
   readonly id: BudgetId;
+  /**
+   * Pre-composed and in Chinese, because its only reader is the terminal tool,
+   * which has no way to see the interface-language setting (that lives in the
+   * webview's localStorage). The player builds its own label from
+   * `targetMinutes` and `id`; the reduce prompt builds its own from
+   * `prompts.reduce.budgetLabel`. Neither reads this.
+   */
   readonly label: string;
+  /** The duration the rung aims at; what `label` is built from. */
+  readonly targetMinutes: number;
   /** Target duration range, in minutes. */
   readonly minMinutes: number;
   readonly maxMinutes: number;
   readonly nodeRange: readonly [number, number];
   readonly minutesPerNode: readonly [number, number];
-  /** Goes into the prompt; sets how ruthless the selection should be. */
-  readonly coverage: string;
 }
 
 interface Rung {
@@ -44,25 +51,20 @@ interface Rung {
   /** Share of the full walk this rung targets. */
   readonly share: number;
   readonly minutesPerNode: readonly [number, number];
-  readonly coverage: string;
 }
 
 const RUNGS: readonly Rung[] = [
   {
     id: 'quick', name: '知道个大概', share: 0.1, minutesPerNode: [2, 3],
-    coverage: '只要全书的主干论点。够在饭桌上说清这本书讲了什么就行，细节全部舍弃。',
   },
   {
     id: 'brief', name: '抓住要点', share: 0.28, minutesPerNode: [2, 4],
-    coverage: '主干论点加上支撑它的关键论证。舍弃例子、旁支和操作细节。',
   },
   {
     id: 'solid', name: '真的读懂', share: 0.58, minutesPerNode: [3, 4],
-    coverage: '概念、论证和代表性的例子。覆盖大部分核心章节，舍弃附录与边缘话题。',
   },
   {
     id: 'full', name: '完整走一遍', share: 1, minutesPerNode: [3, 5],
-    coverage: '覆盖几乎全部实质内容，允许为重要概念单独设站。仍要舍弃版权页、索引、名单这类非内容章节。',
   },
 ];
 
@@ -131,11 +133,11 @@ export function budgetsFor(shape: BookShape): Readonly<Record<BudgetId, ReadingB
     const budget: ReadingBudget = {
       id: rung.id,
       label: `${formatMinutes(target)} · ${rung.name}`,
+      targetMinutes: target,
       minMinutes: Math.max(5, Math.round(target * 0.85)),
       maxMinutes: Math.round(target * 1.15),
       nodeRange: nodeRangeFor(target, shape, rung.minutesPerNode),
       minutesPerNode: rung.minutesPerNode,
-      coverage: rung.coverage,
     };
     return [rung.id, budget] as const;
   });
@@ -169,6 +171,8 @@ export function suggestNodeCount(totalWords: number, budget: ReadingBudget): num
 
 export interface BudgetChoice {
   readonly budget: ReadingBudget;
+  /** How many of the book's words each station would have to carry. */
+  readonly wordsPerNode: number;
   /** False means still offerable but to be labelled: at this length the budget distorts. */
   readonly honest: boolean;
   readonly note?: string;
@@ -192,8 +196,15 @@ export function suggestBudgets(shape: BookShape): {
     const wordsPerNode = shape.totalWords / suggestNodeCount(shape.totalWords, budget);
     const honest = wordsPerNode <= WORDS_PER_NODE_CEILING;
     return honest
-      ? { budget, honest }
-      : { budget, honest, note: `这本书 ${Math.round(shape.totalWords / 10_000)} 万字，该档位每站要概括约 ${Math.round(wordsPerNode / 10_000)} 万字，会流于空泛` };
+      ? { budget, honest, wordsPerNode }
+      // `note` is for the CLI, which is Chinese anyway; the player words it from
+      // `wordsPerNode` in whatever language the reader chose.
+      : {
+        budget,
+        honest,
+        wordsPerNode,
+        note: `这本书 ${Math.round(shape.totalWords / 10_000)} 万字，该档位每站要概括约 ${Math.round(wordsPerNode / 10_000)} 万字，会流于空泛`,
+      };
   });
 
   const recommended: BudgetId = shape.totalWords >= 300_000 ? 'full'

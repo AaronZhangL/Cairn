@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./types": "./src/types.ts",
+    "./errors": "./src/errors.ts",
     "./icons": "./src/icons.ts",
     "./fit": "./src/fit.ts",
     "./parse": "./src/parse/index.ts",

@@ -10,6 +10,8 @@
  *   4. Progress is visible per task — not one indefinite spinner
  */
 
+import { CairnError } from '../errors';
+
 export interface JobStore<R> {
   get(taskId: string): Promise<R | undefined>;
   put(taskId: string, result: R): Promise<void>;
@@ -55,9 +57,9 @@ export interface JobOptions {
 
 const DEFAULTS = { concurrency: 4, maxAttempts: 3, baseDelayMs: 500 } as const;
 
-export class JobAbortedError extends Error {
+export class JobAbortedError extends CairnError {
   constructor() {
-    super('任务已取消');
+    super('cancelled');
     this.name = 'JobAbortedError';
   }
 }

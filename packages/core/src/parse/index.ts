@@ -20,6 +20,7 @@ export function detectFormat(fileName: string): BookFormat {
     throw new ParseError(
       `暂不支持 .${ext || '未知'} 格式，可上传 ${ACCEPTED_EXTENSIONS.join(' / ')}`,
       'unsupported_format',
+      { ext, accepted: ACCEPTED_EXTENSIONS.join(' / ') },
     );
   }
   return format;

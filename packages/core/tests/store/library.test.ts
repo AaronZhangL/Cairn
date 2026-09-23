@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  audioFile, bookDir, bookFile, bookSlug, deckFile, deckIndexFile, normalizeEntry,
+  audioFile, bookDir, bookFile, bookSlug, deckFile, deckIndexFile, isBookId, normalizeEntry,
 } from '../../src/store/library';
 
 describe('library paths', () => {
@@ -64,5 +64,26 @@ describe('normalizeEntry', () => {
       complete: false, built: 3,
     };
     expect(normalizeEntry(fresh)).toMatchObject({ complete: false, built: 3 });
+  });
+});
+
+describe('isBookId', () => {
+  const hash = (s: string): string => `${s.length}a1b2c3`.slice(0, 6);
+
+  test('accepts what bookSlug produces', () => {
+    expect(isBookId(bookSlug('Atomic Habits', hash, '/books/ah.epub'))).toBe(true);
+    expect(isBookId(bookSlug('原子习惯', hash, '/books/zh.epub'))).toBe(true);
+  });
+
+  /** A delete joins this onto the library root, so traversal must never parse. */
+  test('rejects anything that could leave the library directory', () => {
+    expect(isBookId('..')).toBe(false);
+    expect(isBookId('../..')).toBe(false);
+    expect(isBookId('a/../..')).toBe(false);
+    expect(isBookId('books/a')).toBe(false);
+    expect(isBookId('.hidden')).toBe(false);
+    expect(isBookId('')).toBe(false);
+    expect(isBookId('-leading-dash')).toBe(false);
+    expect(isBookId('a'.repeat(65))).toBe(false);
   });
 });

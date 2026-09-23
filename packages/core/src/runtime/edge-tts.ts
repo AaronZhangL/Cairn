@@ -16,6 +16,7 @@ import type { DraftDeck, NodeDeck } from '../types';
 import {
   assembleDeck, DEFAULT_VOICE, type Narrator, parseSrt, type TtsOptions,
 } from '../pipeline/tts';
+import { CairnError } from '../errors';
 
 /**
  * Where to look for the `edge-tts` binary.
@@ -36,6 +37,17 @@ export function candidateDirs(home = homedir()): readonly string[] {
 }
 
 let resolved: string | undefined;
+
+/**
+ * Drop the memoised path.
+ *
+ * The lookup is cached because it stats a dozen directories, but "I just
+ * installed it, look again" has to be answerable without restarting the app —
+ * which is what the engine row in settings offers.
+ */
+export function forgetEdgeTts(): void {
+  resolved = undefined;
+}
 
 /** The binary to spawn, or nothing when it is not installed anywhere we look. */
 export async function findEdgeTts(): Promise<string | undefined> {
@@ -74,10 +86,7 @@ async function pyenvBinDirs(home = homedir()): Promise<readonly string[]> {
 export async function ensureEdgeTts(): Promise<string> {
   const found = await findEdgeTts();
   if (found) return found;
-  throw new Error(
-    '找不到 edge-tts，无法合成旁白。装一个（pip install edge-tts）'
-    + '，或把可执行文件路径写进 CAIRN_EDGE_TTS 环境变量。',
-  );
+  throw new CairnError('tts_missing');
 }
 
 export function edgeTtsNarrator(defaults: TtsOptions = {}): Narrator {
@@ -91,6 +100,27 @@ export function edgeTtsNarrator(defaults: TtsOptions = {}): Narrator {
     speak: (deck, audioPath, options) =>
       synthesize(deck, audioPath, { ...defaults, ...options }),
   };
+}
+
+/**
+ * Speak a few words, for auditioning a voice.
+ *
+ * No subtitles and no deck: the reader is judging how a voice sounds, and the
+ * sample is written wherever the caller can serve it from.
+ */
+export async function speakSample(
+  text: string,
+  voice: string,
+  audioPath: string,
+): Promise<void> {
+  await mkdir(dirname(audioPath), { recursive: true });
+  const child = Bun.spawn(
+    [await ensureEdgeTts(), '--voice', voice, '--write-media', audioPath, '--text', text],
+    { stdout: 'ignore', stderr: 'pipe' },
+  );
+  if (await child.exited !== 0) {
+    throw new CairnError('tts_failed', {}, (await new Response(child.stderr).text()).slice(-300));
+  }
 }
 
 export async function synthesize(
@@ -107,7 +137,7 @@ export async function synthesize(
   const cues = parseSrt(await readFile(srtPath, 'utf8'));
   await rm(srtPath, { force: true });
 
-  if (cues.length === 0) throw new Error('edge-tts 未产出字幕时间轴');
+  if (cues.length === 0) throw new CairnError('tts_no_cues');
 
   return assembleDeck(deck, cues, audioPath);
 }
@@ -128,7 +158,7 @@ async function runEdgeTts(
 
   try {
     if (await child.exited !== 0) {
-      throw new Error(`edge-tts 失败：${(await new Response(child.stderr).text()).slice(-300)}`);
+      throw new CairnError('tts_failed', {}, (await new Response(child.stderr).text()).slice(-300));
     }
   } finally {
     options.signal?.removeEventListener('abort', onAbort);

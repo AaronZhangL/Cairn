@@ -1,6 +1,8 @@
 /** Classify stage: decide the book's type. Reads the gists from map, never the text. */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
+import type { ContentLocale } from '../parse/language';
 import type { BookType, ChapterNote } from '../types';
+import { promptsFor } from './prompts';
 
 const SCHEMA = {
   type: 'object',
@@ -22,22 +24,18 @@ export async function classifyBook(
   notes: readonly ChapterNote[],
   provider: LlmProvider,
   signal?: AbortSignal,
+  locale: ContentLocale = 'zh',
 ): Promise<Classification> {
+  const prompts = promptsFor(locale);
   const digest = notes
     .slice(0, 40)
-    .map((n) => `${n.idx}. ${n.title}：${n.gist}`)
+    .map((n) => `${n.idx}. ${n.title} — ${n.gist}`)
     .join('\n');
 
   const raw = await provider.complete({
     label: 'classify',
-    system: '你在判定一本书属于知识类还是叙事类。只依据给出的章节摘要，不使用任何既有印象。只输出 JSON。',
-    prompt: `书名：${title}
-
-章节摘要：
-${digest}
-
-knowledge = 传递概念、方法、论证的书（含技术书、社科、商业、self-help）
-narrative = 以情节和人物推进的书（小说、传记、纪实）`,
+    system: prompts.classify.system,
+    prompt: prompts.classify.user(title, digest),
     schema: SCHEMA,
     signal,
   });

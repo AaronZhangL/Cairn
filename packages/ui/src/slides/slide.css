@@ -174,11 +174,15 @@
 }
 .s-bars.plain .s-bar-v { text-align: left; }
 .s-bar-track { min-width: 0; height: 1.5cqw; border-radius: 99px; background: #ffffff12; position: relative; overflow: hidden; }
+/* Grows with the narration, not on mount: an entry animation replays out of
+   step with the voice and ignores a scrub backwards. */
 .s-bar-fill {
   position: absolute; inset: 0 auto 0 0; border-radius: 99px;
   background: linear-gradient(90deg, #e0a458, #c4802f);
-  animation: bar-grow .6s cubic-bezier(.2,.7,.3,1) both;
+  transform-origin: left;
 }
+.s-bar-row.out .s-bar-fill { transform: scaleX(0); }
+.s-bar-row.in .s-bar-fill { transform: scaleX(1); }
 /* A zero is the point of quoting a zero — mark the empty track, do not hide it. */
 .s-bar-fill.zero { width: 1.5cqw !important; background: #ffffff2e; }
 /* In the bar's own grid column, not at a margin restating that column's width.
@@ -191,7 +195,93 @@
   letter-spacing: calc(.004em + var(--fit-track, 0em));
 }
 .s-bars.plain .s-bar-l { grid-column: 1; }
-@keyframes bar-grow { from { transform: scaleX(0); transform-origin: left; } }
+
+/* ---- timeline ---- */
+
+.s-tl {
+  --mark-col: 14cqw; --col-gap: 2cqw; --dot: 1.4cqw;
+  list-style: none; display: flex; flex-direction: column; gap: 2cqw;
+}
+.s-tl li {
+  display: grid;
+  grid-template-columns: var(--mark-col) var(--dot) minmax(0, 1fr);
+  gap: var(--col-gap);
+  align-items: start; position: relative;
+}
+/* The spine is the layout: marks with gaps between them are a list, not a run. */
+.s-tl li::after {
+  content: ''; position: absolute;
+  left: calc(var(--mark-col) + var(--col-gap) + var(--dot) / 2);
+  top: calc(var(--dot) + .8cqw); bottom: -2cqw;
+  width: 1px; background: #ffffff1a;
+}
+.s-tl li:last-child::after { display: none; }
+.s-tl-mark {
+  min-width: 0; text-align: right; white-space: nowrap;
+  font-size: calc(1.8cqw * var(--fit, 1)); font-weight: 800;
+  letter-spacing: calc(.02em + var(--fit-track, 0em));
+  color: var(--stage-accent); font-variant-numeric: tabular-nums;
+}
+.s-tl-dot {
+  width: var(--dot); height: var(--dot); margin-top: .5cqw; border-radius: 99px;
+  border: .3cqw solid var(--stage-accent); background: #26231d;
+}
+.s-tl-text {
+  min-width: 0;
+  font-size: calc(2cqw * var(--fit, 1)); line-height: calc(1.5 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+}
+
+/* ---- matrix ---- */
+
+.s-mx { display: flex; flex-direction: column; gap: 1.4cqw; }
+.s-mx-row {
+  display: grid; grid-template-columns: 22cqw minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2cqw; align-items: start;
+}
+.s-mx-heads { padding-bottom: .8cqw; border-bottom: 1px solid #ffffff1a; }
+.s-mx-head {
+  min-width: 0;
+  font-size: calc(2cqw * var(--fit, 1)); font-weight: 800;
+  letter-spacing: calc(-.01em + var(--fit-track, 0em)); color: var(--stage-dim);
+}
+.s-mx-head.hl { color: var(--stage-accent); }
+.s-mx-aspect {
+  min-width: 0;
+  font-size: calc(1.7cqw * var(--fit, 1)); line-height: calc(1.4 + var(--fit-lead, 0));
+  letter-spacing: calc(.004em + var(--fit-track, 0em)); color: var(--stage-dim);
+}
+.s-mx-cell {
+  min-width: 0;
+  font-size: calc(1.9cqw * var(--fit, 1)); line-height: calc(1.45 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em)); color: var(--stage-ink);
+  padding-left: 1.4cqw; border-left: 1px solid #ffffff14;
+}
+.s-mx-cell.hl { border-left-color: #e0a45866; }
+
+/* ---- relation ---- */
+
+.s-rel { list-style: none; display: flex; flex-direction: column; gap: 2.2cqw; }
+.s-rel li { display: flex; align-items: center; gap: 1.2cqw; }
+.s-rel-node {
+  flex: 1 1 0; min-width: 0; text-align: center;
+  font-size: calc(2cqw * var(--fit, 1)); font-weight: 600;
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  padding: .9cqw 1.6cqw; border: 1px solid #ffffff21; border-radius: .8cqw;
+  background: #ffffff0d;
+}
+.s-rel-node.hl { border-color: #e0a45866; background: #e0a4580f; color: var(--stage-accent); }
+.s-rel-wire { flex: 0 1 4cqw; height: 1px; background: #e0a45859; position: relative; }
+/* The claim sits on the arrow, so it cannot be read as two nouns placed near each other. */
+.s-rel-wire.arrow::after {
+  content: ''; position: absolute; right: 0; top: -.35cqw;
+  border-left: .7cqw solid #e0a45859;
+  border-top: .35cqw solid transparent; border-bottom: .35cqw solid transparent;
+}
+.s-rel-how {
+  flex: none; min-width: 0; white-space: nowrap;
+  font-size: calc(1.5cqw * var(--fit, 1)); letter-spacing: .06em; color: var(--stage-dim);
+}
 
 /* ---- quote ---- */
 
@@ -279,16 +369,23 @@
 
    Items arrive with the narration. Kept as opacity and transform only, so it
    costs one composited layer and never reflows mid-sentence. */
-.s-points li, .s-flow li, .s-pane {
-  transition: opacity .42s ease, transform .42s cubic-bezier(.2,.7,.3,1);
+.s-points li, .s-flow li, .s-pane, .s-bar-row, .s-tl li, .s-mx-row, .s-rel li {
+  transition: opacity .24s ease, transform .24s cubic-bezier(.2,.7,.3,1);
 }
-.s-points li.out, .s-flow li.out, .s-pane.out { opacity: 0; transform: translateY(1.2cqw); }
-.s-points li.in, .s-flow li.in, .s-pane.in { opacity: 1; transform: none; }
+.s-bar-fill { transition: transform .24s cubic-bezier(.2,.7,.3,1); }
+.s-points li.out, .s-flow li.out, .s-pane.out,
+.s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out {
+  opacity: 0; transform: translateY(1.2cqw);
+}
+.s-points li.in, .s-flow li.in, .s-pane.in,
+.s-bar-row.in, .s-tl li.in, .s-mx-row.in, .s-rel li.in { opacity: 1; transform: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .s-points li, .s-flow li, .s-pane, .s-dots i { transition: none; }
-  .s-points li.out, .s-flow li.out, .s-pane.out { opacity: 1; transform: none; }
-  .s-bar-fill { animation: none; }
+  .s-points li, .s-flow li, .s-pane, .s-bar-row, .s-tl li, .s-mx-row, .s-rel li,
+  .s-bar-fill, .s-dots i { transition: none; }
+  .s-points li.out, .s-flow li.out, .s-pane.out,
+  .s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out { opacity: 1; transform: none; }
+  .s-bar-row.out .s-bar-fill { transform: scaleX(1); }
 }
 
 /* ---- caption ---- */
@@ -309,7 +406,9 @@
   pointer-events: auto;
 }
 .slide-caption p {
-  font-size: 2.35cqw;
+  /* The one piece of stage type the reader's text-size choice does reach: it is
+     a band that wraps, not a layout with a length budget in fit.ts. */
+  font-size: calc(2.35cqw * var(--text-scale, 1));
   line-height: 1.5;
   font-weight: 600;
   text-align: center;

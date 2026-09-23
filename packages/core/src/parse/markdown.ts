@@ -1,5 +1,7 @@
 import { type Chapter, type ParsedBook, ParseError } from '../types';
 import { countWords, decodeBytes, normalizeText } from './text';
+import { localeFromText } from './language';
+import { promptsFor } from '../pipeline/prompts';
 
 /** H1 is the book title and H2 the chapters; with no H2, H1 becomes the chapters. */
 const H1 = /^#[ \t]+([^\n]+)$/m;
@@ -11,13 +13,17 @@ export function parseMarkdown(bytes: Uint8Array, fileName: string): ParsedBook {
   const text = normalizeText(decodeBytes(bytes));
   if (text.length === 0) throw new ParseError('文件没有可读文本', 'no_content');
 
+  // Detected before splitting: the fallback chapter title has to be in the
+  // book's own language, and splitting is what decides whether one is needed.
+  const language = localeFromText(text.slice(0, 4000));
+
   const marks = [...text.matchAll(HEADING)].filter((m) => m.index !== undefined);
   const hasH2 = marks.some((m) => m[1] === '##');
   const level = hasH2 ? '##' : '#';
   const sections = marks.filter((m) => m[1] === level);
 
   const chapters: Chapter[] =
-    sections.length > 0 ? cutSections(text, sections) : [singleChapter(text)];
+    sections.length > 0 ? cutSections(text, sections) : [singleChapter(text, promptsFor(language).parse.whole)];
 
   if (chapters.length === 0) throw new ParseError('未能切分出任何章节', 'no_content');
 
@@ -26,6 +32,7 @@ export function parseMarkdown(bytes: Uint8Array, fileName: string): ParsedBook {
     format: 'markdown',
     chapters,
     totalWords: chapters.reduce((sum, c) => sum + c.wordCount, 0),
+    language,
   };
 }
 
@@ -47,8 +54,8 @@ function cutSections(text: string, sections: readonly RegExpMatchArray[]): Chapt
   return chapters;
 }
 
-function singleChapter(text: string): Chapter {
-  return { idx: 0, title: '全文', text, wordCount: countWords(text) };
+function singleChapter(text: string, whole: string): Chapter {
+  return { idx: 0, title: whole, text, wordCount: countWords(text) };
 }
 
 function stripExtension(fileName: string): string {

@@ -2,19 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
+import { errorText, useT } from '@cairn/ui';
+import { payloadOf } from '@cairn/core/errors';
 import { generateBook, onProgress, pickBook, progressNow } from './bridge';
+import { VOICES } from './shared/settings';
 import type { BookPreview, Progress } from './shared/types';
+
+/** The voice's own name, without repeating the language beside it. */
+function voiceName(id: string): string {
+  return Object.values(VOICES).flat().find((v) => v.id === id)?.name ?? id;
+}
 
 /** Slow enough to be free, fast enough that a finished batch shows up promptly. */
 const POLL_MS = 1500;
-
-const STAGE_LABEL: Record<Progress['stage'], string> = {
-  map: '逐章压缩',
-  classify: '判定类型',
-  reduce: '设计路径',
-  decks: '生成幻灯与口播',
-  done: '完成',
-};
 
 /**
  * Adding a book, in three steps: pick a file, choose how long you want to spend,
@@ -29,6 +29,7 @@ export function AddBook({
   /** Opened from the drop zone, where picking a file was already the click. */
   autoPick?: boolean;
 }): ReactElement {
+  const t = useT();
   const [preview, setPreview] = useState<BookPreview>();
   const [progress, setProgress] = useState<Progress>();
   const [parsing, setParsing] = useState(false);
@@ -66,7 +67,7 @@ export function AddBook({
       // Cancelling the dialog is not an error; close rather than sit on a dead screen
       if (chosen) setPreview(chosen); else if (autoPick) onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(payloadOf(e), t));
     } finally {
       setParsing(false);
     }
@@ -79,7 +80,7 @@ export function AddBook({
     try {
       onDone(await generateBook(preview.filePath, budgetId));
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(payloadOf(e), t));
       setProgress(undefined);
     }
   };
@@ -91,13 +92,13 @@ export function AddBook({
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         {!preview && !running && (
           <>
-            <h2>添加一本书</h2>
+            <h2>{t.add.title}</h2>
             <p className="modal-sub">
               {/* A 14 MB EPUB takes a moment to parse, and a frozen dialog looks broken */}
-              {parsing ? '正在读这本书…' : '支持 EPUB / TXT / Markdown。书不会离开这台机器。'}
+              {parsing ? t.add.parsing : t.add.supported}
             </p>
             <button type="button" className="primary" onClick={pick} disabled={parsing}>
-              {parsing ? '读取中…' : '选择文件…'}
+              {parsing ? t.add.picking : t.add.pick}
             </button>
           </>
         )}
@@ -107,9 +108,17 @@ export function AddBook({
             <h2>{preview.title}</h2>
             <p className="modal-sub">
               {preview.author ? `${preview.author} · ` : ''}
-              {preview.chapters} 章 · {preview.words.toLocaleString()} 字
+              {t.unit.count(preview.chapters)} · {t.unit.words(preview.words)}
             </p>
-            <p className="modal-label">想花多久走完？</p>
+            {/* Before the budget, because it is the one decision that cannot be
+                changed afterwards without rebuilding the whole book. */}
+            <p className="modal-narration">
+              {t.add.narratedIn(
+                t.add.languageName[preview.narration.locale],
+                voiceName(preview.narration.voice),
+              )}
+            </p>
+            <p className="modal-label">{t.add.howLong}</p>
             <div className="budget-list">
               {preview.budgets.map((b) => (
                 <button
@@ -119,32 +128,37 @@ export function AddBook({
                   onClick={() => void run(b.id)}
                 >
                   <span className="budget-label">
-                    {b.label}
-                    {b.recommended && <em>推荐</em>}
+                    {t.add.budgetLabel(
+                      t.unit.duration(b.minutes),
+                      t.settings.narration.budgets[b.id],
+                    )}
+                    {b.recommended && <em>{t.add.recommended}</em>}
                   </span>
                   {/* A budget that would distort this book is offered, but labelled */}
-                  {!b.honest && b.note && <span className="budget-note">⚠ {b.note}</span>}
+                  {!b.honest && b.wordsPerNode !== undefined && (
+                    <span className="budget-note">⚠ {t.add.budgetWarning(b.wordsPerNode)}</span>
+                  )}
                 </button>
               ))}
             </div>
             <button type="button" className="ghost" onClick={() => setPreview(undefined)}>
-              换一本
+              {t.add.another}
             </button>
           </>
         )}
 
         {running && progress && (
           <>
-            <h2>{preview?.title ?? '生成中'}</h2>
+            <h2>{preview?.title ?? t.add.generating}</h2>
             <p className="modal-sub">
-              {STAGE_LABEL[progress.stage]}
+              {t.add.stages[progress.stage]}
               {progress.total > 1 && ` · ${progress.done}/${progress.total}`}
             </p>
             <div className="prog">
               <i style={{ width: `${pct(progress)}%` }} />
             </div>
             <p className="modal-hint">
-              整本书只读一遍，中断后可以从断点继续。几十章的书通常要几分钟。
+              {t.add.note}
             </p>
           </>
         )}

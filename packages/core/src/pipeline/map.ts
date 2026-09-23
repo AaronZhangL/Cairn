@@ -4,8 +4,12 @@
  * ChapterNotes produced here and never the book again.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
-import type { Chapter, ChapterNote } from '../types';
+import type { ContentLocale } from '../parse/language';
+import type {
+  Chapter, ChapterContrast, ChapterFigure, ChapterNote, ChapterRelation, ChapterSequence,
+} from '../types';
 import { type JobOptions, type JobStore, runJob, type JobResult } from './job';
+import { promptsFor, type Prompts } from './prompts';
 
 /**
  * How many chapters go into one call.
@@ -15,14 +19,16 @@ import { type JobOptions, type JobStore, runJob, type JobResult } from './job';
  */
 export const DEFAULT_BATCH_SIZE = 4;
 
-const SYSTEM = `你在为一本书生成逐章摘要，供后续生成学习路径使用。
 
-铁律：
-1. 只依据我给你的正文作答。不得使用你对这本书的任何既有印象。
-2. 正文里没有的内容，一个字也不要补。
-3. quotes 必须是正文中逐字出现的原句，不得改写。
-4. 每章独立作答，不要跨章推断。
-5. 只输出 JSON。`;
+const listOf = (keys: readonly string[]): Record<string, unknown> => ({
+  type: 'array',
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: [...keys],
+    properties: Object.fromEntries(keys.map((k) => [k, { type: 'string' }])),
+  },
+});
 
 const SCHEMA = {
   type: 'object',
@@ -34,12 +40,22 @@ const SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['idx', 'gist', 'keyPoints', 'quotes'],
+        required: ['idx', 'gist', 'keyPoints', 'quotes', 'figures', 'contrasts', 'sequences', 'relations'],
         properties: {
           idx: { type: 'integer' },
           gist: { type: 'string' },
           keyPoints: { type: 'array', items: { type: 'string' } },
           quotes: { type: 'array', items: { type: 'string' } },
+          figures: listOf(['value', 'label']),
+          contrasts: listOf(['about', 'left', 'right']),
+          sequences: {
+            type: 'array',
+            items: {
+              type: 'object', additionalProperties: false, required: ['title', 'steps'],
+              properties: { title: { type: 'string' }, steps: listOf(['mark', 'text']) },
+            },
+          },
+          relations: listOf(['from', 'how', 'to']),
         },
       },
     },
@@ -49,6 +65,8 @@ const SCHEMA = {
 export interface MapOptions extends Omit<JobOptions, 'concurrency'> {
   readonly batchSize?: number;
   readonly concurrency?: number;
+  /** The book's own language, which decides what language the notes come back in. */
+  readonly locale?: ContentLocale;
 }
 
 export interface MapOutcome {
@@ -62,12 +80,13 @@ export async function mapChapters(
   store: JobStore<readonly ChapterNote[]>,
   options: MapOptions = {},
 ): Promise<MapOutcome> {
+  const prompts = promptsFor(options.locale ?? 'zh');
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE);
   const batches = groupIntoBatches(chapters, batchSize);
 
   const job = await runJob(
     batches,
-    async (batch) => summarizeBatch(batch, provider, options.signal),
+    async (batch) => summarizeBatch(batch, prompts, provider, options.signal),
     store,
     { ...options, concurrency: options.concurrency ?? provider.suggestedConcurrency },
   );
@@ -96,6 +115,7 @@ function groupIntoBatches(
 
 async function summarizeBatch(
   batch: readonly Chapter[],
+  prompts: Prompts,
   provider: LlmProvider,
   signal?: AbortSignal,
 ): Promise<readonly ChapterNote[]> {
@@ -103,9 +123,9 @@ async function summarizeBatch(
   const last = batch[batch.length - 1]!;
 
   const raw = await provider.complete({
-    system: SYSTEM,
+    system: prompts.map.system,
     label: `map:${first.idx}-${last.idx}`,
-    prompt: buildPrompt(batch),
+    prompt: prompts.map.user(batch),
     schema: SCHEMA,
     signal,
   });
@@ -122,6 +142,10 @@ interface RawNote {
   gist?: string;
   keyPoints?: unknown;
   quotes?: unknown;
+  figures?: unknown;
+  contrasts?: unknown;
+  sequences?: unknown;
+  relations?: unknown;
 }
 
 function toNote(chapter: Chapter, raw: RawNote | undefined): ChapterNote {
@@ -131,6 +155,10 @@ function toNote(chapter: Chapter, raw: RawNote | undefined): ChapterNote {
     gist: typeof raw?.gist === 'string' ? raw.gist.trim() : '',
     keyPoints: toStringArray(raw?.keyPoints),
     quotes: toStringArray(raw?.quotes),
+    figures: records<ChapterFigure>(raw?.figures, ['value', 'label']),
+    contrasts: records<ChapterContrast>(raw?.contrasts, ['about', 'left', 'right']),
+    sequences: toSequences(raw?.sequences),
+    relations: records<ChapterRelation>(raw?.relations, ['from', 'how', 'to']),
   };
 }
 
@@ -142,14 +170,36 @@ function toStringArray(value: unknown): readonly string[] {
     .filter((v) => v.length > 0);
 }
 
-function buildPrompt(batch: readonly Chapter[]): string {
-  const body = batch
-    .map((c) => `<章 idx="${c.idx}" 标题="${c.title}">\n${c.text}\n</章>`)
-    .join('\n\n');
+const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
 
-  return `以下是 ${batch.length} 章正文。为每一章产出 gist（1-2 句）、keyPoints（2-4 条）、quotes（1-3 句原文摘句）。
-
-idx 必须原样回填，不得改动。
-
-${body}`;
+/** Every key must be present and non-empty: a half-filled figure is not a figure. */
+function records<T>(value: unknown, keys: readonly string[]): readonly T[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const row = item as Record<string, unknown>;
+    const filled = keys.map((k) => [k, text(row[k])] as const);
+    return filled.every(([, v]) => v.length > 0)
+      ? [Object.fromEntries(filled) as T]
+      : [];
+  });
 }
+
+/** `mark` alone may be empty: not every sequence in a book is dated. */
+function toSequences(value: unknown): readonly ChapterSequence[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const row = item as Record<string, unknown>;
+    const title = text(row.title);
+    const raw = Array.isArray(row.steps) ? row.steps : [];
+    const steps = raw.flatMap((step) => {
+      if (typeof step !== 'object' || step === null) return [];
+      const s = step as Record<string, unknown>;
+      const body = text(s.text);
+      return body ? [{ mark: text(s.mark), text: body }] : [];
+    });
+    return title && steps.length > 1 ? [{ title, steps }] : [];
+  });
+}
+

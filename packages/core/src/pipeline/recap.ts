@@ -16,12 +16,13 @@ import type { DraftDeck, PathNode, Stage } from '../types';
 import type { LlmProvider } from '../llm/types';
 import { clampNodeMinutes, type ReadingBudget, totalMinutes } from './budget';
 import type { ReduceResult } from './reduce';
-import { composeDeck, MAX_SLIDES, MIN_SLIDES } from './slides';
-import { targetChars } from './tts';
+import type { ContentLocale } from '../parse/language';
+import { promptsFor } from './prompts';
+import { composeDeck, slideCount } from './slides';
+
 
 export const RECAP_NODE_ID = 'recap';
-const RECAP_STAGE_TITLE = '合上书';
-const RECAP_TITLE = '回望这条路';
+
 
 /** Enough stations to be worth a recap. Below this the reader still has them all in mind. */
 const MIN_STATIONS = 3;
@@ -40,16 +41,17 @@ function recapMinutes(stationCount: number, budget: ReadingBudget): number {
  * The overrun it causes is one station's worth and is reported honestly in
  * `totalMinutes`.
  */
-export function withRecap(reduced: ReduceResult): ReduceResult {
+export function withRecap(reduced: ReduceResult, locale: ContentLocale = 'zh'): ReduceResult {
+  const prompts = promptsFor(locale);
   if (reduced.nodes.length < MIN_STATIONS) return reduced;
 
   const chapters = [...new Set(reduced.nodes.flatMap((n) => n.sourceChapters))].sort((a, b) => a - b);
   const recap: PathNode = {
     id: RECAP_NODE_ID,
     idx: reduced.nodes.length,
-    title: RECAP_TITLE,
+    title: prompts.recap.title,
     kind: 'recap',
-    brief: '把走过的每一站接回一条线，说清这本书最终主张什么。',
+    brief: prompts.recap.brief,
     keyPoints: reduced.nodes.map((n) => n.title),
     sourceChapters: chapters,
     estMinutes: recapMinutes(reduced.nodes.length, reduced.budget),
@@ -58,7 +60,7 @@ export function withRecap(reduced: ReduceResult): ReduceResult {
   const nodes = [...reduced.nodes, recap];
   // Its own stage, and the only one-station stage there is: it belongs to no
   // phase of the walk, it is what happens after the walk.
-  const stages: readonly Stage[] = [...reduced.stages, { title: RECAP_STAGE_TITLE, nodeIds: [recap.id] }];
+  const stages: readonly Stage[] = [...reduced.stages, { title: prompts.recap.stageTitle, nodeIds: [recap.id] }];
 
   return { ...reduced, nodes, stages, totalMinutes: totalMinutes(nodes) };
 }
@@ -67,27 +69,6 @@ export function isRecap(node: PathNode): boolean {
   return node.kind === 'recap';
 }
 
-const SYSTEM = `你在为一次读书路径做最后一站：回望。
-
-读者刚刚一站一站走完了这本书。这一站不引入任何新内容，只做三件事：
-1. 把走过的站重新接成一条线——它们之间是什么关系，为什么是这个顺序。
-2. 说清整本书最终主张什么，用一句话就能带走的那种。
-3. 收尾。读者到这里是走完了，要让他知道自己走完了。
-
-幻灯版式：
-- title   开场，只有标题和一句副标
-- points  不超过 3 条核心论断
-- flow    把站点串成推导链或步骤，不超过 5 步
-- compare A 与 B 的对照
-
-铁律：
-1. 只依据我给出的站点清单。不得引入任何清单之外的内容，也不得使用你对这本书的既有印象。
-2. 不要逐站复述。复述一遍等于让读者再走一次，这一站的价值在于**收束**。
-3. 不要用「第 3 站讲了……」这种说法，读者记的是内容不是编号。
-4. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
-   **总字数必须接近给定目标**——字数决定音频时长。
-5. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
-6. 只输出 JSON。`;
 
 export async function makeRecapDeck(
   node: PathNode,
@@ -95,14 +76,32 @@ export async function makeRecapDeck(
   bookTitle: string,
   provider: LlmProvider,
   signal?: AbortSignal,
+  locale: ContentLocale = 'zh',
 ): Promise<DraftDeck> {
+  const prompts = promptsFor(locale);
+  const count = slideCount(node.estMinutes);
+  const walked = stations
+    .map((s, i) => {
+      const points = s.keyPoints.slice(0, 3).map((k) => `  - ${k}`).join('\n');
+      return `${i + 1}. ${s.title}\n  ${s.brief}${points ? `\n${points}` : ''}`;
+    })
+    .join('\n\n');
+
   return dropQuotes(await composeDeck(
     {
       nodeId: node.id,
-      label: '回望这一站',
+      label: prompts.recap.title,
       traceLabel: `slides:${node.id}`,
-      system: SYSTEM,
-      prompt: buildPrompt(node, stations, bookTitle),
+      system: prompts.recap.system,
+      prompt: prompts.recap.user({
+        bookTitle,
+        recapTitle: prompts.recap.title,
+        walked,
+        stationCount: stations.length,
+        minutes: node.estMinutes,
+        slides: count,
+      }),
+      maxSlides: slideCount(node.estMinutes).max,
       // No notes: this station quotes nothing, because it has no excerpts to
       // quote. `dropQuotes` below enforces that rather than trusting the prompt.
     },
@@ -124,21 +123,3 @@ function dropQuotes(deck: DraftDeck): DraftDeck {
   return slides.length === deck.slides.length ? deck : { ...deck, slides };
 }
 
-function buildPrompt(node: PathNode, stations: readonly PathNode[], bookTitle: string): string {
-  const walked = stations
-    .map((s, i) => {
-      const points = s.keyPoints.slice(0, 3).map((k) => `  - ${k}`).join('\n');
-      return `${i + 1}. ${s.title}\n  ${s.brief}${points ? `\n${points}` : ''}`;
-    })
-    .join('\n\n');
-
-  return `这本书：${bookTitle}
-
-读者刚刚按顺序走完了下面这 ${stations.length} 站：
-
-${walked}
-
-请做最后一站「${RECAP_TITLE}」。
-时长约 ${node.estMinutes} 分钟，做 ${MIN_SLIDES}-${MAX_SLIDES} 张幻灯。
-口播稿总字数目标 ${targetChars(node.estMinutes)} 字（允许 ±15%），这决定音频时长，请认真控制。`;
-}

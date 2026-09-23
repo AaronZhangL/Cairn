@@ -8,15 +8,35 @@
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import { type FitField, overBudget } from '../fit';
+import type { ContentLocale } from '../parse/language';
+import { type NoteMaterial, promptsFor } from './prompts';
 import { ICON_NAMES, toIconName } from '../icons';
 import type {
-  ChapterNote, ComparePane, DraftDeck, DraftSlide, PathNode, QuoteSource, Slide,
+  ChapterNote, ComparePane, DraftDeck, DraftSlide, MatrixRow, PathNode, QuoteSource,
+  RelationLink, Slide, TimelineItem,
 } from '../types';
-import { targetChars } from './tts';
 
-/** A station is 2–6 minutes of narration; more than six slides turns into a flicker. */
-const MAX_SLIDES = 6;
-const MIN_SLIDES = 3;
+import { CairnError } from '../errors';
+
+/**
+ * One slide per this much narration. A fixed cap of six left a four-minute
+ * station showing one card for fifty seconds, which reads as a stall.
+ */
+const SECONDS_PER_SLIDE = 22;
+const FEWEST = 4;
+/** Past this the deck flickers, and the model stops distributing atSentence well. */
+const MOST = 14;
+
+export interface SlideCount {
+  readonly min: number;
+  readonly max: number;
+}
+
+export function slideCount(estMinutes: number): SlideCount {
+  const target = Math.round((Math.max(0, estMinutes) * 60) / SECONDS_PER_SLIDE);
+  const max = Math.min(MOST, Math.max(FEWEST + 2, target + 3));
+  return { min: Math.min(max - 1, Math.max(FEWEST, target - 2)), max };
+}
 
 /**
  * OpenAI structured output requires `required` to list every key in `properties`,
@@ -33,6 +53,14 @@ const pane = {
   type: 'object', additionalProperties: false, required: ['title', 'points', 'icon'],
   properties: { title: str, points: strList, icon: nullableIcon },
 } as const;
+
+const rowsOf = (keys: readonly string[]): Record<string, unknown> => ({
+  type: 'array',
+  items: {
+    type: 'object', additionalProperties: false, required: [...keys],
+    properties: Object.fromEntries(keys.map((k) => [k, str])),
+  },
+});
 
 const variant = (
   layout: string,
@@ -66,6 +94,11 @@ const SLIDE_SCHEMA = {
     variant('quote', { text: str, cite: nullableStr }),
     variant('compare', { left: pane, right: pane, heading: nullableStr }),
     variant('flow', { steps: strList, heading: nullableStr }),
+    variant('timeline', { items: rowsOf(['mark', 'text']), heading: nullableStr }),
+    variant('matrix', {
+      left: str, right: str, rows: rowsOf(['aspect', 'left', 'right']), heading: nullableStr,
+    }),
+    variant('relation', { links: rowsOf(['from', 'how', 'to']), heading: nullableStr }),
   ],
 } as const;
 
@@ -79,47 +112,34 @@ const SCHEMA = {
   },
 } as const;
 
-const SYSTEM = `你在把一站学习内容做成一组幻灯 + 一段口播。
-
-幻灯版式：
-- title   开场，只有标题和一句副标
-- points  不超过 3 条核心论断
-- number  实验数据或关键比例对比，2-3 组数字
-- quote   原文金句
-- compare A 与 B 的对照
-- flow    推导链或步骤，不超过 5 步
-
-铁律：
-1. 只依据我给出的章节摘要。不得使用你对这本书或这个主题的既有知识。
-2. quote 的 text 必须原样取自我给出的摘句，一个字都不能改。
-3. number 的数字必须来自摘要里真实出现的数据。摘要里没有数字，就不要用这个版式。
-4. 幻灯上写要点，不写完整句子。完整的话留给口播。
-   每个字段的字数上限（中文按字算，英文按词长的一半算）：
-   标题 20，副标 30，小标题 24，points 每条 28，
-   number 的数值 6、标签 14，flow 每步 16，compare 每栏标题 10、每条 20，
-   引文 100。**超出的幻灯会被整张丢弃**，写不下就换个说法，不要硬塞。
-5. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
-   **总字数必须接近给定目标**——字数决定音频时长，写短了这一站就不到该有的长度。
-6. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
-7. icon 只出现在 title 和 compare 的两栏上，用来给这一站一个能认出来的标记。
-   只能从给定的名字里挑，挑不到贴切的就填 null。
-   **宁可不给也不要硬给**：抽象概念（复利、身份认同、锚定）没有对应的图形，
-   硬套一个只会变成毫无意义的装饰。挑的是内容里真实出现的具体事物。
-8. 只输出 JSON。`;
 
 export async function makeDeck(
   node: PathNode,
   notes: readonly ChapterNote[],
   provider: LlmProvider,
   signal?: AbortSignal,
+  locale: ContentLocale = 'zh',
 ): Promise<DraftDeck> {
+  const prompts = promptsFor(locale);
+  const count = slideCount(node.estMinutes);
+
   return composeDeck(
     {
       nodeId: node.id,
-      label: `第 ${node.idx + 1} 站`,
+      label: `${node.idx + 1}`,
       traceLabel: `slides:${node.id}`,
-      system: SYSTEM,
-      prompt: buildPrompt(node, notes),
+      system: prompts.slides.system,
+      prompt: prompts.slides.user({
+        title: node.title,
+        brief: node.brief,
+        keyPoints: node.keyPoints,
+        minutes: node.estMinutes,
+        slides: count,
+        secondsPerSlide: SECONDS_PER_SLIDE,
+        iconNames: ICON_NAMES,
+        material: notes.map((n) => prompts.slides.noteBlock(materialOf(n))).join('\n\n'),
+      }),
+      maxSlides: slideCount(node.estMinutes).max,
       notes,
     },
     provider,
@@ -135,6 +155,8 @@ export interface DeckRequest {
   readonly traceLabel: string;
   readonly system: string;
   readonly prompt: string;
+  /** Derived from the station's length by `slideCount`; the prompt states it too. */
+  readonly maxSlides: number;
   /** Excerpts a quote slide may be traced back to. The recap station has none. */
   readonly notes?: readonly ChapterNote[];
 }
@@ -145,6 +167,23 @@ export interface DeckRequest {
  * the path rather than from the book (see ./recap.ts) but must produce exactly
  * the same kind of deck.
  */
+/** A note's material as data, so each locale renders its own section headings. */
+function materialOf(n: ChapterNote): NoteMaterial {
+  return {
+    idx: n.idx,
+    title: n.title,
+    gist: n.gist,
+    keyPoints: n.keyPoints,
+    quotes: n.quotes,
+    figures: (n.figures ?? []).map((f) => `${f.value} — ${f.label}`),
+    contrasts: (n.contrasts ?? []).map((c) => `${c.about}: ${c.left} / ${c.right}`),
+    sequences: (n.sequences ?? []).map(
+      (q) => `${q.title}: ${q.steps.map((t) => `${t.mark ? `${t.mark} ` : ''}${t.text}`).join(' → ')}`,
+    ),
+    relations: (n.relations ?? []).map((r) => `${r.from} ${r.how} ${r.to}`),
+  };
+}
+
 export async function composeDeck(
   request: DeckRequest,
   provider: LlmProvider,
@@ -161,11 +200,12 @@ export async function composeDeck(
   const parsed = parseJsonOutput<{ sentences?: unknown; slides?: unknown }>(raw);
   const sentences = strs(parsed.sentences);
   if (sentences.length === 0) {
-    throw new Error(`${request.label}没有产出口播稿`);
+    throw new CairnError('no_narration', { label: request.label });
   }
 
   const notes = request.notes ?? [];
-  const slides = normalize(parsed.slides, sentences.length).map((draft) => attachSource(draft, notes));
+  const slides = normalize(parsed.slides, sentences.length, request.maxSlides)
+    .map((draft) => attachSource(draft, notes));
   return { nodeId: request.nodeId, sentences, slides };
 }
 
@@ -225,36 +265,21 @@ export function locateQuote(
   return best?.source;
 }
 
-export { MAX_SLIDES, MIN_SLIDES };
 
-function buildPrompt(node: PathNode, notes: readonly ChapterNote[]): string {
-  const material = notes
-    .map((n) => {
-      const points = n.keyPoints.map((k) => `  - ${k}`).join('\n');
-      const quotes = n.quotes.map((q) => `  「${q}」`).join('\n');
-      return `[${n.idx}] ${n.title}\n  ${n.gist}\n${points}${quotes ? `\n${quotes}` : ''}`;
-    })
-    .join('\n\n');
 
-  return `这一站：${node.title}
-要讲明白：${node.brief}
-${node.keyPoints.length > 0 ? `要点：\n${node.keyPoints.map((k) => `- ${k}`).join('\n')}\n` : ''}
-时长约 ${node.estMinutes} 分钟，做 ${MIN_SLIDES}-${MAX_SLIDES} 张幻灯。
-可用的 icon 名字（没有贴切的就填 null）：${ICON_NAMES.join(' ')}
-口播稿总字数目标 ${targetChars(node.estMinutes)} 字（允许 ±15%），这决定音频时长，请认真控制。
 
-可用材料（来自这一站溯源的章节）：
 
-${material}`;
-}
-
-function normalize(raw: unknown, sentenceCount: number): readonly DraftSlide[] {
+function normalize(
+  raw: unknown,
+  sentenceCount: number,
+  maxSlides: number,
+): readonly DraftSlide[] {
   if (!Array.isArray(raw)) return [];
 
   const slides = raw
     .map((item) => toDraftSlide(item as Record<string, unknown>, sentenceCount))
     .filter((s): s is DraftSlide => s !== undefined)
-    .slice(0, MAX_SLIDES);
+    .slice(0, maxSlides);
 
   // A deck whose slides all sit on sentence 0 would show one slide for the whole station
   return [...slides].sort((a, b) => a.atSentence - b.atSentence);
@@ -268,18 +293,9 @@ function toDraftSlide(item: Record<string, unknown>, sentenceCount: number): Dra
 }
 
 /**
- * Drops any slide whose required fields for its layout are missing, or whose
- * text is past any size the stage can render it at.
- *
- * Length is checked here as well as in the renderer because the two failures
- * are different. `fit.ts` steps the type down for a string that is merely long,
- * which covers everything a model writes when it overshoots. Past the last rung
- * there is no size left, and a slide rendered anyway would overflow its box —
- * so it is dropped, the same way a slide missing a required field is. Dropping
- * one slide costs a beat of the deck; a broken one costs the station.
- *
- * A required field over budget drops the slide. An optional one is omitted
- * instead: losing a kicker is not worth losing the card it sits on.
+ * Drops a slide whose required fields are missing, or whose text is past the
+ * last rung of the fit ladder — no size renders it without overflow. An
+ * optional field over budget is omitted instead of costing the whole slide.
  */
 function toSlide(item: Record<string, unknown>): Slide | undefined {
   switch (item.layout) {
@@ -334,6 +350,30 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
         ? { layout: 'flow', steps, ...opt('heading', item, 'heading') }
         : undefined;
     }
+    case 'timeline': {
+      const items = rows<TimelineItem>(item.items, ['mark', 'text'], 6);
+      if (items.length < 2) return undefined;
+      if (anyOverBudget(items.map((i) => i.mark), 'timelineMark')) return undefined;
+      if (anyOverBudget(items.map((i) => i.text), 'timelineText')) return undefined;
+      return { layout: 'timeline', items, ...opt('heading', item, 'heading') };
+    }
+    case 'matrix': {
+      const left = fitted(item.left, 'matrixHead');
+      const right = fitted(item.right, 'matrixHead');
+      const matrixRows = rows<MatrixRow>(item.rows, ['aspect', 'left', 'right'], 4);
+      if (!left || !right || matrixRows.length < 2) return undefined;
+      if (anyOverBudget(matrixRows.map((r) => r.aspect), 'matrixAspect')) return undefined;
+      const cells = matrixRows.flatMap((r) => [r.left, r.right]);
+      if (anyOverBudget(cells, 'matrixCell')) return undefined;
+      return { layout: 'matrix', left, right, rows: matrixRows, ...opt('heading', item, 'heading') };
+    }
+    case 'relation': {
+      const links = rows<RelationLink>(item.links, ['from', 'how', 'to'], 4);
+      if (links.length < 2) return undefined;
+      if (anyOverBudget(links.flatMap((l) => [l.from, l.to]), 'relationNode')) return undefined;
+      if (anyOverBudget(links.map((l) => l.how), 'relationHow')) return undefined;
+      return { layout: 'relation', links, ...opt('heading', item, 'heading') };
+    }
     default:
       return undefined;
   }
@@ -349,6 +389,19 @@ function toPane(value: unknown): ComparePane | undefined {
   // back to, and a wrong pictogram mislabels the pane it sits on.
   const icon = toIconName(p.icon);
   return { title, points, ...(icon ? { icon } : {}) };
+}
+
+/** A row is kept only if every one of its cells is filled: a half-row states half a fact. */
+function rows<T>(value: unknown, keys: readonly string[], limit: number): readonly T[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .flatMap((entry) => {
+      if (typeof entry !== 'object' || entry === null) return [];
+      const row = entry as Record<string, unknown>;
+      const filled = keys.map((k) => [k, asText(row[k])] as const);
+      return filled.every(([, v]) => v.length > 0) ? [Object.fromEntries(filled) as T] : [];
+    })
+    .slice(0, limit);
 }
 
 const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');

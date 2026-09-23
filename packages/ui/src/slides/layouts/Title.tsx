@@ -5,12 +5,7 @@ import { Icon } from '../Icon';
 
 type Props = Extract<Slide, { layout: 'title' }> & { readonly stationNo?: number };
 
-/**
- * The station's opening card. It does one job the other layouts cannot: make
- * this station recognisable when the reader scrolls back to it later. The
- * oversized station number and the pictogram are both for that — a wall of
- * identically-styled title cards is unnavigable.
- */
+/** The station's opening card: named, numbered, and recognisable on the way back. */
 export function Title({ kicker, title, subtitle, icon, stationNo }: Props): ReactElement {
   return (
     <>

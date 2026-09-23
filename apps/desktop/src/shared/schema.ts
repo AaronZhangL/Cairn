@@ -3,6 +3,7 @@ import type { Answer } from '@cairn/core/pipeline/ask';
 import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
+import type { ContentLocale, ModelStatus, ShellSettingsValues, UiLocale } from './settings';
 import type { BookPreview, DeckStatus, Progress } from './types';
 
 /**
@@ -29,6 +30,32 @@ export type BunSchema = RPCSchema<{
     focusStation: { params: { bookId: string; nodeId: string }; response: null };
     /** Pick a half-built book back up when it is opened. */
     resumeBook: { params: { bookId: string }; response: boolean };
+    /** Remove a book, its decks, its audio and its cache. Irreversible. */
+    deleteBook: { params: { bookId: string }; response: boolean };
+
+    /* ---- settings the main process owns; the renderer's own live in localStorage ---- */
+    getSettings: { params: void; response: ShellSettingsValues };
+    setSettings: { params: Partial<ShellSettingsValues>; response: ShellSettingsValues };
+    /** The library path, for showing and for revealing in Finder. */
+    dataDir: { params: void; response: string };
+    /** `recheck` drops the memoised edge-tts lookup before answering. */
+    engineStatus: {
+      params: { recheck?: boolean };
+      response: { found: boolean; path?: string };
+    };
+    /** Writes a sample under the library root and returns its relative path. */
+    previewVoice: { params: { locale: ContentLocale }; response: string };
+    revealDataDir: { params: void; response: null };
+    /** Throws away everything derived from the books, keeping the books. */
+    clearCache: { params: void; response: null };
+    /**
+     * The menu bar is drawn by the OS, so its words cannot come from the
+     * renderer's dictionary. The webview tells the main process which language
+     * it is in and the menu is rebuilt in place.
+     */
+    setMenuLocale: { params: { locale: UiLocale }; response: null };
+    /** Which model route the current settings resolve to, and whether it can run. */
+    modelStatus: { params: void; response: ModelStatus };
   };
 }>;
 

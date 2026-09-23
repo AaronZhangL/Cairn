@@ -23,7 +23,8 @@ async function viewUrl(): Promise<string> {
   }
 }
 
-// Without an application menu macOS has nowhere to route ⌘C / ⌘V / ⌘A
+// Without an application menu macOS has nowhere to route ⌘C / ⌘V / ⌘A. The
+// language is the default until the webview reports the reader's choice.
 installMenu();
 
 const rpc = BrowserView.defineRPC<CairnRPC>({ handlers: { requests: handlers, messages: {} } });

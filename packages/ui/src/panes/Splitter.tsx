@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import type { Split } from './useSplit';
+import { useT } from '../settings/SettingsProvider';
 
 /**
  * The line between two panes: drag to resize, double-click to fold.
@@ -14,6 +15,7 @@ export function Splitter({
   split: Split;
   label: string;
 }): ReactElement {
+  const t = useT();
   const { state, dragging, onGrab, toggleCollapsed } = split;
 
   return (
@@ -24,7 +26,7 @@ export function Splitter({
       role="separator"
       aria-orientation="vertical"
       aria-label={label}
-      title={`拖动调整宽度，双击${state.collapsed ? '展开' : '收起'}`}
+      title={t.panel.splitterDrag(state.collapsed)}
     />
   );
 }

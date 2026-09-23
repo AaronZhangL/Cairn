@@ -4,15 +4,9 @@ import { GAUNTLET } from './__fixtures__/gauntlet';
 import './gauntlet.css';
 
 /**
- * The layout gauntlet: every slide in `__fixtures__/gauntlet.ts`, rendered.
- *
- * Deliberately not a test. Overflow is a property of real layout and nothing in
- * the test setup lays anything out, so this is checked by eye — resize the
- * window and look for text leaving its box, text under a graphic, or a slide
- * taller than its frame.
- *
- * Reached at `?gauntlet` in `bun run dev`, which needs neither codex nor
- * edge-tts.
+ * Every layout at its worst, rendered. Reached at `?gauntlet` in `bun run dev`.
+ * Deliberately not a test: overflow is a property of real layout, and nothing in
+ * the test setup lays anything out.
  */
 export function Gauntlet(): ReactElement {
   return (

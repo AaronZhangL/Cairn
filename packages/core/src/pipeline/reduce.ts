@@ -6,11 +6,14 @@
  * summarizing is not.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
+import type { ContentLocale } from '../parse/language';
 import type { BookType, ChapterNote, NodeKind, PathNode, Stage } from '../types';
+import { promptsFor, type Prompts } from './prompts';
 import {
   budgetsFor, clampNodeMinutes, DEFAULT_BUDGET_ID, exceedsBudget,
   type ReadingBudget, suggestNodeCount, totalMinutes,
 } from './budget';
+import { CairnError } from '../errors';
 
 const KINDS: readonly NodeKind[] = ['concept', 'argument', 'event', 'character'];
 
@@ -69,7 +72,10 @@ export interface ReduceResult {
 export interface ReduceOptions {
   readonly budget?: ReadingBudget;
   readonly signal?: AbortSignal;
+  /** The book's own language; the path's titles and briefs come back in it. */
+  readonly locale?: ContentLocale;
 }
+
 
 export async function reduceToPath(
   notes: readonly ChapterNote[],
@@ -78,6 +84,7 @@ export async function reduceToPath(
   provider: LlmProvider,
   options: ReduceOptions = {},
 ): Promise<ReduceResult> {
+  const prompts = promptsFor(options.locale ?? 'zh');
   const budget = options.budget
     ?? budgetsFor({ totalWords, chapterCount: notes.length })[DEFAULT_BUDGET_ID];
   const valid = new Set(notes.map((n) => n.idx));
@@ -86,15 +93,25 @@ export async function reduceToPath(
 
   for (let retry = 0; retry <= 1; retry += 1) {
     const raw = await provider.complete({
-      system: systemPrompt(type, budget),
+      system: prompts.reduce.system(type, prompts.reduce.coverage[budget.id]),
       label: retry === 0 ? 'reduce' : `reduce.retry${retry}`,
-      prompt: buildPrompt(notes, target, budget, retry > 0),
+      prompt: prompts.reduce.user({
+        digest: digestOf(notes),
+        chapterCount: notes.length,
+        budgetLabel: prompts.reduce.budgetLabel(budget.targetMinutes, budget.id),
+        minMinutes: budget.minMinutes,
+        maxMinutes: budget.maxMinutes,
+        targetNodes: target,
+        minutesPerNode: budget.minutesPerNode,
+        stageCount: stageCount(target),
+        tightening: retry > 0,
+      }),
       schema: SCHEMA,
       signal: options.signal,
     });
 
     const parsed = parseJsonOutput<{ stages?: RawStage[] }>(raw);
-    const { nodes, stages, rejected } = normalize(parsed.stages ?? [], valid, budget);
+    const { nodes, stages, rejected } = normalize(parsed.stages ?? [], valid, budget, prompts);
     dropped += rejected;
 
     if (nodes.length === 0) continue;
@@ -105,7 +122,7 @@ export async function reduceToPath(
     target = Math.max(3, Math.round(target * (budget.maxMinutes / totalMinutes(nodes))));
   }
 
-  throw new Error('reduce 未能产出任何有效节点');
+  throw new CairnError('reduce_empty');
 }
 
 interface RawStage {
@@ -131,6 +148,7 @@ function normalize(
   raw: readonly RawStage[],
   validChapters: ReadonlySet<number>,
   budget: ReadingBudget,
+  prompts: Prompts,
 ): { nodes: readonly PathNode[]; stages: readonly Stage[]; rejected: number } {
   const nodes: PathNode[] = [];
   const stages: Stage[] = [];
@@ -165,71 +183,29 @@ function normalize(
 
     // A stage whose stations were all rejected would render as an empty group
     if (nodeIds.length > 0) {
-      stages.push({ title: stageTitle.length > 0 ? stageTitle : `第 ${stages.length + 1} 阶段`, nodeIds });
+      const fallback = prompts.reduce.fallbackStage(stages.length + 1);
+      stages.push({ title: stageTitle.length > 0 ? stageTitle : fallback, nodeIds });
     }
   }
 
   return { nodes, stages, rejected };
 }
 
-function systemPrompt(type: BookType, budget: ReadingBudget): string {
-  const shape = type === 'narrative'
-    ? '这是一本叙事类的书。站点应沿故事推进：关键事件、转折、人物关系的变化。'
-    : '这是一本知识类的书。站点应沿理解推进：先建立概念，再展开论证，最后落到应用。';
 
-  return `你在为一本书设计学习路径。
 
-${shape}
-
-取舍尺度：${budget.coverage}
-
-铁律：
-1. 只依据我给出的章节摘要。不得使用你对这本书的任何既有印象。
-2. sourceChapters 必须来自我给出的章号，不得编造。
-3. 站点要有顺序感：后一站建立在前一站之上，不是摘要的平铺。
-4. 不是每章一站。该合并的合并，该跳过的跳过。
-5. 阶段名描述**读者此刻在做什么**（如「建立模型」「展开论证」「落到实践」），
-   不要复述书的目录。路径已经重排过顺序，沿用原书结构会和实际顺序打架。
-6. 预算紧时靠**砍站**，不靠把每站讲得更浅——一站讲不明白一件事就没有价值。
-7. 只输出 JSON。`;
+/** Stages must group, so keep at least two stations in each; one-per-stage is no grouping. */
+function stageCount(nodeCount: number): number {
+  return Math.min(5, Math.max(1, Math.round(nodeCount / 4)));
 }
 
-function buildPrompt(
-  notes: readonly ChapterNote[],
-  target: number,
-  budget: ReadingBudget,
-  tightening: boolean,
-): string {
-  const digest = notes
+/** Chapter summaries as the prompt sees them. Numbers only — no prose to localise. */
+function digestOf(notes: readonly ChapterNote[]): string {
+  return notes
     .map((n) => {
       const points = n.keyPoints.slice(0, 3).map((k) => `    - ${k}`).join('\n');
       return `[${n.idx}] ${n.title}\n  ${n.gist}${points ? `\n${points}` : ''}`;
     })
     .join('\n\n');
-
-  const urgency = tightening
-    ? `\n\n上一次产出的路径超出了预算。这次必须更狠地砍站，控制在 ${target} 站左右——记住是砍站，不是把每站讲浅。`
-    : '';
-
-  const [lo, hi] = budget.minutesPerNode;
-  return `以下是全书 ${notes.length} 章的摘要。请设计一条学习路径。
-
-用户选择的预算：${budget.label}
-
-约束：
-- 目标总时长 ${budget.minMinutes}–${budget.maxMinutes} 分钟
-- 站数建议 ${target} 左右，但以时长为准，不要为凑数硬拆
-- 每站 estMinutes 在 ${lo}–${hi} 分钟之间
-- brief 写清这一站要讲明白什么（2-3 句）
-- 把站点分进约 ${stageCount(target)} 个阶段，每个阶段给一个描述读者在做什么的名字。
-  **每个阶段至少 2 站**——一站一个阶段等于没有分组${urgency}
-
-${digest}`;
-}
-
-/** Stages must group, so keep at least two stations in each; one-per-stage is no grouping. */
-function stageCount(nodeCount: number): number {
-  return Math.min(5, Math.max(1, Math.round(nodeCount / 4)));
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');

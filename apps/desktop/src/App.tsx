@@ -1,28 +1,40 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { askLogFile, audioFile } from '@cairn/core/store/library';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { type AskRecord, stationHeat } from '@cairn/core/store/asks';
 import {
-  AskPane, DeckPane, StagePane, Splitter, PanelToggle, useSplit, useResume, columnWidth,
+  AskPane, DeckPane, StagePane, Splitter, PanelToggle, SettingsPanel, useSplit, useResume,
+  useUi, columnWidth,
   DEFAULT_LEFT, DEFAULT_RIGHT, LEFT_LIMITS, RIGHT_LIMITS,
   type Turn,
 } from '@cairn/ui';
 import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
-  ask, askOutside, focusStation, inShell, libraryBase, listBooks, resumeBook,
+  ask, askOutside, deleteBook, focusStation, inShell, libraryBase, listBooks, onDeckStatus,
+  resumeBook, setMenuLocale,
 } from './bridge';
 import { useBundle } from './useBundle';
+import { useShellSettings } from './useShellSettings';
 
 export function App(): ReactElement {
   const [books, setBooks] = useState<readonly LibraryEntry[]>([]);
   const [bookId, setBookId] = useState<string>();
   const [adding, setAdding] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   /** Port and token are new on every launch, so every URL is built from this. */
   const [base, setBase] = useState<string>();
   const { bundle, error, reload } = useBundle(bookId, base);
 
+  const { prefs, t } = useUi();
+  /**
+   * Read at mount only. As a dependency it would reopen the last book the
+   * moment the reader toggled this setting, which is not what the switch says.
+   */
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+  const shell = useShellSettings();
   const resume = useResume();
   const left = useSplit('pane.left', DEFAULT_LEFT, LEFT_LIMITS, 'left');
   const right = useSplit('pane.right', DEFAULT_RIGHT, RIGHT_LIMITS, 'right');
@@ -41,14 +53,27 @@ export function App(): ReactElement {
       // walked over several sittings; landing on the drop zone every launch
       // makes the reader find their place by hand.
       const last = resume.lastBookId;
-      if (last !== undefined && shelf.some((b) => b.id === last)) setBookId(last);
+      if (prefsRef.current.resume && last !== undefined && shelf.some((b) => b.id === last)) {
+        setBookId(last);
+      }
     })();
   }, [resume]);
+
+  // The menu bar is the one surface our dictionary cannot reach
+  useEffect(() => setMenuLocale(prefs.locale), [prefs.locale]);
 
   // A book closed mid-build would otherwise sit unfinished forever
   useEffect(() => {
     if (bookId) void resumeBook(bookId);
   }, [bookId]);
+
+  // The shelf is read once at launch, so without this its progress is frozen
+  // at whatever it was then — which read as "0 built" for the whole run.
+  useEffect(() => onDeckStatus((s) => {
+    setBooks((list) => list.map(
+      (b) => (b.id === s.bookId ? { ...b, built: s.ready, complete: s.complete } : b),
+    ));
+  }), []);
 
   // Where questions piled up last time through — read over the same channel as
   // the books themselves, so it works without the shell too.
@@ -67,8 +92,8 @@ export function App(): ReactElement {
   const path = bundle?.path;
   /** Where the reader stopped in this book, read once per book, before any render. */
   const place = useMemo(
-    () => (path ? resume.placeFor(path.bookId) : undefined),
-    [path, resume],
+    () => (prefs.resume && path ? resume.placeFor(path.bookId) : undefined),
+    [prefs.resume, path, resume],
   );
   // The stored station is the fallback, not an effect that sets state afterwards:
   // setting it later would render — and start playing — the first station first.
@@ -94,6 +119,12 @@ export function App(): ReactElement {
   // Stations only. Transport keys (← → space) belong to the deck.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // ⌘, opens settings, as it does in every macOS app
+      if (e.metaKey && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
       // ⌘B / ⌘J fold the side panes, as they do in an editor
       if (e.metaKey && (e.key === 'b' || e.key === 'j')) {
         e.preventDefault();
@@ -143,6 +174,13 @@ export function App(): ReactElement {
     if (entry.id === bookId) reload(); else openBook(entry.id);
   }, [bookId, reload, openBook]);
 
+  /** Deleting drops the stored position too: re-adding the same file reuses its id. */
+  const removeBook = useCallback(async (id: string) => {
+    await deleteBook(id);
+    setBooks((b) => b.filter((x) => x.id !== id));
+    resume.forget(id);
+  }, [resume]);
+
   const goHome = useCallback(() => {
     // Going back to the shelf is deliberate, so the next launch opens there too.
     // The position inside each book is kept.
@@ -152,14 +190,25 @@ export function App(): ReactElement {
     setTurns([]);
   }, [resume]);
 
-  const modal = adding
-    ? <AddBook autoPick onDone={onAdded} onClose={() => setAdding(false)} />
-    : null;
+  const modal = (
+    <>
+      {adding && <AddBook autoPick onDone={onAdded} onClose={() => setAdding(false)} />}
+      {settingsOpen && (
+        <SettingsPanel shell={shell} onClose={() => setSettingsOpen(false)} />
+      )}
+    </>
+  );
 
   if (!bookId) {
     return (
       <div className="shell empty">
-        <Home books={books} onAdd={() => setAdding(true)} onOpen={openBook} />
+        <Home
+          books={books}
+          onAdd={() => setAdding(true)}
+          onOpen={openBook}
+          onSettings={() => setSettingsOpen(true)}
+          {...(inShell ? { onDelete: removeBook } : {})}
+        />
         {modal}
       </div>
     );
@@ -169,8 +218,8 @@ export function App(): ReactElement {
     return (
       <div className="shell empty">
         <div className="deck-empty">
-          {error ?? '载入中…'}
-          <button type="button" className="ghost" onClick={goHome}>返回书架</button>
+          {error ?? t.app.loading}
+          <button type="button" className="ghost" onClick={goHome}>{t.app.backToShelf}</button>
         </div>
         {modal}
       </div>
@@ -195,13 +244,13 @@ export function App(): ReactElement {
       <PanelToggle
         control={{ collapsed: left.state.collapsed, toggle: left.toggleCollapsed }}
         side="left"
-        label="站点栏"
+        label={t.panel.stagePane}
         hint="⌘B"
       />
       <PanelToggle
         control={{ collapsed: right.state.collapsed, toggle: right.toggleCollapsed }}
         side="right"
-        label="提问栏"
+        label={t.panel.askPane}
         hint="⌘J"
       />
 
@@ -214,13 +263,14 @@ export function App(): ReactElement {
         onSwitchBook={(id) => { openBook(id); setCurrentId(undefined); setTurns([]); }}
         onAdd={inShell ? () => setAdding(true) : undefined}
         onHome={goHome}
+        onSettings={() => setSettingsOpen(true)}
         failed={bundle.failed}
         heat={heat}
         complete={bundle.complete}
         collapsed={left.state.collapsed}
       />
 
-      <Splitter split={left} label="站点栏" />
+      <Splitter split={left} label={t.panel.stagePane} />
 
       <DeckPane
         node={node}
@@ -230,12 +280,12 @@ export function App(): ReactElement {
         stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
         resumeAt={place}
         onSelect={setSelection}
-        onPause={(caption) => setSelection((s) => s ?? caption)}
-        onEnded={() => step(1)}
+        // The reader chose whether a finished chapter rolls into the next one
+        onEnded={() => { if (prefs.autoNext) step(1); }}
         onProgress={(ms) => resume.record(path.bookId, { nodeId: node.id, ms })}
       />
 
-      <Splitter split={right} label="提问栏" />
+      <Splitter split={right} label={t.panel.askPane} />
 
       <AskPane
         turns={turns}

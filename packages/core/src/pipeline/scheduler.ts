@@ -17,9 +17,30 @@
  */
 import type { NodeDeck, PathNode } from '../types';
 import { JobAbortedError, type JobStore } from './job';
+import { CairnError } from '../errors';
 
-/** How many stations may be in flight, i.e. how far ahead of the reader we run. */
-const DEFAULT_LOOKAHEAD = 2;
+/** Ceiling while the reader might still stop: past this, prefetch crowds out their questions. */
+const MAX_LOOKAHEAD = 4;
+/**
+ * Ceiling once they are past halfway. Not the whole path: every lane is another
+ * `codex exec` process, and the provider suggests two.
+ */
+const COMMITTED_LOOKAHEAD = 6;
+
+/**
+ * How far ahead of the reader to build.
+ *
+ * Starts at one — nothing is worth building before the station being watched —
+ * and grows with depth, because a reader at station six is far likelier to
+ * finish than one at station one. Past halfway they have as good as committed,
+ * so the rest is built as fast as the machine sensibly allows.
+ */
+export function lookaheadFor(reached: number, total: number): number {
+  const at = Math.max(0, reached);
+  if (total > 0 && at * 2 >= total) return Math.min(COMMITTED_LOOKAHEAD, total);
+  return Math.min(MAX_LOOKAHEAD, 1 + Math.floor(at / 2));
+}
+
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_BASE_DELAY_MS = 500;
 
@@ -43,11 +64,7 @@ export interface DeckSchedulerOptions {
    * in `build.ts` is the fingerprint this takes; the default is only for tests.
    */
   readonly keyOf?: (node: PathNode) => string;
-  /**
-   * In-flight cap. Two is deliberate: a station is three to five minutes of
-   * audio and a build is far quicker than that, so a deeper queue buys no
-   * comfort and takes provider slots away from the reader's questions.
-   */
+  /** Fixes the in-flight cap. Left out, it follows the reader (`lookaheadFor`). */
   readonly lookahead?: number;
   readonly maxAttempts?: number;
   readonly baseDelayMs?: number;
@@ -80,7 +97,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
   const {
     nodes, build, store, onReady, onFailed, signal,
     keyOf = (node) => node.id,
-    lookahead = DEFAULT_LOOKAHEAD,
+    lookahead: fixedLookahead,
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     baseDelayMs = DEFAULT_BASE_DELAY_MS,
     sleep = defaultSleep,
@@ -96,6 +113,8 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
   /** Node ids still to build, in priority order. */
   let pending = nodes.map((n) => n.id);
   let running = 0;
+  /** The furthest station the reader has asked for, which is what grows the lanes. */
+  let reached = 0;
   let stopped = false;
   let holds = 0;
   let resumeGate: (() => void) | undefined;
@@ -110,7 +129,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
   const settle = (nodeId: string, deck: NodeDeck | undefined, error?: Error): void => {
     for (const w of waiters.get(nodeId) ?? []) {
       if (deck) w.resolve(deck);
-      else w.reject(error ?? new Error(`第 ${nodeId} 站未能建成`));
+      else w.reject(error ?? new CairnError('node_failed', { id: nodeId }));
     }
     waiters.delete(nodeId);
   };
@@ -186,12 +205,25 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
     }
   };
 
+  const lanes: Promise<void>[] = [];
+
+  const ensureLanes = (want: number): void => {
+    const target = Math.max(1, Math.min(want, nodes.length));
+    while (lanes.length < target) lanes.push(lane());
+  };
+
   const done = (async () => {
-    const lanes = Math.max(1, Math.min(lookahead, nodes.length));
-    await Promise.all(Array.from({ length: lanes }, lane));
+    ensureLanes(fixedLookahead ?? lookaheadFor(0, nodes.length));
+    // Lanes are added as the reader advances, so the set cannot be awaited once
+    let awaited = 0;
+    while (awaited < lanes.length) {
+      const inFlight = lanes.slice();
+      awaited = inFlight.length;
+      await Promise.all(inFlight);
+    }
     // Anything still waiting will never arrive once the lanes are gone
     for (const nodeId of [...waiters.keys()]) {
-      settle(nodeId, decks.get(nodeId), failed.get(nodeId) ?? new Error('生成已停止'));
+      settle(nodeId, decks.get(nodeId), failed.get(nodeId) ?? new CairnError('generation_stopped'));
     }
   })();
 
@@ -199,6 +231,8 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
     focus(nodeId) {
       const from = order.get(nodeId);
       if (from === undefined) return;
+      reached = Math.max(reached, from);
+      if (fixedLookahead === undefined) ensureLanes(lookaheadFor(reached, nodes.length));
       // Stations at or after the reader first, then the ones they skipped past:
       // skipping is not the same as not wanting, so nothing is dropped.
       pending = [...pending].sort((a, b) => rank(order, a, from) - rank(order, b, from));
@@ -209,7 +243,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
       if (built) return Promise.resolve(built);
       const failure = failed.get(nodeId);
       if (failure) return Promise.reject(failure);
-      if (!order.has(nodeId)) return Promise.reject(new Error(`未知站点 ${nodeId}`));
+      if (!order.has(nodeId)) return Promise.reject(new CairnError('unknown_node', { id: nodeId }));
 
       this.focus(nodeId);
       return new Promise<NodeDeck>((resolve, reject) => {

@@ -15,6 +15,8 @@
  * a real retriever can be dropped in without touching callers.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
+import type { ContentLocale } from '../parse/language';
+import { promptsFor } from './prompts';
 import type { Chapter, ChapterNote, PathNode } from '../types';
 
 /** How much of the source chapter to include around a highlighted passage. */
@@ -43,13 +45,6 @@ const ANSWER_SCHEMA = {
   },
 } as const;
 
-const SYSTEM = `你在回答读者对一本书的提问。
-
-铁律：
-1. 只依据我给你的材料作答。不得使用你对这本书或这个主题的任何既有知识。
-2. 材料里没有答案时，grounded 设为 false，并在 suggestion 里说明该去看哪一部分，不要硬答。
-3. 不要复述材料，直接回答问题。
-4. 只输出 JSON。`;
 
 export interface AskAnchoredParams {
   readonly question: string;
@@ -65,28 +60,28 @@ export interface AskAnchoredParams {
 export async function askAnchored(
   params: AskAnchoredParams,
   provider: LlmProvider,
+  locale: ContentLocale = 'zh',
 ): Promise<Answer> {
   const { question, selection, node, chapters } = params;
+  const prompts = promptsFor(locale);
 
   const material = chapters
     .map((c) => {
       const body = selection ? excerptAround(c.text, selection) : c.text.slice(0, CONTEXT_CHARS * 2);
-      return `<章 idx="${c.idx}" 标题="${c.title}">\n${body}\n</章>`;
+      return prompts.ask.chapterTag(c.idx, c.title, body);
     })
     .join('\n\n');
 
   const raw = await provider.complete({
-    system: SYSTEM,
+    system: prompts.ask.system,
     label: `ask:anchored:${node.id}`,
-    prompt: `读者正走到这一站：
-标题：${node.title}
-这一站要讲明白：${node.brief}
-${selection ? `\n读者划中的原文：\n「${selection}」\n` : ''}
-读者的问题：${question}
-
-可用材料：
-
-${material}`,
+    prompt: prompts.ask.user({
+      nodeTitle: node.title,
+      brief: node.brief,
+      ...(selection ? { selection } : {}),
+      question,
+      material,
+    }),
     schema: ANSWER_SCHEMA,
     signal: params.signal,
   });
@@ -131,7 +126,9 @@ export function singleBook(notes: readonly ChapterNote[]): readonly NoteSource[]
 export function noteIndexLocator(
   sources: readonly NoteSource[],
   provider: LlmProvider,
+  locale: ContentLocale = 'zh',
 ): ChapterLocator {
+  const prompts = promptsFor(locale);
   const schema = {
     type: 'object',
     additionalProperties: false,
@@ -151,13 +148,9 @@ export function noteIndexLocator(
         .join('\n\n');
 
       const raw = await provider.complete({
-        system: '你在为一个问题挑出最相关的章节。只输出 JSON，只返回章号。',
+        system: prompts.ask.locatorSystem,
         label: 'ask:locate',
-        prompt: `问题：${question}
-
-从下面的章节索引中挑出最多 ${MAX_LOCATED_CHAPTERS} 个最相关的章号。宁少勿滥；确实没有相关章节就返回空数组。
-
-${index}`,
+        prompt: prompts.ask.locatorUser(question, MAX_LOCATED_CHAPTERS, index),
         schema,
         signal,
       });
@@ -194,14 +187,16 @@ export interface AskBookParams {
 export async function askBook(
   params: AskBookParams,
   provider: LlmProvider,
+  locale: ContentLocale = 'zh',
 ): Promise<Answer> {
+  const prompts = promptsFor(locale);
   const located = await params.locator.locate(params.question, params.signal);
   if (located.length === 0) {
     return {
-      text: '这本书里没有找到相关内容。',
+      text: prompts.ask.notFound,
       grounded: false,
       sourceChapters: [],
-      suggestion: '换个说法再问，或者这个问题可能超出了这本书的范围。',
+      suggestion: prompts.ask.rephrase,
     };
   }
 
@@ -210,20 +205,20 @@ export async function askBook(
 
   if (chapters.length === 0) {
     return {
-      text: '相关章节的原文已不在本地。',
+      text: prompts.ask.textGone,
       grounded: false,
       sourceChapters: located.map((r) => r.chapter),
     };
   }
 
   const material = chapters
-    .map((c) => `<章 idx="${c.idx}" 标题="${c.title}">\n${c.text.slice(0, CONTEXT_CHARS * 3)}\n</章>`)
+    .map((c) => prompts.ask.chapterTag(c.idx, c.title, c.text.slice(0, CONTEXT_CHARS * 3)))
     .join('\n\n');
 
   const raw = await provider.complete({
-    system: SYSTEM,
+    system: prompts.ask.system,
     label: 'ask:book',
-    prompt: `读者的问题：${params.question}\n\n可用材料：\n\n${material}`,
+    prompt: prompts.ask.plainUser(params.question, material),
     schema: ANSWER_SCHEMA,
     signal: params.signal,
   });

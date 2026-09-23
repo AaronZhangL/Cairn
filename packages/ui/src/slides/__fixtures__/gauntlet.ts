@@ -3,14 +3,10 @@ import type { Slide } from '@cairn/core/types';
 /**
  * Every layout at its worst, for looking at.
  *
- * Overflow is the one defect in this layer that cannot be unit-tested: it is a
- * property of real layout, and nothing in the test setup lays anything out.
- * So it is checked by eye instead, against content chosen to break things
- * rather than content that happens to exist in one book — the original bug
- * shipped because "32华氏度" was longer than any value anyone had tried.
- *
- * Each slide names the thing it is trying to break. When a layout changes,
- * open this and look; if a new way to overflow is found, add it here first.
+ * Overflow is a property of real layout and no test lays anything out, so it is
+ * checked by eye against content chosen to break things — the original bug
+ * shipped because nobody had tried a value longer than "32华氏度". A new way to
+ * overflow goes in here first.
  */
 export const GAUNTLET: readonly { readonly what: string; readonly slide: Slide }[] = [
   {
@@ -89,6 +85,57 @@ export const GAUNTLET: readonly { readonly what: string; readonly slide: Slide }
         ],
         icon: 'cycle',
       },
+    },
+  },
+  {
+    what: 'timeline —— 六条，mark 长短悬殊，最后一条正文很长',
+    slide: {
+      layout: 'timeline',
+      heading: '一个习惯从建立到稳定',
+      items: [
+        { mark: '第 1 天', text: '决定开始' },
+        { mark: '第 2 周', text: '新鲜感耗尽，这是第一个放弃高峰' },
+        { mark: '1985', text: '一个和上面完全不同量级的 mark' },
+        { mark: '第 66 天', text: '平均而言行为开始自动化' },
+        { mark: '', text: '没有 mark 的一条，看它会不会把整条线拽歪' },
+        {
+          mark: '第 2 年',
+          text: '此时它已经不再是一个需要意志力维持的习惯，而是身份的一部分；'
+            + '你不再是"在跑步的人"，你就是跑者，这个转变才是全部意义所在',
+        },
+      ],
+    },
+  },
+  {
+    what: 'matrix —— 四行，左右两列长度极不对称，维度名很长',
+    slide: {
+      layout: 'matrix',
+      heading: '两种做法逐项对照',
+      left: '目标导向',
+      right: '系统导向',
+      rows: [
+        { aspect: '关注点', left: '终点', right: '每天重复的那件事' },
+        {
+          aspect: '达成之后会发生什么',
+          left: '动力消失，因为那个曾经拉着你的东西已经不在了',
+          right: '继续',
+        },
+        { aspect: '失败时', left: '推倒重来', right: '只是漏了一次' },
+        { aspect: '身份', left: '不变', right: '被一次次的小行为重新定义' },
+      ],
+    },
+  },
+  {
+    what: 'relation —— 四条因果，节点名长短悬殊，关系词长',
+    slide: {
+      layout: 'relation',
+      heading: '这条链上每一步都是书里明说的',
+      links: [
+        { from: '提示', how: '触发', to: '渴望' },
+        { from: '环境设计', how: '降低阻力从而提高', to: '行为发生的概率' },
+        { from: '连续失败两次', how: '导致', to: '习惯中断' },
+        { from: '身份认同', how: '反过来强化', to: '行为' },
+      ],
     },
   },
   {

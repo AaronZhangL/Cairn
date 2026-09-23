@@ -10,6 +10,12 @@ const HOLD_MS = 180;
 const REWIND_TICK_MS = 100;
 const REWIND_STEP_S = 0.8;
 const MAX_RATE = 4;
+/** One press of ↑ / ↓. Ten steps across the range is enough to aim with. */
+const VOLUME_STEP = 0.1;
+
+export function clampVolume(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+}
 
 /** Tap distance scales with rate, so a jump covers the same amount of narration at any speed. */
 export function seekDistance(rate: number): number {
@@ -29,10 +35,16 @@ export function nextRate(rate: number): number {
 export interface Transport {
   readonly rate: number;
   readonly boosting: boolean;
+  readonly volume: number;
+  readonly muted: boolean;
   setRate: (rate: number) => void;
   cycleRate: () => void;
   toggle: () => void;
   seek: (deltaS: number) => void;
+  setVolume: (volume: number) => void;
+  toggleMute: () => void;
+  /** Write rate and volume onto the element, which resets both when new media loads. */
+  apply: () => void;
 }
 
 /**
@@ -48,17 +60,25 @@ export interface Transport {
 export function useTransport(
   audio: React.RefObject<HTMLAudioElement | null>,
   enabled = true,
+  onFullscreen?: () => void,
+  /** Where the reader's stored default puts the dial at the start of a session. */
+  initialRate = 1,
 ): Transport {
-  const [rate, setRateState] = useState(1);
+  const [rate, setRateState] = useState(initialRate);
   const [boosting, setBoosting] = useState(false);
+  const [volume, setVolumeState] = useState(1);
+  const [muted, setMuted] = useState(false);
 
   // Refs, not state: the key handlers must see current values without re-binding
-  const rateRef = useRef(1);
+  const rateRef = useRef(initialRate);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const rewindTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const held = useRef<'left' | 'right' | undefined>(undefined);
   /** Single source of truth for "a hold is in progress"; never infer it from playbackRate. */
   const holding = useRef(false);
+  const volumeRef = useRef(1);
+  const mutedRef = useRef(false);
+  mutedRef.current = muted;
 
   const setRate = useCallback((next: number) => {
     rateRef.current = next;
@@ -67,6 +87,30 @@ export function useTransport(
   }, [audio]);
 
   const cycleRate = useCallback(() => setRate(nextRate(rateRef.current)), [setRate]);
+
+  const setVolume = useCallback((next: number) => {
+    const level = clampVolume(next);
+    volumeRef.current = level;
+    setVolumeState(level);
+    setMuted(level === 0);
+    if (audio.current) { audio.current.volume = level; audio.current.muted = level === 0; }
+  }, [audio]);
+
+  const toggleMute = useCallback(() => {
+    setMuted((was) => {
+      const next = !was;
+      if (audio.current) audio.current.muted = next;
+      return next;
+    });
+  }, [audio]);
+
+  const apply = useCallback(() => {
+    const el = audio.current;
+    if (!el) return;
+    el.playbackRate = rateRef.current;
+    el.volume = volumeRef.current;
+    el.muted = mutedRef.current;
+  }, [audio]);
 
   const seek = useCallback((deltaS: number) => {
     const el = audio.current;
@@ -100,6 +144,13 @@ export function useTransport(
       if (e.code === 'Space') {
         e.preventDefault();
         toggle();
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMute(); return; }
+      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); onFullscreen?.(); return; }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setVolume(volumeRef.current + (e.key === 'ArrowUp' ? VOLUME_STEP : -VOLUME_STEP));
         return;
       }
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -149,7 +200,10 @@ export function useTransport(
       window.removeEventListener('blur', endHold);
       endHold();
     };
-  }, [enabled, seek, toggle, endHold, audio]);
+  }, [enabled, seek, toggle, endHold, audio, setVolume, toggleMute, onFullscreen]);
 
-  return { rate, boosting, setRate, cycleRate, toggle, seek };
+  return {
+    rate, boosting, volume, muted,
+    setRate, cycleRate, toggle, seek, setVolume, toggleMute, apply,
+  };
 }

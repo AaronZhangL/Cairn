@@ -10,7 +10,7 @@ const DIR = await mkdtemp(join(tmpdir(), 'cairn-install-'));
 process.env.CAIRN_DATA_DIR = DIR;
 
 const {
-  installDeck, installPath, listBooks, patchEntry, readDeckIndex, rewritePath,
+  deleteBook, installDeck, installPath, listBooks, patchEntry, readDeckIndex, rewritePath,
 } = await import('../../src/main/install');
 
 afterAll(async () => { await rm(DIR, { recursive: true, force: true }); });
@@ -93,7 +93,13 @@ describe('installDeck', () => {
     expect(await Bun.file(join(DIR, 'books/b1/audio/n0.mp3')).exists()).toBe(true);
   });
 
-  test('落盘的 deck 指向播放器够得到的音频，而不是构建缓存', async () => {
+  /**
+   * A generated book is meant to be movable — copied to another machine, or
+   * synced to a phone that has no idea what `/Users/karen` means. An absolute
+   * path baked into the deck survives neither, and the player never reads this
+   * field anyway (it derives the URL from `audioFile(bookId, nodeId)`).
+   */
+  test('落盘的 deck 存的是相对路径，既不是构建缓存也不是绝对路径', async () => {
     const audio = await audioCache(['n0']);
     await installPath(path(1), notes, chapters, entry());
     await installDeck('b1', deck('n0'), audio);
@@ -101,8 +107,25 @@ describe('installDeck', () => {
     const saved = JSON.parse(
       await readFile(join(DIR, 'books/b1/decks/n0.json'), 'utf8'),
     ) as NodeDeck;
-    expect(saved.audioPath).toContain(DIR);
+    expect(saved.audioPath).toBe('audio/n0.mp3');
+    expect(saved.audioPath).not.toContain(DIR);
     expect(saved.audioPath).not.toContain('cache-audio');
+    expect(saved.audioPath.startsWith('/')).toBe(false);
+  });
+
+  /**
+   * The source is still found by its content-keyed name, not rebuilt from the
+   * node id — that reconstruction is what once shipped one budget's audio under
+   * another budget's subtitles (invariant 8). Storing a relative path must not
+   * quietly undo it.
+   */
+  test('音频仍按内容键的文件名从缓存拷贝', async () => {
+    const audio = await audioCache(['n0']);
+    await installPath(path(1), notes, chapters, entry());
+    await installDeck('b1', deck('n0'), audio);
+
+    expect(await Bun.file(join(DIR, 'books/b1/audio/n0.mp3')).text())
+      .toBe(await Bun.file(join(audio, 'n0.mp3')).text());
   });
 });
 
@@ -150,5 +173,38 @@ describe('rewritePath', () => {
 describe('readDeckIndex', () => {
   test('没有清单时返回 undefined —— 老书没有这个文件', async () => {
     expect(await readDeckIndex('missing')).toBeUndefined();
+  });
+});
+
+describe('deleteBook', () => {
+  test('removes the entry and the whole book directory', async () => {
+    await installPath(path(2), notes, chapters, entry());
+    await installDeck('b1', deck('n0'), await audioCache(['n0']));
+    expect(await listBooks()).toHaveLength(1);
+
+    expect(await deleteBook('b1')).toBe(true);
+    expect(await listBooks()).toHaveLength(0);
+    expect(await readFile(join(DIR, 'books', 'b1', 'path.json'), 'utf8').catch(() => null))
+      .toBeNull();
+  });
+
+  test('leaves the other books alone', async () => {
+    await installPath(path(1), notes, chapters, entry());
+    await installPath({ ...path(1), bookId: 'b2' }, notes, chapters, entry({ id: 'b2' }));
+
+    await deleteBook('b1');
+    expect((await listBooks()).map((b) => b.id)).toEqual(['b2']);
+    expect(await readFile(join(DIR, 'books', 'b2', 'path.json'), 'utf8')).toContain('b2');
+  });
+
+  test('refuses a book that is not listed', async () => {
+    expect(await deleteBook('never-added')).toBe(false);
+  });
+
+  /** The id crosses the RPC bridge and is joined onto the library root. */
+  test('refuses an id that could leave the library directory', async () => {
+    await installPath(path(1), notes, chapters, entry());
+    expect(await deleteBook('../..')).toBe(false);
+    expect(await listBooks()).toHaveLength(1);
   });
 });

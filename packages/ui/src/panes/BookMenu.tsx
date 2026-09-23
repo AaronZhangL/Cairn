@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { LibraryEntry } from '@cairn/core/store/library';
+import { ChevronMark } from './icons';
+import { useT } from '../settings/SettingsProvider';
 
 /**
  * The book switcher: the pane's title is the trigger.
@@ -17,7 +19,7 @@ import type { LibraryEntry } from '@cairn/core/store/library';
  * a custom menu feel worse than the select it replaced.
  */
 export function BookMenu({
-  title, books, currentId, onSwitch, onAdd, onHome,
+  title, books, currentId, onSwitch, onAdd, onHome, onSettings,
 }: {
   title: string;
   books: readonly LibraryEntry[];
@@ -27,7 +29,10 @@ export function BookMenu({
   onAdd?: () => void;
   /** Back to the shelf: the only route to the home screen once a book is open. */
   onHome?: () => void;
+  /** Settings, for when a book is open and the shelf's gear is out of reach. */
+  onSettings?: () => void;
 }): ReactElement {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -43,6 +48,7 @@ export function BookMenu({
   const rows: readonly (() => void)[] = [
     ...books.map((b) => () => choose(b.id)),
     ...(onAdd ? [() => run(onAdd)] : []),
+    ...(onSettings ? [() => run(onSettings)] : []),
     ...(onHome ? [() => run(onHome)] : []),
   ];
   const rowsRef = useRef(rows);
@@ -114,7 +120,9 @@ export function BookMenu({
         title={title}
       >
         <span className="book-name">{title}</span>
-        <span className="book-chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
+        <span className={open ? 'book-chev up' : 'book-chev'} aria-hidden="true">
+          <ChevronMark />
+        </span>
       </button>
 
       {open && (
@@ -138,14 +146,14 @@ export function BookMenu({
               <span className="book-item-body">
                 <span className="book-item-name">{book.title}</span>
                 <span className="book-item-meta">
-                  {book.stations} 站 · {book.minutes} 分钟
+                  {t.unit.count(book.stations)} · {t.unit.minutes(book.minutes)}
                 </span>
               </span>
             </button>
           ))}
           </div>
 
-          {(onAdd || onHome) && <div className="book-sep" />}
+          {(onAdd || onSettings || onHome) && <div className="book-sep" />}
 
           {onAdd && (
             <button
@@ -157,7 +165,22 @@ export function BookMenu({
             >
               <span className="book-check" aria-hidden="true">＋</span>
               <span className="book-item-body">
-                <span className="book-item-name">添加一本书</span>
+                <span className="book-item-name">{t.menu.addBook}</span>
+              </span>
+            </button>
+          )}
+
+          {onSettings && (
+            <button
+              type="button"
+              role="menuitem"
+              className={rowClass('book-item action', books.length + (onAdd ? 1 : 0), active, false)}
+              onMouseEnter={() => setActive(books.length + (onAdd ? 1 : 0))}
+              onClick={() => run(onSettings)}
+            >
+              <span className="book-check" aria-hidden="true">⚙</span>
+              <span className="book-item-body">
+                <span className="book-item-name">{t.menu.settings}</span>
               </span>
             </button>
           )}
@@ -172,7 +195,7 @@ export function BookMenu({
             >
               <span className="book-check" aria-hidden="true">‹</span>
               <span className="book-item-body">
-                <span className="book-item-name">返回书架</span>
+                <span className="book-item-name">{t.menu.backToShelf}</span>
               </span>
             </button>
           )}

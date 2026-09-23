@@ -17,11 +17,16 @@ import type { LlmProvider } from '../llm/types';
 import type { ChapterNote, NodeDeck, Path, PathNode } from '../types';
 import { type JobOptions, type JobResult, type JobStore, runJob } from './job';
 import { fingerprint } from './fingerprint';
+import type { ContentLocale } from '../parse/language';
 import { isRecap, makeRecapDeck } from './recap';
 import { makeDeck } from './slides';
 import { DEFAULT_VOICE, deckAudioPath, type Narrator, type TtsOptions } from './tts';
+import { CairnError } from '../errors';
 
-export interface BuildOptions extends JobOptions, TtsOptions {}
+export interface BuildOptions extends JobOptions, TtsOptions {
+  /** The book's own language; the slides and narration come back in it. */
+  readonly locale?: ContentLocale;
+}
 
 export interface BuildResult {
   readonly decks: readonly NodeDeck[];
@@ -60,6 +65,11 @@ export function deckKey(node: PathNode, voice?: string): string {
  * Build one station. Shared by the batch runner and the scheduler so the two
  * paths cannot drift in what a deck is, or in where its audio lands.
  */
+/** What synthesis needs, plus the language the content itself is written in. */
+export interface NodeBuildOptions extends TtsOptions {
+  readonly locale?: ContentLocale;
+}
+
 export async function buildNode(
   node: PathNode,
   path: Path,
@@ -67,14 +77,17 @@ export async function buildNode(
   audioDir: string,
   provider: LlmProvider,
   narrator: Narrator,
-  options: TtsOptions = {},
+  options: NodeBuildOptions = {},
 ): Promise<NodeDeck> {
+  const locale = options.locale ?? 'zh';
   const draft = isRecap(node)
     // The closing station recaps the path, so its material is the other
     // stations, not the book. Sending it the chapters its sourceChapters point
     // at would be the whole book in one prompt.
-    ? await makeRecapDeck(node, path.nodes.filter((n) => !isRecap(n)), path.title, provider, options.signal)
-    : await makeDeck(node, chapterNotes(node, byChapter), provider, options.signal);
+    ? await makeRecapDeck(
+      node, path.nodes.filter((n) => !isRecap(n)), path.title, provider, options.signal, locale,
+    )
+    : await makeDeck(node, chapterNotes(node, byChapter), provider, options.signal, locale);
 
   return narrator.speak(draft, deckAudioPath(audioDir, deckKey(node, options.voice)), options);
 }
@@ -88,7 +101,7 @@ function chapterNotes(
     .filter((n): n is ChapterNote => n !== undefined);
 
   if (notes.length === 0) {
-    throw new Error(`第 ${node.idx + 1} 站「${node.title}」的溯源章节不存在`);
+    throw new CairnError('missing_source_chapter', { n: node.idx + 1, title: node.title });
   }
   return notes;
 }

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Gauntlet } from '@cairn/ui';
+import { Gauntlet, SettingsProvider } from '@cairn/ui';
 import { App } from './App';
 
 /**
@@ -15,6 +15,9 @@ const gauntlet = import.meta.env.DEV && new URLSearchParams(location.search).has
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {gauntlet ? <Gauntlet /> : <App />}
+    {/* Wraps the gauntlet too: it draws slides, and slides read the text scale. */}
+    <SettingsProvider>
+      {gauntlet ? <Gauntlet /> : <App />}
+    </SettingsProvider>
   </StrictMode>,
 );

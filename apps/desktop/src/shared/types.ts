@@ -1,4 +1,5 @@
 import type { BudgetId } from '@cairn/core/pipeline/budget';
+import type { ContentLocale } from './settings';
 
 /** Parse-only summary shown before any model call, so the budget choice is informed. */
 export interface BookPreview {
@@ -8,8 +9,23 @@ export interface BookPreview {
   readonly author?: string;
   readonly chapters: number;
   readonly words: number;
+  /**
+   * What this book will be read aloud in, decided before a single model call.
+   * Shown at the same point the budget is chosen: a book about to be narrated
+   * in the wrong language is worth catching before paying for it, not after.
+   */
+  readonly narration: { readonly locale: ContentLocale; readonly voice: string };
+  /**
+   * Numbers, not sentences. `ReadingBudget.label` is composed for the terminal
+   * tool and is Chinese either way; the player words these itself.
+   */
   readonly budgets: readonly {
-    id: BudgetId; label: string; honest: boolean; note?: string; recommended: boolean;
+    id: BudgetId;
+    minutes: number;
+    honest: boolean;
+    /** Present only when the rung would flatten this book: words per station. */
+    wordsPerNode?: number;
+    recommended: boolean;
   }[];
 }
 

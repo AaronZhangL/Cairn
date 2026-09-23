@@ -10,6 +10,8 @@
  * and could only be read once it was whole.
  */
 
+import type { ContentLocale } from '../parse/language';
+
 /**
  * What a run is worth, recorded rather than recomputed.
  *
@@ -49,6 +51,19 @@ export interface LibraryEntry {
   /** Stations with a playable deck. Absent means all of them. */
   readonly built?: number;
   readonly quality?: PathQuality;
+  /**
+   * What this book was written in, and the voice it was actually built with.
+   *
+   * Both are recorded rather than recomputed: changing the voice in settings
+   * must not change what an existing book sounds like, and a half-built book
+   * resumed after such a change has to keep using the voice its finished
+   * stations already used — otherwise one book ends up in two voices.
+   *
+   * Absent on books built before this existed. Treat a missing voice as
+   * `DEFAULT_VOICE`, because that is what those books were built with.
+   */
+  readonly language?: ContentLocale;
+  readonly voice?: string;
 }
 
 export const LIBRARY_INDEX = 'books.json';
@@ -104,6 +119,15 @@ export function normalizeEntry(entry: LibraryEntry): LibraryEntry & {
  * second one silently replace the first. Regenerating the *same* file at another
  * budget still lands on the same id, which is what you want.
  */
+/**
+ * Whether a string can be a book id, which is to say: whether `bookSlug` could
+ * have produced it. Guards the one operation that is irreversible — a delete
+ * joins this onto the library root, and `..` there would leave it.
+ */
+export function isBookId(value: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
+}
+
 export function bookSlug(
   title: string,
   hash: (s: string) => string,

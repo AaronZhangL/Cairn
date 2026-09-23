@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  closeBook, EMPTY_RESUME, openBook, parseStored, placeIn, remember, type Place,
+  closeBook, EMPTY_RESUME, forgetBook, openBook, parseStored, placeIn, remember, type Place,
   type ResumeStore, shouldWrite,
 } from './resume';
 
@@ -15,6 +15,8 @@ export interface Resume {
   readonly record: (bookId: string, place: Place) => void;
   /** Returning to the shelf: keep the positions, forget which book was open. */
   readonly close: () => void;
+  /** A book was deleted: drop its position so a re-add starts from the beginning. */
+  readonly forget: (bookId: string) => void;
 }
 
 /**
@@ -56,11 +58,17 @@ export function useResume(key = 'cairn.resume'): Resume {
     write(key, next);
   }, [key, current]);
 
+  const forget = useCallback((bookId: string) => {
+    const next = forgetBook(current(), bookId);
+    store.current = next;
+    write(key, next);
+  }, [key, current]);
+
   // A fresh object every render would make every caller's memo and effect deps
   // change on every render, which is exactly what this hook must not cause.
   return useMemo(
-    () => ({ lastBookId, placeFor, open, record, close }),
-    [lastBookId, placeFor, open, record, close],
+    () => ({ lastBookId, placeFor, open, record, close, forget }),
+    [lastBookId, placeFor, open, record, close, forget],
   );
 }
 

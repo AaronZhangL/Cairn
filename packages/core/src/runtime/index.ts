@@ -9,6 +9,16 @@
  */
 export { codexCliProvider, type CodexOptions } from './codex-cli';
 export {
-  candidateDirs, edgeTtsNarrator, ensureEdgeTts, findEdgeTts, synthesize,
+  type CodexApiKeyLogin, type CodexLogin, type CodexOAuthLogin,
+  FALLBACK_CODEX_MODEL, readCodexLogin, refreshAccessToken, refreshCodexLogin,
+  type RefreshedTokens,
+} from './codex-credentials';
+export {
+  type ChatGptCodexConfig, chatGptCodexProvider, collect,
+} from './chatgpt-codex';
+export { firstMessage, type HttpLlmConfig, httpLlmProvider } from './http-llm';
+export {
+  candidateDirs, edgeTtsNarrator, ensureEdgeTts, findEdgeTts, forgetEdgeTts, speakSample,
+  synthesize,
 } from './edge-tts';
 export { listTraces, readTrace, traceDirSink, traceFileName } from './trace-dir';

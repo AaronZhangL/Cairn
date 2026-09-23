@@ -18,6 +18,8 @@
  *      otherwise tell which is which.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
+import type { ContentLocale } from '../parse/language';
+import { promptsFor } from './prompts';
 
 export interface SearchResult {
   readonly title: string;
@@ -48,13 +50,6 @@ const SCHEMA = {
   },
 } as const;
 
-const SYSTEM = `你在回答一个这本书没有覆盖的问题，依据是网络搜索结果。
-
-铁律：
-1. 只依据给出的搜索结果作答，不要凭记忆补充。
-2. 不要提及书里的内容——书里的部分由另一路负责，这里只答书外的。
-3. usedSources 填你实际用到的结果编号。
-4. 只输出 JSON。`;
 
 export interface AskOutsideParams {
   readonly question: string;
@@ -67,14 +62,16 @@ export async function askOutside(
   params: AskOutsideParams,
   search: WebSearch,
   provider: LlmProvider,
+  locale: ContentLocale = 'zh',
 ): Promise<OutsideAnswer> {
+  const prompts = promptsFor(locale);
   const query = params.bookTitle
     ? `${params.question} ${params.bookTitle}`
     : params.question;
 
   const results = await search.search(query, params.signal);
   if (results.length === 0) {
-    return { text: '没有搜到可用的资料。', citations: [], empty: true };
+    return { text: prompts.outside.nothingFound, citations: [], empty: true };
   }
 
   const material = results
@@ -82,9 +79,9 @@ export async function askOutside(
     .join('\n\n');
 
   const raw = await provider.complete({
-    system: SYSTEM,
+    system: prompts.outside.system,
     label: 'ask:outside',
-    prompt: `问题：${params.question}\n\n搜索结果：\n\n${material}`,
+    prompt: prompts.outside.user(params.question, material),
     schema: SCHEMA,
     signal: params.signal,
   });

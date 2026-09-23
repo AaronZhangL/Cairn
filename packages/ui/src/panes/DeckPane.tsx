@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { toCaptions } from '@cairn/core/pipeline/caption';
 import type { NodeDeck, PathNode } from '@cairn/core/types';
 import { SlideView } from '../slides/SlideView';
-import { FastMark, PauseMark, PlayMark } from './icons';
-import { revealProgress } from '../slides/reveal';
+import { lastIndexAtOrBefore, LEAD_MS } from '../slides/reveal';
+import { FastMark, FullscreenMark, PauseMark, PlayMark, VolumeMark } from './icons';
+import { useUi } from '../settings/SettingsProvider';
+import { useAutoHide } from './useAutoHide';
 import type { Place } from './resume';
 import { startAt } from './resume';
 import { RATES, useTransport } from './useTransport';
@@ -14,8 +16,11 @@ import { RATES, useTransport } from './useTransport';
  * Audio time is the single source of truth — the visible slide and the caption
  * are both derived from it, so they can never drift apart.
  */
+/** Commit the playhead no more often than this: 32ms is below what an eye catches. */
+const CLOCK_MS = 32;
+
 export function DeckPane({
-  node, deck, audioSrc, stageTitle, resumeAt, onSelect, onPause, onEnded, onProgress,
+  node, deck, audioSrc, stageTitle, resumeAt, onSelect, onEnded, onProgress,
   build = 'pending',
 }: {
   node: PathNode;
@@ -33,30 +38,37 @@ export function DeckPane({
    */
   resumeAt?: Place;
   onSelect: (text: string) => void;
-  /**
-   * Fires when the reader pauses, carrying the line that was on screen. Pausing
-   * is nearly always "wait, what does this mean" — so the current caption is
-   * what the question is about, and the ask pane can offer it without the
-   * reader re-selecting a line they just heard.
-   */
-  onPause?: (caption: string | undefined) => void;
   onEnded: () => void;
   /** Fires as the audio moves, so the caller can remember the position. */
   onProgress?: (ms: number) => void;
 }): ReactElement {
+  const { prefs, t } = useUi();
   const audio = useRef<HTMLAudioElement>(null);
+  const fit = useRef<HTMLDivElement>(null);
   const [ms, setMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [rateOpen, setRateOpen] = useState(false);
-  const transport = useTransport(audio, deck !== undefined);
+  const [full, setFull] = useState(false);
+  const chrome = useAutoHide();
+
+  // The frame goes fullscreen through its centring wrapper, so the stage keeps
+  // its 16:9 and letterboxes instead of stretching to the display's shape.
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void fit.current?.requestFullscreen?.();
+  }, []);
+
+  useEffect(() => {
+    const onChange = (): void => setFull(document.fullscreenElement !== null);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const transport = useTransport(audio, deck !== undefined, toggleFullscreen, prefs.rate);
 
   // Clause-level lines, derived from the sentence cues the deck already carries,
   // so a book generated before captions existed gets them without regenerating.
   const captions = useMemo(() => toCaptions(deck?.narration ?? []), [deck]);
-
-  // The line on screen, readable from the audio element's own handlers. They
-  // are attached once, so they would otherwise close over the first caption.
-  const captionRef = useRef<string | undefined>(undefined);
 
   // Read through a ref so a changing resume point cannot re-trigger the effect
   // below: it is consumed once, on the station it belongs to.
@@ -88,10 +100,35 @@ export function DeckPane({
     return () => el.removeEventListener('loadedmetadata', seekThere);
   }, [node.id, deck]);
 
-  // A new src resets playbackRate, so reapply it without touching the position
+  // A new src resets rate and volume — and does it when the media loads, which
+  // is after this effect runs, so `onLoadedMetadata` below applies them again.
+  // Without that second pass every station started at 1x and then jumped.
+  const { apply } = transport;
+  useEffect(apply, [apply, node.id, transport.rate, transport.volume, transport.muted]);
+
+  /**
+   * `timeupdate` fires about four times a second, so everything derived from it
+   * arrived up to 250ms after the sound it belongs to — far past the ~45ms at
+   * which a late picture is noticed. The position is read per frame instead,
+   * committed at most every 32ms so the pane is not re-rendered 60 times a
+   * second to move a step function.
+   */
   useEffect(() => {
-    if (audio.current) audio.current.playbackRate = transport.rate;
-  }, [node.id, transport.rate]);
+    const el = audio.current;
+    if (!el || !playing) return undefined;
+
+    let frame = 0;
+    let last = 0;
+    const tick = (now: number): void => {
+      if (now - last >= CLOCK_MS) {
+        last = now;
+        setMs(Math.round(el.currentTime * 1000));
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, deck]);
 
   if (!deck) {
     // Pending is the ordinary case now: the path lands whole and the stations
@@ -99,28 +136,29 @@ export function DeckPane({
     return (
       <main className="pane deck-pane">
         <div className="deck-empty">
-          {build === 'failed' ? '这一站没能生成' : '这一站还在生成，稍等一下'}
+          {build === 'failed' ? t.deck.failed : t.deck.pending}
         </div>
       </main>
     );
   }
 
-  const slideIdx = lastIndexAtOrBefore(deck.slides.map((s) => s.atMs), ms);
+  // Everything on screen is read at the lead, never at the raw audio position.
+  const at = ms + LEAD_MS;
+  const slideIdx = lastIndexAtOrBefore(deck.slides.map((s) => s.atMs), at);
   // Between captions there is no exact hit, so hold the last one that started
-  const capIdx = lastIndexAtOrBefore(captions.map((c) => c.startMs), ms);
+  const capIdx = lastIndexAtOrBefore(captions.map((c) => c.startMs), at);
   const slide = deck.slides[slideIdx];
   const caption = captions[capIdx];
-  captionRef.current = caption?.text;
 
-  // How far the voice has moved through this slide's own span. Layouts that
-  // build use it to reveal in step; derived from audio time like everything
-  // else on screen, so a scrub backwards folds the slide back up too.
-  const progress = revealProgress(
-    captions.map((c) => c.startMs),
-    slide?.atMs ?? 0,
-    deck.slides[slideIdx + 1]?.atMs ?? deck.durationMs,
-    ms,
-  );
+  // Items arrive when the voice names them, so a card is never still absent
+  // after the sentence that introduced it. Derived from audio time like
+  // everything else on screen, so a scrub backwards folds the slide up again.
+  const reveal = {
+    cues: captions,
+    spanStartMs: slide?.atMs ?? 0,
+    spanEndMs: deck.slides[slideIdx + 1]?.atMs ?? deck.durationMs,
+    ms: at,
+  };
 
   // Clicking the slide is the transport. A deck plays like a video, so the frame
   // itself is the pause target; a 38px button below it was the wrong place to aim.
@@ -140,26 +178,28 @@ export function DeckPane({
   return (
     <main className="pane deck-pane">
       <div className="deck-head">
-        <span className="deck-kicker">第 {node.idx + 1} 站</span>
+        <span className="deck-kicker">{t.unit.nth(node.idx + 1)}</span>
         <span className="deck-title">{node.title}</span>
       </div>
 
-      <div className="slide-stage-fit">
+      <div className="slide-stage-fit" ref={fit}>
         {/* The caption sits inside the frame, the way it would in a video: the
             deck is what is being watched, and a band below it pulled the eye
             off the slide every time the line changed. */}
         <div
-          className="slide-stage captioned"
+          className={`slide-stage captioned${chrome.active || !playing || rateOpen ? ' chrome-up' : ''}`}
           onClick={toggleFromStage}
+          onPointerMove={chrome.wake}
+          onPointerLeave={chrome.leave}
           role="button"
           tabIndex={-1}
-          aria-label={playing ? '暂停' : '播放'}
-          title="点击画面暂停 / 播放"
+          aria-label={playing ? t.deck.pause : t.deck.play}
+          title={t.deck.stageHint}
         >
           {slide && (
             <SlideView
               slide={slide}
-              progress={progress}
+              reveal={reveal}
               chrome={{
                 stageTitle,
                 stationNo: node.idx + 1,
@@ -185,92 +225,139 @@ export function DeckPane({
               <span className="stage-paused-disc"><PlayMark size={38} /></span>
             </div>
           )}
-        </div>
-      </div>
 
-      <div className="transport">
-        {/* The stage is the main pause target, but the button stays: it is the
-            only place the transport state is visible while the deck plays, and
-            a reader reaching for the scrub bar expects it next to it. */}
-        <button
-          type="button"
-          className="play"
-          onClick={transport.toggle}
-          aria-label={playing ? '暂停' : '播放'}
-          title={playing ? '暂停' : '播放'}
-        >
-          {playing ? <PauseMark size={21} /> : <PlayMark size={21} />}
-        </button>
+          <div className="stage-scrim" aria-hidden="true" />
 
-        <input
-          className="scrub" type="range" min={0} max={deck.durationMs} value={ms}
-          onChange={(e) => seek(Number(e.target.value))}
-        />
-        <span className="clock">{fmt(ms)} / {fmt(deck.durationMs)}</span>
+          {/* The transport belongs to the frame, not to the pane: the deck plays
+              like a video, so its controls live where a video's controls live —
+              and the room they used to take below the stage goes to the slide. */}
+          <div className="stage-controls" onClick={(e) => e.stopPropagation()}>
+            {/* The line is drawn, and the range sits invisibly on top of it.
+                A styled `::-webkit-slider-*` cannot thicken its track without
+                also stretching its own thumb into an ellipse. */}
+            <div
+              className="scrub-slot"
+              style={{ '--at': `${pct(ms, deck.durationMs)}%` } as CSSProperties}
+              onPointerEnter={chrome.hold}
+              onPointerLeave={chrome.wake}
+            >
+              <span className="scrub-rail" aria-hidden="true">
+                <span className="scrub-fill" />
+              </span>
+              <span className="scrub-thumb" aria-hidden="true" />
+              <input
+                className="scrub-input" type="range" min={0} max={deck.durationMs} value={ms}
+                onChange={(e) => seek(Number(e.target.value))}
+                aria-label={t.deck.progress}
+              />
+            </div>
 
-        <div className="rate-wrap">
-          {rateOpen && (
-            <>
-              {/* Click anywhere else to dismiss, without trapping focus */}
-              <div className="rate-scrim" onClick={() => setRateOpen(false)} />
-              <div className="rate-menu" role="menu">
-                {RATES.map((r) => (
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={r === transport.rate}
-                    key={r}
-                    className={r === transport.rate ? 'rate-item on' : 'rate-item'}
-                    onClick={() => { transport.setRate(r); setRateOpen(false); }}
-                  >
-                    {r}×
-                  </button>
-                ))}
+            <div className="ctl-row" onPointerEnter={chrome.hold} onPointerLeave={chrome.wake}>
+              <button
+                type="button"
+                className="ctl"
+                onClick={transport.toggle}
+                aria-label={playing ? t.deck.pause : t.deck.play}
+                title={playing ? t.deck.pause : t.deck.play}
+              >
+                {playing ? <PauseMark size={26} /> : <PlayMark size={26} />}
+              </button>
+
+              {/* The slider keeps its width at all times, so showing it is a
+                  fade rather than a reflow of everything to its right. */}
+              <div className="vol">
+                <button
+                  type="button"
+                  className="ctl"
+                  onClick={transport.toggleMute}
+                  aria-label={transport.muted ? t.deck.unmute : t.deck.mute}
+                  title={transport.muted ? t.deck.unmute : t.deck.mute}
+                >
+                  <VolumeMark size={24} muted={transport.muted || transport.volume === 0} />
+                </button>
+                <input
+                  className="volbar" type="range" min={0} max={1} step={0.01}
+                  value={transport.muted ? 0 : transport.volume}
+                  style={{ '--at': `${(transport.muted ? 0 : transport.volume) * 100}%` } as CSSProperties}
+                  onChange={(e) => transport.setVolume(Number(e.target.value))}
+                  aria-label={t.deck.volume}
+                />
               </div>
-            </>
-          )}
-          <button
-            type="button"
-            className={transport.boosting ? 'rate boosting' : 'rate'}
-            aria-haspopup="menu"
-            aria-expanded={rateOpen}
-            onClick={() => setRateOpen((v) => !v)}
-            title="选择倍速 · 长按 → 临时加速"
-          >
-            {transport.boosting ? <FastMark /> : `${transport.rate}×`}
-          </button>
-        </div>
 
-        <span className="page">{slideIdx + 1} / {deck.slides.length}</span>
+              <span className="time">{fmt(ms)} / {fmt(deck.durationMs)}</span>
+              <span className="ctl-grow" />
+
+              <div className="rate-wrap">
+                {rateOpen && (
+                  <>
+                    {/* Click anywhere else to dismiss, without trapping focus */}
+                    <div className="rate-scrim" onClick={() => setRateOpen(false)} />
+                    <div className="rate-menu" role="menu">
+                      {RATES.map((r) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={r === transport.rate}
+                          key={r}
+                          className={r === transport.rate ? 'rate-item on' : 'rate-item'}
+                          onClick={() => { transport.setRate(r); setRateOpen(false); }}
+                        >
+                          {r}×
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className={transport.boosting ? 'ctl wide boosting' : 'ctl wide'}
+                  aria-haspopup="menu"
+                  aria-expanded={rateOpen}
+                  onClick={() => setRateOpen((v) => !v)}
+                  title={t.deck.rate}
+                >
+                  {transport.boosting ? <FastMark size={18} /> : `${transport.rate}×`}
+                </button>
+              </div>
+
+              <span className="ctl wide page">{slideIdx + 1} / {deck.slides.length}</span>
+
+              <button
+                type="button"
+                className="ctl"
+                onClick={toggleFullscreen}
+                aria-label={full ? t.deck.exitFullscreen : t.deck.fullscreen}
+                title={full ? t.deck.exitFullscreen : t.deck.fullscreen}
+              >
+                <FullscreenMark size={22} exit={full} />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <audio
         ref={audio}
         src={audioSrc}
         onTimeUpdate={(e) => {
-          const at = Math.round(e.currentTarget.currentTime * 1000);
-          setMs(at);
-          onProgress?.(at);
+          const now = Math.round(e.currentTarget.currentTime * 1000);
+          // Coarse, but the only ticker while paused or seeking; the frame loop
+          // above owns the position during playback.
+          if (!playing) setMs(now);
+          onProgress?.(now);
         }}
+        onLoadedMetadata={(e) => { e.currentTarget.playbackRate = transport.rate; }}
         onPlay={() => setPlaying(true)}
-        onPause={() => {
-          setPlaying(false);
-          onPause?.(captionRef.current);
-        }}
+        onPause={() => setPlaying(false)}
         onEnded={onEnded}
       />
     </main>
   );
 }
 
-/** The slide in force at time `ms` — the last one whose atMs has passed. */
-function lastIndexAtOrBefore(marks: readonly number[], ms: number): number {
-  let found = 0;
-  for (let i = 0; i < marks.length; i += 1) {
-    if (marks[i]! <= ms) found = i;
-    else break;
-  }
-  return found;
+/** Where the playhead sits, as a percentage the scrub's own gradient reads. */
+function pct(ms: number, total: number): number {
+  return total > 0 ? Math.min(100, Math.max(0, (ms / total) * 100)) : 0;
 }
 
 function fmt(ms: number): string {

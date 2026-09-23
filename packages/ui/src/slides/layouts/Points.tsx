@@ -1,21 +1,14 @@
 import type { ReactElement } from 'react';
 import { fitAll, fitOf } from '@cairn/core/fit';
 import type { Slide } from '@cairn/core/types';
-import { revealCount } from '../reveal';
 
-type Props = Extract<Slide, { layout: 'points' }> & { readonly progress: number };
+type Props = Extract<Slide, { layout: 'points' }> & { readonly shown: number };
 
 /**
- * Up to three claims, appearing one at a time with the narration.
- *
- * No icons here on purpose. The numbered marks already carry the rhythm, and a
- * glyph per line would compete with the words for the same job.
- *
- * The three claims are sized together: one long claim set smaller than its
- * neighbours would read as the least important, which is not what length means.
+ * Up to three claims, arriving with the narration. Sized together: a long claim
+ * set smaller would read as the least important, which is not what length means.
  */
-export function Points({ heading, points, progress }: Props): ReactElement {
-  const shown = revealCount(points.length, progress);
+export function Points({ heading, points, shown }: Props): ReactElement {
 
   return (
     <div className="s">

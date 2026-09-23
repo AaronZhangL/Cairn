@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { useT } from '../settings/SettingsProvider';
 
 export interface PanelControl {
   readonly collapsed: boolean;
@@ -22,7 +23,9 @@ export function PanelToggle({
   label: string;
   hint: string;
 }): ReactElement {
+  const t = useT();
   const { collapsed, toggle } = control;
+  const action = collapsed ? t.panel.expand(label) : t.panel.collapse(label);
 
   return (
     <button
@@ -30,8 +33,8 @@ export function PanelToggle({
       className={`panel-toggle ${side}${collapsed ? ' off' : ''}`}
       onClick={toggle}
       aria-pressed={!collapsed}
-      aria-label={`${collapsed ? '展开' : '收起'}${label}`}
-      title={`${collapsed ? '展开' : '收起'}${label} (${hint})`}
+      aria-label={action}
+      title={`${action} (${hint})`}
     >
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
         <rect

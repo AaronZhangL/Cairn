@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import type { NodeDeck, Path, PathNode } from '@cairn/core/types';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { BookMenu } from './BookMenu';
+import { useT } from '../settings/SettingsProvider';
 
 /**
  * Left pane: stages and their stations.
@@ -13,7 +14,7 @@ import { BookMenu } from './BookMenu';
  * point of the thing.
  */
 export function StagePane({
-  path, decks, currentId, onPick, books = [], onSwitchBook, onAdd, onHome,
+  path, decks, currentId, onPick, books = [], onSwitchBook, onAdd, onHome, onSettings,
   failed, heat, complete = true, collapsed = false,
 }: {
   path: Path;
@@ -32,9 +33,11 @@ export function StagePane({
   onAdd?: () => void;
   /** Back to the shelf. */
   onHome?: () => void;
+  onSettings?: () => void;
   /** Collapsed panes keep their grid slot, or the columns would shift. */
   collapsed?: boolean;
 }): ReactElement {
+  const t = useT();
   if (collapsed) return <nav className="pane stage-pane collapsed" />;
 
   const byId = new Map(path.nodes.map((n) => [n.id, n]));
@@ -54,11 +57,15 @@ export function StagePane({
             onSwitch={onSwitchBook}
             onAdd={onAdd}
             onHome={onHome}
+            onSettings={onSettings}
           />
         </div>
         <div className="stage-meta">
-          {path.nodes.length} 站 · {complete ? '' : '约 '}{path.totalMinutes} 分钟
-          {!complete && pending > 0 && <span className="stage-building"> · 还在建 {pending} 站</span>}
+          {t.unit.count(path.nodes.length)} · {complete ? '' : t.unit.approx}
+          {t.unit.minutes(path.totalMinutes)}
+          {!complete && pending > 0 && (
+            <span className="stage-building">{t.stage.building(pending)}</span>
+          )}
         </div>
       </header>
 
@@ -98,6 +105,7 @@ function StationRow({
   heat: number;
   onPick: (nodeId: string) => void;
 }): ReactElement {
+  const t = useT();
   return (
     <button
       type="button"
@@ -107,10 +115,10 @@ function StationRow({
       <span className="station-mark">{state === 'done' ? '✓' : node.idx + 1}</span>
       <span className="station-title">{node.title}</span>
       {heat > 1 && (
-        <span className="station-heat" title={`这一站问过 ${heat} 次`} aria-hidden="true">·</span>
+        <span className="station-heat" title={t.stage.asked(heat)} aria-hidden="true">·</span>
       )}
       <span className="station-min">
-        {build === 'ready' ? `${minutes}′` : build === 'failed' ? '建不出来' : '准备中'}
+        {build === 'ready' ? `${minutes}′` : build === 'failed' ? t.stage.failed : t.stage.notReady}
       </span>
     </button>
   );

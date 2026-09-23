@@ -1,3 +1,4 @@
+import { CairnError } from '@cairn/core/errors';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bookFile, type DeckIndex, deckFile, deckIndexFile } from '@cairn/core/store/library';
 import type { NodeDeck, Path } from '@cairn/core/types';
@@ -120,6 +121,6 @@ export function useBundle(bookId: string | undefined, base: string | undefined):
 
 async function fetchJson<T>(base: string, path: string): Promise<T> {
   const res = await fetch(`${base}/${path}`);
-  if (!res.ok) throw new Error(`${path} 载入失败 (${res.status})`);
+  if (!res.ok) throw new CairnError('bundle_failed', { path, status: res.status });
   return res.json() as Promise<T>;
 }

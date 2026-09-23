@@ -1,5 +1,9 @@
 import { type Chapter, type ParsedBook, ParseError } from '../types';
 import { countWords, decodeBytes, normalizeText } from './text';
+import { localeFromText } from './language';
+import { promptsFor, type Prompts } from '../pipeline/prompts';
+
+type ParseWords = Prompts['parse'];
 
 const CN_NUM = '[零〇一二三四五六七八九十百千万两]';
 
@@ -8,7 +12,11 @@ const HEADING = new RegExp(
   '^[ \\t]*(' +
     `第\\s*(?:[0-9]+|${CN_NUM}+)\\s*[章节回卷部篇集](?:[ \\t\\u3000]*[^\\n]{0,40})?` +
     '|(?:楔子|序章|序言|引子|尾声|后记|番外|终章)(?:[ \\t\\u3000]*[^\\n]{0,40})?' +
-    '|Chapter\\s+[0-9IVXLCivxlc]+(?:[ \\t]*[^\\n]{0,60})?' +
+    '|(?:Chapter|Part|Book|Section)\\s+[0-9IVXLCivxlc]+(?:[ \\t]*[^\\n]{0,60})?' +
+    // The English counterpart of the 楔子/序章/尾声 list above. Without it an
+    // English book's front and back matter fall into the size-based fallback.
+    '|(?:Prologue|Epilogue|Foreword|Preface|Introduction|Afterword|Appendix|Conclusion)'
+    + '(?:[ \\t]*[^\\n]{0,60})?' +
   ')[ \\t]*$',
   'gm',
 );
@@ -22,7 +30,11 @@ export function parseTxt(bytes: Uint8Array, fileName: string): ParsedBook {
   const text = normalizeText(decodeBytes(bytes));
   if (text.length === 0) throw new ParseError('文件没有可读文本', 'no_content');
 
-  const chapters = splitByHeading(text) ?? splitBySize(text);
+  // Detected before splitting, because the fallback chapter titles below have
+  // to be written in the book's own language.
+  const language = localeFromText(text.slice(0, 4000));
+  const { parse } = promptsFor(language);
+  const chapters = splitByHeading(text, parse) ?? splitBySize(text, parse);
   if (chapters.length === 0) throw new ParseError('未能切分出任何章节', 'no_content');
 
   return {
@@ -30,17 +42,19 @@ export function parseTxt(bytes: Uint8Array, fileName: string): ParsedBook {
     format: 'txt',
     chapters,
     totalWords: chapters.reduce((sum, c) => sum + c.wordCount, 0),
+    // A plain text file declares nothing, so the text is all there is to go on
+    language,
   };
 }
 
 /** Returns null when no headings are found, deferring to the size-based fallback. */
-function splitByHeading(text: string): readonly Chapter[] | null {
+function splitByHeading(text: string, parse: ParseWords): readonly Chapter[] | null {
   const marks = [...text.matchAll(HEADING)].filter((m) => m.index !== undefined);
   if (marks.length < 2) return null;
 
   const chapters: Chapter[] = [];
   const preface = text.slice(0, marks[0]!.index!).trim();
-  if (countWords(preface) > 0) chapters.push(makeChapter(chapters.length, '开篇', preface));
+  if (countWords(preface) > 0) chapters.push(makeChapter(chapters.length, parse.opening, preface));
 
   marks.forEach((mark, i) => {
     const start = mark.index!;
@@ -53,7 +67,7 @@ function splitByHeading(text: string): readonly Chapter[] | null {
   return chapters;
 }
 
-function splitBySize(text: string): readonly Chapter[] {
+function splitBySize(text: string, parse: ParseWords): readonly Chapter[] {
   const paragraphs = text.split(/\n{2,}/).filter((p) => p.trim().length > 0);
   const chapters: Chapter[] = [];
   let buffer: string[] = [];
@@ -61,7 +75,7 @@ function splitBySize(text: string): readonly Chapter[] {
 
   const flush = (): void => {
     if (buffer.length === 0) return;
-    chapters.push(makeChapter(chapters.length, `第 ${chapters.length + 1} 部分`, buffer.join('\n\n')));
+    chapters.push(makeChapter(chapters.length, parse.part(chapters.length + 1), buffer.join('\n\n')));
     buffer = [];
     words = 0;
   };

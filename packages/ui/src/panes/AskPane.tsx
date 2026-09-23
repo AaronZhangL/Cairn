@@ -1,5 +1,6 @@
 import {useState } from 'react';
 import type { ReactElement } from 'react';
+import { useT } from '../settings/SettingsProvider';
 import type { Answer } from '@cairn/core/pipeline/ask';
 import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 
@@ -36,7 +37,9 @@ export function AskPane({
   /** Collapsed panes keep their grid slot, or the columns would shift. */
   collapsed?: boolean;
 }): ReactElement {
+  const t = useT();
   const [draft, setDraft] = useState('');
+  const sendable = draft.trim().length > 0;
 
   if (collapsed) return <aside className="pane ask-pane collapsed" />;
 
@@ -48,7 +51,7 @@ export function AskPane({
             {turn.selection && <blockquote className="sel">{turn.selection}</blockquote>}
             <div className="q">{turn.question}</div>
 
-            {turn.pending && <div className="a pending">思考中…</div>}
+            {turn.pending && <div className="a pending">{t.ask.thinking}</div>}
 
             {turn.answer && (
               <BookAnswer
@@ -71,8 +74,8 @@ export function AskPane({
             type="button"
             className="sel-drop"
             onClick={onClearSelection}
-            aria-label="不带这句"
-            title="不带这句"
+            aria-label={t.ask.dropQuote}
+            title={t.ask.dropQuote}
           >
             ×
           </button>
@@ -87,8 +90,8 @@ export function AskPane({
           if (q) { onAsk(q); setDraft(''); }
         }}
       >
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="问点什么…" />
-        <button type="submit">问</button>
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t.ask.placeholder} />
+        <button type="submit" disabled={!sendable}>{t.ask.send}</button>
       </form>
     </aside>
   );
@@ -102,9 +105,10 @@ function BookAnswer({
   onSearchOutside: () => void;
   searched: boolean;
 }): ReactElement {
+  const t = useT();
   return (
     <div className={answer.grounded ? 'a book' : 'a book ungrounded'}>
-      <div className="src-tag">书里说</div>
+      <div className="src-tag">{t.ask.fromBook}</div>
       <p>{answer.text}</p>
 
       {answer.suggestion && <p className="suggest">{answer.suggestion}</p>}
@@ -113,7 +117,7 @@ function BookAnswer({
         <div className="chips">
           {answer.sourceChapters.map((c) => (
             <button type="button" key={c} className="chip" onClick={() => onJumpToChapter(c)}>
-              第 {c} 章
+              {t.ask.chapter(c)}
             </button>
           ))}
         </div>
@@ -122,7 +126,7 @@ function BookAnswer({
       {/* Going outside the book is the reader's call, never the model's */}
       {!answer.grounded && !searched && (
         <button type="button" className="go-search" onClick={onSearchOutside}>
-          这本书里没讲到，要我去网上查吗？
+          {t.ask.notInBook}
         </button>
       )}
     </div>
@@ -130,9 +134,10 @@ function BookAnswer({
 }
 
 function WebAnswer({ answer }: { answer: OutsideAnswer }): ReactElement {
+  const t = useT();
   return (
     <div className="a web">
-      <div className="src-tag web-tag">书外补充 · 来自网络</div>
+      <div className="src-tag web-tag">{t.ask.outsideTag}</div>
       <p>{answer.text}</p>
       <ul className="cites">
         {answer.citations.map((c) => (

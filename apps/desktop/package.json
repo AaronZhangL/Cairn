@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build": "vite build",
     "start": "electrobun prepare && vite build && electrobun dev",
     "package": "electrobun prepare && vite build && electrobun build --env=stable"
   },

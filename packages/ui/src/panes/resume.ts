@@ -91,6 +91,16 @@ export function closeBook(store: ResumeStore): ResumeStore {
 }
 
 /**
+ * Drop a deleted book's position. Re-adding the same file lands on the same id
+ * (`bookSlug` hashes the path), so a kept place would resume the new path at a
+ * station that no longer exists.
+ */
+export function forgetBook(store: ResumeStore, bookId: string): ResumeStore {
+  const { [bookId]: _gone, ...places } = store.places;
+  return store.lastBookId === bookId ? { places } : { ...store, places };
+}
+
+/**
  * Where playback should start for a station, given what was stored.
  *
  * `durationMs` is the station's real length, so the tail rule can be applied; 0

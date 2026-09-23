@@ -22,7 +22,9 @@ constantly:
    problem with the previous design.
 3. **Regions separate by surface, not by rules.** The sidebar and the ask pane use `--chrome`
    and carry no border. Where a divider seems necessary, use a scroll-edge fade instead of a
-   1px line.
+   1px line. The one exception is a **draggable** splitter, which is a control and not a
+   divider: it carries a `--line` rule at rest. In the dark theme `--chrome` and `--page` sit
+   1.03 apart, so surface alone leaves nothing to grab for.
 
 ### Directions that were rejected
 
@@ -144,9 +146,45 @@ Nothing here can be unit-tested: overflow is a property of real layout and there
 setup. `?gauntlet` in `bun run dev` draws every layout at its worst, which is what the budgets
 are checked against.
 
+## Slide layouts
+
+Nine layouts, each a different *shape of claim*. They are not interchangeable skins: picking the
+wrong one makes a true statement unreadable, so the reasoning behind each belongs here rather
+than in a comment on the component.
+
+| Layout | The claim it is for | The decision inside it |
+| --- | --- | --- |
+| `title` | This station, named | The oversized station number and the pictogram exist so the card is recognisable when scrolled back to; a wall of identically-styled titles is unnavigable |
+| `points` | Up to three claims | No icons — the numbered marks already carry the rhythm, and a glyph per line competes with the words. One thread down the marks so three claims read as one argument |
+| `number` | Figures worth comparing | Bars, not three big numerals: "1" beside "110" says nothing until the eye sees the ratio. No bars at all when the values are not comparable, because a bar drawn from a guess asserts a ratio the book never claimed. A zero gets a marked-empty track — quoting a zero is the point |
+| `quote` | The book's own words | Styled unlike everything else, because "this is verbatim" must be visible without saying it. A quote whose source could not be located says so: that is exactly the one worth doubting |
+| `compare` | A against B | The right pane is emphasised and arrives a beat later, so the contrast is stated rather than merely laid out. Each side may claim one glyph, which here does real work — it labels which pane is which at a glance |
+| `flow` | A causal chain | A column, never a wrapped row: a wrapped row breaks the chain wherever the right edge falls, and the break reads as a meaningful gap. The connector is the content — a chain with gaps is a list |
+| `timeline` | A dated or staged progression | Distinct from `flow`: the order is the book's own and the mark carries information a bare chain cannot show. Marks sit on one spine, because marks with gaps between them are a list, not a run |
+| `matrix` | The same question asked of both sides | `compare` sets two lists side by side and leaves the reader to pair them up; here the pairing *is* the layout, so a row that does not line up cannot exist |
+| `relation` | Cause and effect, as stated | The relation sits on the arrow rather than in a sentence, so the claim cannot be read as a loose association between two nearby nouns |
+
+Three rules hold across all nine:
+
+- **Every layout builds with the narration, item by item.** An item appears at the caption that
+  names it (`reveal.ts` matches the slide's words against the script), falling back to an even
+  share of the slide's span when the script names it nowhere, and never arriving before the item
+  above it. Evenly spaced beats put a card on screen *after* the sentence that introduced it,
+  which reads as the deck lagging the voice. Everything is derived from audio time, so a scrub
+  backwards folds the slide up again — an entry animation would replay out of step.
+- **No layout invents its own material.** `number`, `timeline`, `matrix` and `relation` draw only
+  on `figures` / `sequences` / `contrasts` / `relations` extracted by the map stage. These four
+  look the most evidenced, so a fabricated one does the most damage.
+- **Nothing is drawn.** Type, stroked shapes, and glyphs from the fixed local set. No generated
+  images — see SPEC.md.
+
+Not built: `world` (a novel's setting; nothing in the notes supports it yet) and `stack`
+(proportional composition, which `number`'s bars already cover).
+
 ## Motion
 
-There is almost none today, deliberately. When adding it:
+Two places have it: items building with the narration (above), and the player chrome (below).
+Everywhere else, still none. When adding more:
 
 - **Springs, not fixed-duration easing.** A spring can be interrupted and carries velocity; a
   scripted animation cannot.
@@ -157,6 +195,73 @@ There is almost none today, deliberately. When adding it:
 - **Feedback happens on pointer-down, not on release**, and updates continuously during the
   interaction rather than only at the end.
 - Animate `transform` and `opacity` only.
+
+### The player chrome
+
+The deck plays like a video, so its controls behave like a video's: nothing but a 3px progress
+line until the pointer moves over the frame. The room the old always-on bar took below the stage
+goes to the slide, which matters more than it sounds — type is sized in `cqw`, so a bigger frame
+is bigger type throughout.
+
+Entering, controls land a beat apart; leaving, they go together in 140ms. A staggered exit reads
+as reluctance. The stagger is `transition-delay`, never keyframes, so moving the pointer away
+mid-entrance turns them around from wherever they are.
+
+| At | Element | Motion |
+| --- | --- | --- |
+| 0ms | scrim | opacity only — it is the ground the rest lands on, and moving it drags the eye |
+| 0ms | caption | shifts up by `--ctl-h`, so it is never covered for even a frame |
+| 20ms | play | `translateY 6px → 0` |
+| 60–180ms | volume, time, rate, page, fullscreen | the same, 30ms apart |
+| — | scrub | **does not fade in.** It rises from the frame's bottom edge by `--ctl-h` |
+
+That last row is the point. The idle line and the scrub are one object, not a line that fades
+out and a bar that fades in. Hovering it scales **the rail only** to 1.9 and grows the thumb from
+0 — scaling anything that contains the thumb draws the round handle as an ellipse.
+
+### Staying with the sound
+
+The picture is drawn **90ms ahead of the audio**, and that is deliberate.
+
+ITU-R BT.1359-1 puts the detectability thresholds at roughly -45ms to +125ms, and the asymmetry
+is the point: the brain expects sound to arrive after sight, so a picture that lands *before* its
+sound goes unnoticed to about 125ms, while one that lands *after* is caught at 45ms. Zero is not
+the target; slightly early is.
+
+Three things used to push the picture the wrong way, and all three are fixed:
+
+- **`timeupdate` fires about four times a second**, so everything derived from it was up to 250ms
+  late. The position is read from `requestAnimationFrame` instead, committed at most every 32ms —
+  a step function does not need 60 commits a second.
+- **A 420ms build** meant a revealed item only read as arrived ~200ms after its cue. It is 240ms
+  now.
+- **Nothing led the sound.** `LEAD_MS` in `reveal.ts` is the single knob; it also absorbs the
+  frame quantisation and the audio output latency under it.
+
+### When the chrome goes away
+
+Four things hold it up, and only four: the pointer moved in the last 2.5s, the pointer is resting
+on the controls, the rate menu is open, or the deck is paused. Nothing else.
+
+The trap to avoid is **focus**. A clicked control keeps DOM focus for as long as nothing else
+takes it, so pinning on `:focus-within` pins forever — in fullscreen there is no "move the mouse
+away" to break it, and the bar never comes down again. The pin is `:has(:focus-visible)`, which a
+mouse click does not set and a Tab does.
+
+In fullscreen the cursor hides with the controls. There is nowhere for the pointer to go — it
+cannot leave the frame — so an arrow left on the slide is the last thing covering it. Any
+movement brings both back.
+
+Hidden controls take no clicks (`pointer-events: none`). An invisible button that still responds
+is worse than no button: the click does something the reader cannot see.
+
+Two constraints worth keeping:
+
+- **The volume slider's width is always reserved**, and only its opacity and a small `translateX`
+  change. Animating the width (as YouTube does) reflows everything to its right.
+- **Controls stay up while paused**, and `:focus-within` counts as hover — otherwise the bar is
+  unreachable by keyboard. Sizes are `clamp(px, cqw, px)` so the same controls read correctly in
+  a narrow pane and in fullscreen.
 
 ## Accessibility
 

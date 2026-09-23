@@ -13,7 +13,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import {
-  audioFile, bookDir, bookFile, type DeckIndex, deckFile, deckIndexFile,
+  audioFile, bookDir, bookFile, type DeckIndex, deckFile, deckIndexFile, isBookId,
   LIBRARY_INDEX, type LibraryEntry, normalizeEntry,
 } from '@cairn/core/store/library';
 import type { Chapter, ChapterNote, NodeDeck, Path } from '@cairn/core/types';
@@ -87,11 +87,12 @@ export async function installDeck(
   // what shipped one budget's audio with another budget's subtitles.
   await Bun.write(target, Bun.file(join(audioDir, basename(deck.audioPath))));
 
-  // The deck points at the copy the player can reach, not the cache it was built in
+  // Stored relative to the book, never as the absolute path it was built at: a
+  // book is meant to survive being copied elsewhere. See `NodeDeck.audioPath`.
   await mkdir(join(at(bookDir(bookId)), 'decks'), { recursive: true });
   await writeFile(
     at(deckFile(bookId, deck.nodeId)),
-    JSON.stringify({ ...deck, audioPath: target }),
+    JSON.stringify({ ...deck, audioPath: `audio/${deck.nodeId}.mp3` }),
   );
 }
 
@@ -112,6 +113,27 @@ export async function readDeckIndex(bookId: string): Promise<DeckIndex | undefin
 export async function rewritePath(path: Path): Promise<void> {
   await writeFile(at(bookFile(path.bookId, 'path.json')), JSON.stringify(path));
   forget(path.bookId);
+}
+
+/**
+ * Take a book out of the library, files and all. Irreversible.
+ *
+ * Two guards, because the id crosses the RPC bridge and is joined onto the
+ * library root: it must be a shape `bookSlug` could have produced, and it must
+ * already be listed. Delisting happens before the files go, so a failed removal
+ * leaves an absent book rather than a listed one that cannot open.
+ */
+export function deleteBook(bookId: string): Promise<boolean> {
+  return serialize(async () => {
+    if (!isBookId(bookId)) return false;
+    const index = await listBooks();
+    if (!index.some((b) => b.id === bookId)) return false;
+
+    await writeFile(at(LIBRARY_INDEX), JSON.stringify(index.filter((b) => b.id !== bookId)));
+    await rm(at(bookDir(bookId)), { recursive: true, force: true });
+    forget(bookId);
+    return true;
+  });
 }
 
 export function upsertEntry(entry: LibraryEntry): Promise<LibraryEntry> {

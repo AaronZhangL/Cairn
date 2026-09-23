@@ -3,24 +3,13 @@ import { type FitStep, fitAll, fitOf } from '@cairn/core/fit';
 import type { ComparePane, Slide } from '@cairn/core/types';
 import { Icon } from '../Icon';
 
-type Props = Extract<Slide, { layout: 'compare' }> & { readonly progress: number };
+type Props = Extract<Slide, { layout: 'compare' }> & { readonly showRight: boolean };
 
 /**
- * A against B.
- *
- * The right pane is the emphasised one: a comparison on a slide almost always
- * exists to land the second side, and two identically weighted panes make the
- * reader do that work themselves. The second pane also arrives a beat later,
- * so the contrast is stated rather than merely laid out.
- *
- * Each side may claim one glyph — here an icon does real work, because it
- * labels which pane is which at a glance across the whole slide.
- *
- * Both panes take one size, computed across both: the panes sit side by side,
- * so sizing them apart would say one side matters more when all that differs
- * is how long its words are.
+ * A against B. Both panes take one size computed across both — sizing them apart
+ * would say one side matters more when all that differs is word length.
  */
-export function Compare({ heading, left, right, progress }: Props): ReactElement {
+export function Compare({ heading, left, right, showRight }: Props): ReactElement {
   const titleFit = fitAll([left.title, right.title], 'paneTitle');
   const pointFit = fitAll([...left.points, ...right.points], 'panePoint');
 
@@ -32,7 +21,7 @@ export function Compare({ heading, left, right, progress }: Props): ReactElement
         <div className="s-vs" aria-hidden="true" />
         <Pane
           pane={right}
-          className={progress > 0.34 ? 's-pane hl in' : 's-pane hl out'}
+          className={showRight ? 's-pane hl in' : 's-pane hl out'}
           titleFit={titleFit}
           pointFit={pointFit}
         />

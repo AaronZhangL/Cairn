@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { memoryStore } from '../../src/pipeline/job';
-import { startDeckScheduler } from '../../src/pipeline/scheduler';
+import { lookaheadFor, startDeckScheduler } from '../../src/pipeline/scheduler';
 import type { NodeDeck, PathNode } from '../../src/types';
 
 const nodes = (count: number): readonly PathNode[] =>
@@ -345,5 +345,69 @@ describe('store 键与站点 id 分开', () => {
     });
     await s.done;
     expect([...s.ready()]).toEqual(['n0', 'n1']);
+  });
+});
+
+describe('lookaheadFor', () => {
+  const LONG = 40;
+
+  test('starts at one: nothing is worth building before the station being watched', () => {
+    expect(lookaheadFor(0, LONG)).toBe(1);
+  });
+
+  test('grows as the reader gets deeper into the path', () => {
+    expect(lookaheadFor(2, LONG)).toBeGreaterThan(lookaheadFor(0, LONG));
+    expect(lookaheadFor(6, LONG)).toBeGreaterThan(lookaheadFor(2, LONG));
+  });
+
+  test('stays modest while the reader might still stop', () => {
+    expect(lookaheadFor(10, LONG)).toBeLessThanOrEqual(4);
+  });
+
+  /** Past halfway they have as good as committed, so stop rationing. */
+  test('opens up past halfway', () => {
+    expect(lookaheadFor(8, 15)).toBeGreaterThan(lookaheadFor(6, 40));
+    expect(lookaheadFor(20, LONG)).toBeGreaterThan(lookaheadFor(19, LONG));
+  });
+
+  test('never asks for more lanes than there are stations', () => {
+    expect(lookaheadFor(2, 3)).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('momentum', () => {
+  test('one station at a time at the start, more once the reader is deep in', async () => {
+    const g = gated();
+    const scheduler = startDeckScheduler({
+      nodes: nodes(12), build: g.build, store: memoryStore<NodeDeck>(),
+    });
+
+    await g.waitStart(1);
+    expect(g.started).toHaveLength(1);
+
+    // The reader walks to station 7; the builder should now run further ahead
+    scheduler.focus('n7');
+    await g.waitStart(2);
+    expect(g.started.length).toBeGreaterThan(1);
+
+    scheduler.stop();
+    for (const id of g.outstanding()) g.release(id);
+    await scheduler.done;
+  });
+
+  test('an explicit lookahead is still honoured exactly', async () => {
+    const g = gated();
+    const scheduler = startDeckScheduler({
+      nodes: nodes(12), build: g.build, store: memoryStore<NodeDeck>(), lookahead: 2,
+    });
+
+    await g.waitStart(2);
+    scheduler.focus('n9');
+    await Promise.resolve();
+    expect(g.started).toHaveLength(2);
+
+    scheduler.stop();
+    for (const id of g.outstanding()) g.release(id);
+    await scheduler.done;
   });
 });

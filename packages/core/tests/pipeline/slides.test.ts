@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { locateQuote, makeDeck } from '../../src/pipeline/slides';
+import { locateQuote, makeDeck, slideCount } from '../../src/pipeline/slides';
 import type { LlmProvider, LlmRequest } from '../../src/llm/types';
 import { BUDGETS, HARD_CAP } from '../../src/fit';
 import type { ChapterNote, PathNode } from '../../src/types';
@@ -28,6 +28,51 @@ const cjk = (n: number): string => '字'.repeat(n);
 /** Just past the last rung of the fit ladder for this field. */
 const unrenderable = (field: keyof typeof BUDGETS): string =>
   cjk(Math.ceil(BUDGETS[field] * HARD_CAP) + 1);
+
+describe('makeDeck 新版式', () => {
+  test('timeline 至少两条，每条 mark 与正文都要有', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'timeline', items: [{ mark: '第 1 天', text: '开始' }], atSentence: 0 },
+      { layout: 'timeline', items: [{ mark: '第 1 天' }, { mark: '第 2 周', text: '放弃高峰' }], atSentence: 1 },
+      {
+        layout: 'timeline',
+        items: [{ mark: '第 1 天', text: '开始' }, { mark: '第 66 天', text: '自动化' }],
+        atSentence: 2,
+      },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('matrix 要两个列名和至少两行，行里三格齐全', async () => {
+    const row = { aspect: '关注点', left: '终点', right: '过程' };
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'matrix', left: '目标', rows: [row, row], atSentence: 0 },
+      { layout: 'matrix', left: '目标', right: '体系', rows: [row], atSentence: 1 },
+      { layout: 'matrix', left: '目标', right: '体系', rows: [row, { aspect: '失败时', left: '重来' }], atSentence: 2 },
+      { layout: 'matrix', left: '目标', right: '体系', rows: [row, { aspect: '失败时', left: '重来', right: '漏一次' }], atSentence: 2 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('relation 至少两条链接，from/how/to 缺一不可', async () => {
+    const link = { from: '提示', how: '触发', to: '渴望' };
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'relation', links: [link], atSentence: 0 },
+      { layout: 'relation', links: [link, { from: '环境', to: '行为' }], atSentence: 1 },
+      { layout: 'relation', links: [link, { from: '环境', how: '提高', to: '概率' }], atSentence: 2 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('超出条数上限的部分被截掉，而不是整张丢弃', async () => {
+    const items = Array.from({ length: 9 }, (_, i) => ({ mark: `第 ${i} 天`, text: `第 ${i} 步` }));
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'timeline', items, atSentence: 0 },
+    ])));
+    const s = d.slides[0]!.slide;
+    expect(s.layout === 'timeline' && s.items).toHaveLength(6);
+  });
+});
 
 describe('makeDeck 长度上限', () => {
   test('必填字段长到没有字号放得下时，整张幻灯丢弃', async () => {
@@ -84,6 +129,26 @@ describe('makeDeck 长度上限', () => {
       },
     ])));
     expect(d.slides).toHaveLength(0);
+  });
+});
+
+describe('makeDeck 提示词', () => {
+  test('章节笔记里的结构化材料被交给模型', async () => {
+    const rich = [{
+      ...notes[0]!,
+      figures: [{ value: '32 华氏度', label: '融点' }],
+      contrasts: [{ about: '关注点', left: '终点', right: '过程' }],
+      sequences: [{ title: '四步', steps: [{ mark: '1', text: '提示' }, { mark: '2', text: '渴望' }] }],
+      relations: [{ from: '提示', how: '触发', to: '渴望' }],
+    }];
+    const provider = stub(deck([]));
+    await makeDeck(node, rich, provider);
+
+    const prompt = provider.seen[0]!.prompt;
+    expect(prompt).toContain('32 华氏度');
+    expect(prompt).toContain('关注点: 终点 / 过程');
+    expect(prompt).toContain('1 提示 → 2 渴望');
+    expect(prompt).toContain('提示 触发 渴望');
   });
 });
 
@@ -152,9 +217,12 @@ describe('makeDeck 时序', () => {
     expect(d.slides.map((s) => s.atSentence)).toEqual([0, 2]);
   });
 
-  test('超过 6 张被截断', async () => {
-    const many = Array.from({ length: 10 }, (_, i) => ({ layout: 'quote', text: `q${i}`, atSentence: 0 }));
-    expect((await makeDeck(node, notes, stub(deck(many)))).slides).toHaveLength(6);
+  test('超过这一站能放下的张数就截断', async () => {
+    // A 3-minute station takes 11; the cap now follows the narration's length
+    // instead of a fixed six, which left one card on screen for fifty seconds.
+    const { max } = slideCount(node.estMinutes);
+    const many = Array.from({ length: max + 4 }, (_, i) => ({ layout: 'quote', text: `q${i}`, atSentence: 0 }));
+    expect((await makeDeck(node, notes, stub(deck(many)))).slides).toHaveLength(max);
   });
 });
 
@@ -214,5 +282,29 @@ describe('locateQuote', () => {
   test('空摘句不会被当成命中', () => {
     expect(locateQuote('随便什么', [{ idx: 0, title: 't', gist: '', keyPoints: [], quotes: [''] }]))
       .toBeUndefined();
+  });
+});
+
+describe('slideCount', () => {
+  test('scales with how long the station is', () => {
+    // The complaint this fixes: five cards across four minutes of narration.
+    expect(slideCount(4).max).toBeGreaterThan(8);
+    expect(slideCount(4).min).toBeGreaterThan(slideCount(2).min);
+  });
+
+  test('a short station still gets a deck, not two cards', () => {
+    expect(slideCount(1).min).toBeGreaterThanOrEqual(4);
+    expect(slideCount(0).min).toBeGreaterThanOrEqual(4);
+  });
+
+  test('never asks for more than the model can place well', () => {
+    expect(slideCount(30).max).toBeLessThanOrEqual(14);
+  });
+
+  test('min always leaves the model room under max', () => {
+    for (const minutes of [0, 1, 2, 3, 4, 6, 10, 30]) {
+      const { min, max } = slideCount(minutes);
+      expect(min).toBeLessThan(max);
+    }
   });
 });

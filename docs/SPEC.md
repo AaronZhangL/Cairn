@@ -46,11 +46,23 @@ book.**
 
 ## 2. Intake: shelf, parse, budget
 
+**A note on the word.** The code and these documents call one node of the path a *station*. The
+reader sees 章, because that is the word they reached for. The two are not the book's own
+chapters — those appear only in a quote's provenance, which says 原书第 N 章 to keep them apart.
+The reader-facing noun lives in `packages/ui/src/copy.ts` so changing it stays one edit.
+
 1. **Pick a book** — a local EPUB, TXT or Markdown file.
 2. **Preview** — parse only, no model call, so picking a file stays instant: title, author,
    chapter count, word count.
 3. **Pick a budget** — four rungs, described below.
 4. **Generate** — per-chapter progress, interruptible, resumable from where it stopped.
+
+**Deleting** is on the shelf row, behind a confirm, and takes the whole book: its path, decks,
+audio, pipeline cache and stored reading position. Nothing is archived — this is one machine and
+one owner, and a "deleted" book still occupying a gigabyte of audio would be a lie about disk.
+
+The position has to go with it. Re-adding the same file produces the same id (`bookSlug` hashes
+the path), so a kept position would resume the new path at a station that no longer exists.
 
 ### The budget is the constraint; the station count is the result
 
@@ -170,8 +182,22 @@ NarrationCue { text, startMs, endMs }       // drives the caption
 | `quote` | A line from the book |
 | `compare` | A versus B |
 | `flow` | A chain of reasoning or cause |
+| `timeline` | A dated or staged progression |
+| `matrix` | The same question asked of both sides |
+| `relation` | Cause and effect, as the book states it |
 
-Three to five slides per station. `relation` / `timeline` / `world` (for novels) are not built.
+Slides per station follow the station's length — roughly one per 22 seconds of narration, four
+at the fewest and fourteen at the most (`slideCount`). A fixed cap of six left a four-minute
+station holding one card for fifty seconds, which reads as a stall. `world` (a novel's setting)
+is not built.
+
+The last four draw only on material the map stage extracted verbatim — `figures`, `sequences`,
+`contrasts`, `relations` on each `ChapterNote`. A chapter that yields none of a kind produces no
+slide of that kind. These are the layouts that look most evidenced, so a fabricated one does the
+most damage; the rule is enforced in the prompt and in normalization, not left to taste.
+
+The reasoning behind each layout — what shape of claim it is for, and the decision inside it —
+is in [DESIGN.md](DESIGN.md).
 
 **No image-generation model is called.** Abstract ideas do not yield informative illustrations,
 and a good deck is mostly type and simple diagrams anyway. Pictograms are not generated images:
@@ -212,6 +238,20 @@ Deck caching is keyed on **content, not position**: `deckKey()` fingerprints the
 ---
 
 ## 5. Player: the three panes
+
+### The deck plays like a video
+
+The centre pane is a player. Nothing shows over the frame but a progress line until the pointer
+moves; the controls fade in on the frame itself and fade out again after 2.5 seconds idle, or
+300ms after the pointer leaves. They stay up while paused, because pausing means looking for
+something.
+
+Play/pause, volume with mute, elapsed and total, playback rate, slide count, fullscreen —
+all bare marks with no container, so the strongest thing on screen stays the slide. Keyboard:
+space, ← / → to seek (hold to rewind or to speed up), ↑ / ↓ volume, `m` mute, `f` fullscreen.
+
+Fullscreen goes through the frame's centring wrapper, so the slide keeps its 16:9 and
+letterboxes rather than stretching to the display's shape.
 
 ```
 ┌──────────┬────────────────────────────┬──────────────┐
@@ -356,6 +396,6 @@ tell whether a prompt change made things better or worse.
 | Spaced repetition | Conflicts with "you walk it, then you are done" |
 | Retrieval **within** one book | The index fits in context (§6). Retrieval **across** books is a separate question, and the answer there is yes (§7) |
 
-**Not built yet, but in scope:** novel layouts (`timeline`, `relation`, `world`); the plain-text
+**Not built yet, but in scope:** the `world` layout (a novel's setting); the plain-text
 rendering of a deck; cross-book memory (§7); pruning the pipeline cache — content-addressed keys
 mean every regeneration adds a fresh set of entries and audio, and nothing removes the old ones.

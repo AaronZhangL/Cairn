@@ -1,0 +1,284 @@
+/**
+ * Chinese copy. Typed against `Messages`, so a key added to `en` and not here
+ * fails the typecheck rather than falling back silently at runtime.
+ */
+import type { Messages } from './en';
+
+export const zh: Messages = {
+  errors: {
+    unsupported_format: (p: { ext?: string; accepted?: string }) =>
+      `暂不支持 .${p.ext || '未知'} 格式，可上传 ${p.accepted ?? 'EPUB / TXT / Markdown'}。`,
+    empty_file: '这个文件是空的。',
+    corrupt_archive: 'EPUB 压缩包损坏，或者根本不是 EPUB。',
+    no_content: '这个文件里没有找到可读的正文。',
+    decode_failed: '读不出这个文件的文字编码。',
+
+    llm_timeout: '模型太久没有回应。',
+    llm_aborted: '这次调用已取消。',
+    llm_bad_output: '模型返回了这个程序读不懂的内容。',
+    llm_failed: 'codex 命令失败了。确认它已安装并在 PATH 上。',
+
+    tts_missing:
+      '找不到 edge-tts，无法合成旁白。装一个（pip install edge-tts），或把可执行文件路径写进 CAIRN_EDGE_TTS 环境变量。',
+    tts_failed: 'edge-tts 合成失败。',
+    tts_no_cues: 'edge-tts 没有产出字幕时间轴。',
+    tts_unaligned: '没有字幕时间轴，无法对齐旁白。',
+
+    map_empty: '逐章压缩没有产出任何内容。',
+    reduce_empty: '这本书排不出可用的章节。',
+    no_narration: (p: { label?: string }) => `${p.label ?? '有一章'}没有产出口播稿。`,
+    missing_source_chapter: (p: { n?: number; title?: string }) =>
+      `第 ${p.n ?? '?'} 章「${p.title ?? ''}」的溯源章节不存在。`,
+    node_failed: '这一章没能建成。',
+    generation_stopped: '生成已停止。',
+    unknown_node: '这一章不属于这条路。',
+    cancelled: '已取消。',
+
+    book_not_listed: '书架上没有这本书。',
+    delete_failed: '这本书删不掉。',
+    main_silent: '主进程没有响应，重启一次桌面应用再试。',
+    bundle_failed: (p: { path?: string; status?: number }) =>
+      `${p.path ?? '有个文件'} 载入失败（${p.status ?? '?'}）。`,
+    tavily_key_missing: '没有设置 Tavily API Key，无法联网搜索。',
+    tavily_failed: (p: { status?: number }) => `Tavily 返回 ${p.status ?? '?'}。`,
+
+    offline_pick: '选择文件需要桌面应用，用 `bun run start` 启动。',
+    offline_generate: '生成路径需要桌面应用，用 `bun run start` 启动。',
+    offline_search: '联网搜索需要桌面应用，用 `bun run start` 启动。',
+    offline_delete: '删除书需要桌面应用，用 `bun run start` 启动。',
+
+    unknown: '出了点问题。',
+  },
+
+  unit: {
+    node: '章',
+    nth: (n: number) => `第 ${n} 章`,
+    minutes: (n: number) => `${n} 分钟`,
+    count: (n: number) => `${n} 章`,
+    approx: '约 ',
+    duration: (minutes: number) => (minutes < 60
+      ? `${minutes} 分钟`
+      : `${Number.isInteger(minutes / 60) ? minutes / 60 : (minutes / 60).toFixed(1)} 小时`),
+    words: (n: number) => `${n.toLocaleString('zh-CN')} 字`,
+  },
+
+  stage: {
+    building: (n: number) => ` · 还在建 ${n} 章`,
+    notReady: '准备中',
+    failed: '建不出来',
+    asked: (n: number) => `这一章问过 ${n} 次`,
+  },
+
+  deck: {
+    play: '播放',
+    pause: '暂停',
+    stageHint: '点击画面暂停 / 播放',
+    pending: '这一章还在生成，稍等一下',
+    failed: '这一章没能生成',
+    mute: '静音',
+    unmute: '取消静音',
+    volume: '音量',
+    progress: '进度',
+    rate: '选择倍速 · 长按 → 临时加速',
+    fullscreen: '全屏',
+    exitFullscreen: '退出全屏',
+  },
+
+  ask: {
+    placeholder: '问点什么…',
+    send: '发送',
+    thinking: '思考中…',
+    fromBook: '书里说',
+    chapter: (n: number) => `第 ${n} 章`,
+    notInBook: '这本书里没讲到，要我去网上查吗？',
+    outsideTag: '书外补充 · 来自网络',
+    dropQuote: '不带这句',
+  },
+
+  menu: {
+    addBook: '添加一本书',
+    backToShelf: '返回书架',
+    settings: '设置…',
+  },
+
+  panel: {
+    expand: (what: string) => `展开${what}`,
+    collapse: (what: string) => `收起${what}`,
+    stagePane: '站点栏',
+    askPane: '提问栏',
+    splitterDrag: (collapsed: boolean) => `拖动调整宽度，双击${collapsed ? '展开' : '收起'}`,
+  },
+
+  home: {
+    tagline: '把一本你已经有的电子书，变成一条可以走到头的路。',
+    dropTitle: '放一本电子书进来',
+    dropSub: (formats: string) => `支持 ${formats} · 书不会离开这台机器`,
+    dropCta: '选择文件…',
+    devCta: '开发模式下不能选文件，用 `bun run start` 启动桌面应用',
+    shelf: '书架',
+    built: (done: number, total: number) => ` · 已建 ${done}/${total} 章`,
+    deleteAsk: '连同音频一起删除？',
+    deleting: '删除中…',
+    delete: '删除',
+    cancel: '取消',
+    deleteAria: (title: string) => `删除《${title}》`,
+    deleteTitle: '删除这本书',
+    settings: '设置',
+  },
+
+  add: {
+    title: '添加一本书',
+    parsing: '正在读这本书…',
+    supported: '支持 EPUB / TXT / Markdown。书不会离开这台机器。',
+    pick: '选择文件…',
+    picking: '读取中…',
+    howLong: '想花多久走完？',
+    narratedIn: (language: string, voice: string) => `用${language}朗读 · ${voice}`,
+    languageName: { en: '英文', zh: '中文' },
+    budgetLabel: (duration: string, rung: string) => `${duration} · ${rung}`,
+    budgetWarning: (wordsPerNode: number) =>
+      `该档位每站要概括约 ${Math.round(wordsPerNode / 10_000)} 万字，会流于空泛。`,
+    recommended: '推荐',
+    another: '换一本',
+    generating: '生成中',
+    note: '书不会离开这台机器。生成期间可以关掉这个窗口。',
+    stages: {
+      map: '逐章压缩',
+      classify: '判定类型',
+      reduce: '设计路径',
+      decks: '生成幻灯与口播',
+      done: '完成',
+    },
+  },
+
+  app: {
+    loading: '载入中…',
+    backToShelf: '返回书架',
+  },
+
+  quote: {
+    source: (n: number) => `原书第 ${n} 章`,
+    noSource: '未在原文中找到出处',
+  },
+
+  settings: {
+    title: '设置',
+    close: '关闭设置',
+    groups: {
+      app: '应用',
+      reading: '阅读',
+      generation: '生成',
+    },
+    pages: {
+      general: '通用',
+      appearance: '外观',
+      playback: '播放',
+      models: '模型',
+      narration: '口播',
+      keys: '密钥与联网',
+      data: '数据与缓存',
+    },
+    general: {
+      desc: '界面语言与主题。改动立即生效。',
+      language: '界面语言',
+      languageHint: '原生菜单栏也跟着变。',
+      theme: '主题',
+      themeLight: '浅色',
+      themeDark: '深色',
+      themeSystem: '跟随系统',
+    },
+    appearance: {
+      desc: '界面与字幕画多大。',
+      slideText: '界面字号',
+      slideTextHint: '作用于侧栏与字幕。幻灯正文不在此缩放——它本来就按舞台比例走，长度预算是固定的。',
+      sizeS: '小',
+      sizeM: '中',
+      sizeL: '大',
+      sizeXL: '特大',
+      sample: '一章讲不清一件事，就什么都不是。',
+      sampleCue: '正在朗读的一句会像这样变亮',
+    },
+    models: {
+      desc: '幻灯和口播由谁写出来。应用里其他地方都不用它。',
+      source: '模型来源',
+      sourceCodex: '用这台机器上的 Codex 登录',
+      sourceKey: '用 API key',
+      codexHint:
+        '借用 codex 已经存在 ~/.codex 里的凭证，不用配置任何东西。但它连的是 ChatGPT 自己的后端而不是公开 API——自己用没问题，要把它作为分发版的默认值之前值得想一下。',
+      keyHint: '任何 OpenAI 兼容的端点都行。密钥只存在主进程。',
+      apiKey: 'API key',
+      baseUrl: '接口地址',
+      baseUrlPlaceholder: 'https://api.openai.com/v1',
+      modelName: '模型名',
+      modelPlaceholder: '留空则用检测到的那个',
+      status: '当前生效',
+      statusReady: (provider: string, detail: string) => `${provider} · ${detail}`,
+      statusNoKey: '还没填 API key——生成会失败。',
+      statusNoLogin: '没找到 Codex 登录。跑一次 `codex` 登录，或者改用 API key。',
+      recheck: '重新检测',
+    },
+    playback: {
+      desc: '一章从哪里开始播，播完之后做什么。',
+      rate: '默认语速',
+      rateHint: '播放器里的倍速仍然可以临时改。',
+      autoNext: '播完自动进下一章',
+      autoNextHint: '关掉后每章结束会停住。',
+      resume: '启动时回到上次的位置',
+      resumeHint: '包括上次读的是哪本书、停在第几秒。',
+    },
+    narration: {
+      desc: '念书的声音，在这本书生成时就定下来。',
+      language: '口播语言',
+      languageHint: '按书本自身的文字判定。强制某种语言，会让中文书被英文念出来。',
+      followBook: '跟随书本',
+      alwaysEn: '总是英文',
+      alwaysZh: '总是中文',
+      voiceEn: '英文音色',
+      voiceEnHint: '用于判定为英文的书。',
+      voiceZh: '中文音色',
+      voiceZhHint: '一本书永远用它生成时的音色；这里改的是之后新增的书。',
+      preview: '试听',
+      stop: '停止',
+      voiceGender: { male: '男声', female: '女声' },
+      voiceStyle: {
+        narration: '旁白', warm: '温暖', casual: '随性', youth: '少年',
+      },
+      engine: 'edge-tts',
+      engineFound: (path: string) => `已找到 · ${path}`,
+      engineMissing: '没找到 · 装一个（pip install edge-tts），或写进 CAIRN_EDGE_TTS',
+      recheck: '重新检测',
+      budget: '默认预算',
+      budgetHint: '添加新书时预选的那一档。',
+      budgets: {
+        quick: '知道个大概',
+        brief: '抓住要点',
+        solid: '真的读懂',
+        full: '完整走一遍',
+      },
+    },
+    keys: {
+      desc: '密钥只存在主进程，播放器永远拿不到。',
+      tavily: 'Tavily API Key',
+      tavilyHint: '只用于「去书外面找」。留空则读环境变量 TAVILY_API_KEY。',
+      getKey: '获取密钥 ↗',
+      showKey: '显示密钥',
+      hideKey: '隐藏密钥',
+      trace: '记录每次模型调用',
+      traceHint: '会把整本书的正文再写一份到缓存里（CAIRN_TRACE）。',
+    },
+    data: {
+      desc: '生成的书放在哪里，哪些可以扔掉。',
+      location: '书与音频存放位置',
+      reveal: '在访达中打开',
+      cache: '管线缓存',
+      cacheHint: '清掉后重新生成会重跑模型。',
+      clear: '清空缓存',
+      clearing: '清理中…',
+      confirm: '确定删掉？',
+      confirmYes: '清空',
+      confirmNo: '取消',
+      cleared: '已清空',
+    },
+    offline: '需要桌面应用，用 `bun run start` 启动。',
+  },
+};
