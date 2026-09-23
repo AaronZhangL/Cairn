@@ -30,6 +30,14 @@ describe('resolveInLibrary', () => {
   test('a malformed escape misses rather than throwing', () => {
     expect(() => resolveInLibrary(ROOT, `/${TOKEN}/%zz`, TOKEN)).not.toThrow();
   });
+
+  test('does not serve settings, source chapters, chat, or reading state to the webview', () => {
+    for (const path of ['settings.json', 'books/a/chapters.json', 'books/a/notes.json', 'books/a/chat.json', 'books/a/reading.json']) {
+      expect(resolveInLibrary(ROOT, `/${TOKEN}/${path}`, TOKEN)).toBeUndefined();
+    }
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/books.json`, TOKEN)).toBe('/tmp/lib/books.json');
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/books/a/decks/n0.json`, TOKEN)).toBe('/tmp/lib/books/a/decks/n0.json');
+  });
 });
 
 describe('parseRange', () => {

@@ -106,6 +106,15 @@ exists for exactly this: the player needs the voice defaults and the speech rate
 - Visual changes follow [`docs/DESIGN.md`](docs/DESIGN.md). Re-measure its contrast tables after
   changing any colour.
 
+### Change scope and review
+
+- Limit implementation to the requested behavior and contracts it directly affects. Add an
+  abstraction, configuration option, or fallback only for a concrete need.
+- In code review, report actionable defects with a location, a concrete failure path, and its
+  impact. Do not present style preferences or hypothetical edge cases as defects.
+- Start with checks relevant to the change. Expand investigation for a concrete failure or
+  unresolved risk. Before committing, run the full checks listed below.
+
 ### Comments
 
 The default is **no comment**. Code that needs a paragraph usually needs a better name or a
@@ -174,9 +183,9 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 3. **Every station carries `sourceChapters`.** The cheapest hedge against hallucination: any
    claim can be traced back to the text it came from.
 
-4. **Book-sourced and web-sourced statements render separately, never blended.** The reader has
-   not read the book; a merged paragraph makes the two indistinguishable. A generic chat
-   component will flatten this if allowed to.
+4. **Claims attributed to a source must be checkable.** The companion uses inline citations for
+   claims about the current book, fetched web pages, and completed books; general explanation
+   can be uncited. See [`docs/COMPANION.md`](docs/COMPANION.md).
 
 5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes — prose
    plus the structured material the chart layouts need (`figures`, `contrasts`, `sequences`,
@@ -291,6 +300,23 @@ deck; cross-book memory of what the reader has already walked
 **Ask before:** changing `tokens.css`, cache key derivation, budget arithmetic, or anything that
 sends data off the machine.
 
+## Agent skills
+
+Matt Pocock's skills live in `.agents/skills/`; `.claude/skills/` links to them. Codex and
+Claude Code use the same project-level copies.
+
+### Issue tracker
+
+Specs and issues live in local Markdown under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use one root `CONTEXT.md` for Cairn's product vocabulary. See `docs/agents/domain.md`.
+
 ## Reference
 
 | Document | Read it when |
@@ -298,6 +324,7 @@ sends data off the machine.
 | [`docs/SPEC.md`](docs/SPEC.md) | Before changing scope. The current product definition, organised by module |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries, data flow, dependency choices, and the decision record behind them |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching `tokens.css` or any CSS that affects appearance |
+| [`docs/COMPANION.md`](docs/COMPANION.md) | Before touching the companion pane. It supersedes SPEC §6 |
 
 Two projects worth borrowing from:
 

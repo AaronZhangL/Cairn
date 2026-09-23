@@ -1,8 +1,8 @@
 import type { RPCSchema } from 'electrobun/view';
-import type { Answer } from '@cairn/core/pipeline/ask';
-import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
+import type { ChatSession } from '@cairn/core/companion/types';
+import type { CompanionEvent } from '../main/companion/events';
 import type { ContentLocale, ModelStatus, ShellSettingsValues, UiLocale } from './settings';
 import type { BookPreview, DeckStatus, Progress } from './types';
 
@@ -18,11 +18,10 @@ export type BunSchema = RPCSchema<{
     progressNow: { params: void; response: Progress | null };
     pickBook: { params: void; response: BookPreview | null };
     generateBook: { params: { filePath: string; budgetId: BudgetId }; response: LibraryEntry };
-    ask: {
-      params: { bookId: string; question: string; selection?: string; nodeId: string };
-      response: Answer;
-    };
-    askOutside: { params: { question: string; bookTitle?: string }; response: OutsideAnswer };
+    chatHistory: { params: { bookId: string }; response: ChatSession };
+    chatSend: { params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }; response: boolean };
+    chatCancel: { params: { turnId: string }; response: boolean };
+    chatCompact: { params: { bookId: string }; response: boolean };
     /**
      * Tell the builder which station the reader is on, so the next ones built
      * are the next ones they will reach.
@@ -30,6 +29,7 @@ export type BunSchema = RPCSchema<{
     focusStation: { params: { bookId: string; nodeId: string }; response: null };
     /** Pick a half-built book back up when it is opened. */
     resumeBook: { params: { bookId: string }; response: boolean };
+    markBookFinished: { params: { bookId: string; nodeId: string }; response: boolean };
     /** Remove a book, its decks, its audio and its cache. Irreversible. */
     deleteBook: { params: { bookId: string }; response: boolean };
 
@@ -65,7 +65,7 @@ export type BunSchema = RPCSchema<{
  */
 export type WebviewSchema = RPCSchema<{
   requests: Record<never, never>;
-  messages: { progress: Progress; deckStatus: DeckStatus };
+  messages: { progress: Progress; deckStatus: DeckStatus; companion: CompanionEvent };
 }>;
 
 export type CairnRPC = { bun: BunSchema; webview: WebviewSchema };

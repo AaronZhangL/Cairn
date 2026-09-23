@@ -7,6 +7,7 @@
  */
 import { targetChars } from '../voice';
 import type { NoteMaterial, Prompts } from './types';
+import { systemPrompt, userPrompt } from './xml';
 
 const block = (label: string, lines: readonly string[]): string =>
   (lines.length > 0 ? `\n  ${label}\n${lines.map((l) => `    ${l}`).join('\n')}` : '');
@@ -26,7 +27,7 @@ function duration(minutes: number): string {
 
 export const zh: Prompts = {
   map: {
-    system: `你在为一本书生成逐章摘要，供后续生成学习路径使用。
+    system: systemPrompt(`你在为一本书生成逐章摘要，供后续生成学习路径使用。
 
 除了 gist / keyPoints / quotes，还要抽取四类结构化材料，供后续做图表用：
 - figures   正文里出现的具体数字，value 连单位一起照抄（"32 华氏度"、"3 万人"、"68%"）
@@ -41,32 +42,25 @@ export const zh: Prompts = {
 4. 四类结构化材料同样只能来自正文。**这一章没有就给空数组**——
    编一个数字或编一组对立，比少一张图表严重得多。
 5. 每章独立作答，不要跨章推断。
-6. 只输出 JSON。`,
+6. 只输出 JSON。`),
 
     user: (chapters) => {
       const body = chapters
         .map((c) => `<章 idx="${c.idx}" 标题="${c.title}">\n${c.text}\n</章>`)
         .join('\n\n');
 
-      return `以下是 ${chapters.length} 章正文。为每一章产出：
+      return userPrompt(`以下是 ${chapters.length} 章正文。为每一章产出：
 gist（1-2 句）、keyPoints（2-4 条）、quotes（1-3 句原文摘句），
 以及 figures / contrasts / sequences / relations（各 0-3 组，正文里没有就给空数组）。
 
-idx 必须原样回填，不得改动。
-
-${body}`;
+idx 必须原样回填，不得改动。`, body);
     },
   },
 
   classify: {
-    system: '你在判定一本书属于知识类还是叙事类。只依据给出的章节摘要，不使用任何既有印象。只输出 JSON。',
-    user: (bookTitle, digest) => `书名：${bookTitle}
-
-章节摘要：
-${digest}
-
-knowledge = 传递概念、方法、论证的书（含技术书、社科、商业、self-help）
-narrative = 以情节和人物推进的书（小说、传记、纪实）`,
+    system: systemPrompt('你在判定一本书属于知识类还是叙事类。只依据给出的章节摘要，不使用任何既有印象。只输出 JSON。'),
+    user: (bookTitle, digest) => userPrompt(`knowledge = 传递概念、方法、论证的书（含技术书、社科、商业、self-help）
+narrative = 以情节和人物推进的书（小说、传记、纪实）`, `书名：${bookTitle}\n\n章节摘要：\n${digest}`),
   },
 
   reduce: {
@@ -85,7 +79,7 @@ narrative = 以情节和人物推进的书（小说、传记、纪实）`,
         ? '这是一本叙事类的书。站点应沿故事推进：关键事件、转折、人物关系的变化。'
         : '这是一本知识类的书。站点应沿理解推进：先建立概念，再展开论证，最后落到应用。';
 
-      return `你在为一本书设计学习路径。
+      return systemPrompt(`你在为一本书设计学习路径。
 
 ${shape}
 
@@ -99,7 +93,7 @@ ${shape}
 5. 阶段名描述**读者此刻在做什么**（如「建立模型」「展开论证」「落到实践」），
    不要复述书的目录。路径已经重排过顺序，沿用原书结构会和实际顺序打架。
 6. 预算紧时靠**砍站**，不靠把每站讲得更浅——一站讲不明白一件事就没有价值。
-7. 只输出 JSON。`;
+7. 只输出 JSON。`);
     },
 
     user: (r) => {
@@ -108,9 +102,7 @@ ${shape}
         : '';
       const [lo, hi] = r.minutesPerNode;
 
-      return `以下是全书 ${r.chapterCount} 章的摘要。请设计一条学习路径。
-
-用户选择的预算：${r.budgetLabel}
+      return userPrompt(`以下是全书 ${r.chapterCount} 章的摘要。请设计一条学习路径。
 
 约束：
 - 目标总时长 ${r.minMinutes}–${r.maxMinutes} 分钟
@@ -118,14 +110,12 @@ ${shape}
 - 每站 estMinutes 在 ${lo}–${hi} 分钟之间
 - brief 写清这一站要讲明白什么（2-3 句）
 - 把站点分进约 ${r.stageCount} 个阶段，每个阶段给一个描述读者在做什么的名字。
-  **每个阶段至少 2 站**——一站一个阶段等于没有分组${urgency}
-
-${r.digest}`;
+  **每个阶段至少 2 站**——一站一个阶段等于没有分组${urgency}`, `用户选择的预算：${r.budgetLabel}\n\n${r.digest}`);
     },
   },
 
   slides: {
-    system: `你在把一站学习内容做成一组幻灯 + 一段口播。
+    system: systemPrompt(`你在把一站学习内容做成一组幻灯 + 一段口播。
 
 幻灯版式：
 - title   开场，只有标题和一句副标
@@ -157,20 +147,19 @@ ${r.digest}`;
    只能从给定的名字里挑，挑不到贴切的就填 null。
    **宁可不给也不要硬给**：抽象概念（复利、身份认同、锚定）没有对应的图形，
    硬套一个只会变成毫无意义的装饰。挑的是内容里真实出现的具体事物。
-8. 只输出 JSON。`,
+8. 只输出 JSON。`),
 
-    user: (r) => `这一站：${r.title}
-要讲明白：${r.brief}
-${r.keyPoints.length > 0 ? `要点：\n${r.keyPoints.map((k) => `- ${k}`).join('\n')}\n` : ''}
-时长约 ${r.minutes} 分钟，做 ${r.slides.min}-${r.slides.max} 张幻灯。
+    user: (r) => userPrompt(`时长约 ${r.minutes} 分钟，做 ${r.slides.min}-${r.slides.max} 张幻灯。
 **幻灯要铺满整段口播**：一张幻灯对应大约 ${r.secondsPerSlide} 秒，讲到新的一层就换一张。
 atSentence 要从 0 一直铺到最后一句附近，不要全挤在前三分之一。
-可用的 icon 名字（没有贴切的就填 null）：${r.iconNames.join(' ')}
-口播稿总字数目标 ${targetChars(r.minutes, 'zh')} 字（允许 ±15%），这决定音频时长，请认真控制。
+口播稿总字数目标 ${targetChars(r.minutes, 'zh')} 字（允许 ±15%），这决定音频时长，请认真控制。`, `可用的 icon 名字（没有贴切的就填 null）：${r.iconNames.join(' ')}
+这一站：${r.title}
+要讲明白：${r.brief}
+${r.keyPoints.length > 0 ? `要点：\n${r.keyPoints.map((k) => `- ${k}`).join('\n')}\n` : ''}
 
 可用材料（来自这一站溯源的章节）：
 
-${r.material}`,
+${r.material}`),
 
     noteBlock: (n: NoteMaterial) => `[${n.idx}] ${n.title}\n  ${n.gist}`
       + block('要点', n.keyPoints)
@@ -186,7 +175,7 @@ ${r.material}`,
     title: '回望这条路',
     brief: '把走过的每一站接回一条线，说清这本书最终主张什么。',
 
-    system: `你在为一次读书路径做最后一站：回望。
+    system: systemPrompt(`你在为一次读书路径做最后一站：回望。
 
 读者刚刚一站一站走完了这本书。这一站不引入任何新内容，只做三件事：
 1. 把走过的站重新接成一条线——它们之间是什么关系，为什么是这个顺序。
@@ -207,63 +196,17 @@ ${r.material}`,
 4. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
    **总字数必须接近给定目标**——字数决定音频时长。
 5. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
-6. 只输出 JSON。`,
+6. 只输出 JSON。`),
 
-    user: (r) => `这本书：${r.bookTitle}
+    user: (r) => userPrompt(`请做最后一站。
+时长约 ${r.minutes} 分钟，做 ${r.slides.min}-${r.slides.max} 张幻灯。
+口播稿总字数目标 ${targetChars(r.minutes, 'zh')} 字（允许 ±15%），这决定音频时长，请认真控制。`, `这本书：${r.bookTitle}
 
 读者刚刚按顺序走完了下面这 ${r.stationCount} 站：
 
 ${r.walked}
 
-请做最后一站「${r.recapTitle}」。
-时长约 ${r.minutes} 分钟，做 ${r.slides.min}-${r.slides.max} 张幻灯。
-口播稿总字数目标 ${targetChars(r.minutes, 'zh')} 字（允许 ±15%），这决定音频时长，请认真控制。`,
-  },
-
-  ask: {
-    system: `你在回答读者对一本书的提问。
-
-铁律：
-1. 只依据我给你的材料作答。不得使用你对这本书或这个主题的任何既有知识。
-2. 材料里没有答案时，grounded 设为 false，并在 suggestion 里说明该去看哪一部分，不要硬答。
-3. 不要复述材料，直接回答问题。
-4. 只输出 JSON。`,
-
-    user: (r) => `读者正走到这一站：
-标题：${r.nodeTitle}
-这一站要讲明白：${r.brief}
-${r.selection ? `\n读者划中的原文：\n「${r.selection}」\n` : ''}
-读者的问题：${r.question}
-
-可用材料：
-
-${r.material}`,
-
-    locatorSystem: '你在为一个问题挑出最相关的章节。只输出 JSON，只返回章号。',
-    locatorUser: (question, max, index) => `问题：${question}
-
-从下面的章节索引中挑出最多 ${max} 个最相关的章号。宁少勿滥；确实没有相关章节就返回空数组。
-
-${index}`,
-
-    notFound: '这本书里没有找到相关内容。',
-    rephrase: '换个说法再问，或者这个问题可能超出了这本书的范围。',
-    textGone: '相关章节的原文已不在本地。',
-    anchored: (selection, question) => `读者划中的原文：「${selection}」\n\n问题：${question}`,
-    chapterTag: (idx, title, body) => `<章 idx="${idx}" 标题="${title}">\n${body}\n</章>`,
-    plainUser: (question, material) => `读者的问题：${question}\n\n可用材料：\n\n${material}`,
-  },
-
-  outside: {
-    system: `你在回答一个这本书没有覆盖的问题，依据是网络搜索结果。
-
-铁律：
-1. 只依据给出的搜索结果作答，不要凭记忆补充。
-2. 不要提及书里的内容——书里的部分由另一路负责，这里只答书外的。
-3. usedSources 填你实际用到的结果编号。
-4. 只输出 JSON。`,
-    user: (question, results) => `问题：${question}\n\n搜索结果：\n\n${results}`,
-    nothingFound: '没有搜到可用的资料。',
+最后一站标题：「${r.recapTitle}」`),
   },
 
   parse: {

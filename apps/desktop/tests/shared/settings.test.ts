@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  DEFAULT_SHELL_SETTINGS, parseSettings, VOICES, voiceFor,
+  DEFAULT_SHELL_SETTINGS, parseSettings, redactSettings, REDACTED_SECRET, VOICES, voiceFor,
 } from '../../src/shared/settings';
 
 describe('parseSettings', () => {
@@ -27,11 +27,44 @@ describe('parseSettings', () => {
       trace: true,
       defaultBudget: 'solid',
     };
-    expect(parseSettings(stored)).toEqual(stored as never);
+    expect(parseSettings(stored)).toEqual({ ...stored, chatModel: DEFAULT_SHELL_SETTINGS.chatModel });
   });
 
   test('the model route defaults to borrowing the Codex login', () => {
     expect(DEFAULT_SHELL_SETTINGS.model.source).toBe('codex');
+    expect(DEFAULT_SHELL_SETTINGS.chatModel.source).toBe('inherit');
+  });
+
+  test('parses a separate Companion provider without changing generation', () => {
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: 'generation-key', baseUrl: 'https://generation.test', model: 'generation' },
+      chatModel: { source: 'deepseek', apiKey: 'chat-key', model: 'deepseek-v4-pro' },
+    });
+    expect(parsed.model.source).toBe('key');
+    expect(parsed.model.apiKey).toBe('generation-key');
+    expect(parsed.chatModel).toEqual({ source: 'deepseek', apiKey: 'chat-key', model: 'deepseek-v4-pro' });
+    expect(redactSettings(parsed).chatModel.apiKey).toBe(REDACTED_SECRET);
+  });
+
+  test('rejects unknown Companion providers', () => {
+    expect(parseSettings({ chatModel: { source: 'unknown', apiKey: 'x' } }).chatModel.source)
+      .toBe('inherit');
+  });
+
+  test('accepts the MiniMax China endpoint as a distinct provider', () => {
+    expect(parseSettings({ chatModel: { source: 'minimax-cn' } }).chatModel.source).toBe('minimax-cn');
+  });
+
+  test('redacts stored credentials before settings reach the renderer', () => {
+    const stored = parseSettings({
+      model: { source: 'key', apiKey: 'private-model-key' }, tavilyKey: 'private-search-key',
+    });
+    const visible = redactSettings(stored);
+    expect(visible.model.source).toBe('key');
+    expect(visible.model.apiKey).toBe(REDACTED_SECRET);
+    expect(visible.tavilyKey).toBe(REDACTED_SECRET);
+    expect(JSON.stringify(visible)).not.toContain('private-');
+    expect(redactSettings(DEFAULT_SHELL_SETTINGS).model.apiKey).toBe('');
   });
 
   test.each([

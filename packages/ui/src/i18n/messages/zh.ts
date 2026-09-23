@@ -95,6 +95,27 @@ export const zh: Messages = {
     dropQuote: '不带这句',
   },
 
+  companion: {
+    placeholder: '问这本书，或聊聊别的…',
+    send: '发送',
+    thinking: '思考中…',
+    stop: '停止',
+    compact: '压缩上下文',
+    webSource: '网页来源',
+    readingSource: '读过的书',
+    chapter: (n: number) => `第 ${n} 章`,
+    busy: '上一条回答还在进行中。',
+    compactFailed: '暂时无法压缩这段对话。',
+    error: (code: string) => ({
+      no_credential: '请先在设置中配置聊天模型。',
+      model_unavailable: '当前选择的聊天模型不可用。',
+      bad_citation: '这条回答的来源无法核实，请重试。',
+      aborted: '已停止回答。',
+      tool_limit: '这条问题需要过多工具调用，可以问得更具体一些。',
+      busy: '上一条回答还在进行中。',
+    } as Record<string, string>)[code] ?? '伴读暂时无法完成这条回答。',
+  },
+
   menu: {
     addBook: '添加一本书',
     backToShelf: '返回书架',
@@ -199,14 +220,15 @@ export const zh: Messages = {
       sampleCue: '正在朗读的一句会像这样变亮',
     },
     models: {
-      desc: '幻灯和口播由谁写出来。应用里其他地方都不用它。',
+      desc: '分别选择生成站点和伴读对话所用的模型。',
       source: '模型来源',
       sourceCodex: '用这台机器上的 Codex 登录',
       sourceKey: '用 API key',
       codexHint:
         '借用 codex 已经存在 ~/.codex 里的凭证，不用配置任何东西。但它连的是 ChatGPT 自己的后端而不是公开 API——自己用没问题，要把它作为分发版的默认值之前值得想一下。',
-      keyHint: '任何 OpenAI 兼容的端点都行。密钥只存在主进程。',
+      keyHint: '可填写 OpenAI 兼容接口。密钥只在主进程读取。',
       apiKey: 'API key',
+      secretHint: '已保存的密钥显示为圆点。输入新内容可替换，清空可删除。',
       baseUrl: '接口地址',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       modelName: '模型名',
@@ -216,6 +238,12 @@ export const zh: Messages = {
       statusNoKey: '还没填 API key——生成会失败。',
       statusNoLogin: '没找到 Codex 登录。跑一次 `codex` 登录，或者改用 API key。',
       recheck: '重新检测',
+      chatSource: '伴读模型',
+      chatHint: '只影响对话；生成站点仍使用上方的模型。',
+      chatInherit: '沿用生成模型',
+      chatApiKey: '伴读 API key',
+      chatModelName: '伴读模型名',
+      chatModelPlaceholder: '留空则使用该供应商的默认模型',
     },
     playback: {
       desc: '一章从哪里开始播，播完之后做什么。',

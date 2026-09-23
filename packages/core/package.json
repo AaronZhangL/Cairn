@@ -11,6 +11,7 @@
     "./parse": "./src/parse/index.ts",
     "./llm": "./src/llm/index.ts",
     "./pipeline/*": "./src/pipeline/*.ts",
+    "./companion/*": "./src/companion/*.ts",
     "./store/*": "./src/store/*.ts",
     "./runtime": "./src/runtime/index.ts",
     "./runtime/*": "./src/runtime/*.ts"

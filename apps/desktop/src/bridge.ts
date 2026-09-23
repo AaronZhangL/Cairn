@@ -1,6 +1,6 @@
 import { CairnError } from '@cairn/core/errors';
-import type { Answer } from '@cairn/core/pipeline/ask';
-import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
+import type { ChatSession } from '@cairn/core/companion/types';
+import type { CompanionEvent } from './main/companion/events';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { LIBRARY_INDEX, type LibraryEntry } from '@cairn/core/store/library';
 import { decodeError } from './shared/errors';
@@ -27,13 +27,11 @@ type Rpc = {
     generateBook(
       p: { filePath: string; budgetId: BudgetId }, o?: RequestOptions,
     ): Promise<LibraryEntry>;
-    ask(
-      p: { bookId: string; question: string; selection?: string; nodeId: string },
-      o?: RequestOptions,
-    ): Promise<Answer>;
-    askOutside(
-      p: { question: string; bookTitle?: string }, o?: RequestOptions,
-    ): Promise<OutsideAnswer>;
+    chatHistory(p: { bookId: string }, o?: RequestOptions): Promise<ChatSession>;
+    chatSend(p: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }, o?: RequestOptions): Promise<boolean>;
+    chatCancel(p: { turnId: string }, o?: RequestOptions): Promise<boolean>;
+    chatCompact(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
+    markBookFinished(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<boolean>;
     focusStation(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<null>;
     resumeBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
     deleteBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
@@ -77,6 +75,7 @@ export const inShell =
 
 const progressListeners = new Set<(p: Progress) => void>();
 const deckStatusListeners = new Set<(s: DeckStatus) => void>();
+const companionListeners = new Set<(event: CompanionEvent) => void>();
 
 export function onProgress(fn: (p: Progress) => void): () => void {
   progressListeners.add(fn);
@@ -87,6 +86,11 @@ export function onProgress(fn: (p: Progress) => void): () => void {
 export function onDeckStatus(fn: (s: DeckStatus) => void): () => void {
   deckStatusListeners.add(fn);
   return () => deckStatusListeners.delete(fn);
+}
+
+export function onCompanionEvent(fn: (event: CompanionEvent) => void): () => void {
+  companionListeners.add(fn);
+  return () => companionListeners.delete(fn);
 }
 
 let rpcPromise: Promise<Rpc> | undefined;
@@ -104,6 +108,9 @@ function connect(): Promise<Rpc> {
           },
           deckStatus: (s: DeckStatus) => {
             for (const fn of deckStatusListeners) fn(s);
+          },
+          companion: (event: CompanionEvent) => {
+            for (const fn of companionListeners) fn(event);
           },
         },
       },
@@ -174,24 +181,29 @@ export async function generateBook(filePath: string, budgetId: BudgetId): Promis
   return (await connect()).request.generateBook({ filePath, budgetId }, NO_LIMIT).catch(rethrow);
 }
 
-export async function ask(params: {
-  bookId: string; question: string; selection?: string; nodeId: string;
-  sourceChapters: readonly number[];
-}): Promise<Answer> {
-  if (!inShell) {
-    // Not an error: dev mode answers, it just has nothing behind it. The
-    // wording belongs to the player, which knows the reader's language.
-    return { text: '', grounded: false, sourceChapters: params.sourceChapters };
-  }
-  const { bookId, question, selection, nodeId } = params;
-  return (await connect()).request
-    .ask({ bookId, question, selection, nodeId }, ANSWER_LIMIT)
-    .catch(rethrow);
+export async function markBookFinished(bookId: string, nodeId: string): Promise<boolean> {
+  if (!inShell) return false;
+  return (await connect()).request.markBookFinished({ bookId, nodeId }, POLL_LIMIT).catch(rethrow);
 }
 
-export async function askOutside(question: string, bookTitle: string): Promise<OutsideAnswer> {
+export async function chatHistory(bookId: string): Promise<ChatSession> {
+  if (!inShell) return { pathGeneratedAt: '', messages: [], evidence: [] };
+  return (await connect()).request.chatHistory({ bookId }, POLL_LIMIT).catch(rethrow);
+}
+
+export async function chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }): Promise<boolean> {
   if (!inShell) throw offline('offline_search');
-  return (await connect()).request.askOutside({ question, bookTitle }, ANSWER_LIMIT).catch(rethrow);
+  return (await connect()).request.chatSend(params, POLL_LIMIT).catch(rethrow);
+}
+
+export async function chatCancel(turnId: string): Promise<boolean> {
+  if (!inShell) return false;
+  return (await connect()).request.chatCancel({ turnId }, POLL_LIMIT).catch(rethrow);
+}
+
+export async function chatCompact(bookId: string): Promise<boolean> {
+  if (!inShell) return false;
+  return (await connect()).request.chatCompact({ bookId }, ANSWER_LIMIT).catch(rethrow);
 }
 
 /* ---- settings the main process owns ---- */

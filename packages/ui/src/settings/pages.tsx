@@ -5,7 +5,7 @@ import { LOCALES, type Locale } from '../i18n/locale';
 import { useUi } from './SettingsProvider';
 import { TEXT_SIZES, THEMES, type TextSize, type ThemeChoice } from './prefs';
 import {
-  BUDGET_IDS, type ModelSettings, type NarrationLanguage, type SettingsBudgetId,
+  BUDGET_IDS, type ChatModelSettings, type ModelSettings, type NarrationLanguage, type SettingsBudgetId,
   type ShellSettings,
 } from './shell';
 import { Row, SecretField, Section, Segmented, Select, StackedRow, Switch } from './rows';
@@ -144,12 +144,17 @@ export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
   const keyId = useId();
   const urlId = useId();
   const nameId = useId();
+  const chatSourceId = useId();
+  const chatKeyId = useId();
+  const chatNameId = useId();
 
   if (!shell) return <Offline title={t.settings.pages.models} />;
 
-  const { model } = shell.prefs;
+  const { model, chatModel } = shell.prefs;
   const set = <K extends keyof ModelSettings>(key: K, value: ModelSettings[K]): void =>
     shell.setPref('model', { ...model, [key]: value });
+  const setChat = <K extends keyof ChatModelSettings>(key: K, value: ChatModelSettings[K]): void =>
+    shell.setPref('chatModel', { ...chatModel, [key]: value });
 
   const status = shell.modelStatus;
   const statusText = status === undefined
@@ -181,7 +186,7 @@ export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
       {/* Only for the key route: the Codex route has no endpoint to choose and
           no key to type, which is the whole reason to offer it. */}
       {model.source === 'key' && (
-        <StackedRow label={t.settings.models.apiKey} htmlFor={keyId}>
+        <StackedRow label={t.settings.models.apiKey} hint={t.settings.models.secretHint} htmlFor={keyId}>
           <SecretField
             id={keyId}
             value={model.apiKey}
@@ -226,6 +231,43 @@ export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
           {t.settings.models.recheck}
         </button>
       </Row>
+      <Row label={t.settings.models.chatSource} hint={t.settings.models.chatHint} htmlFor={chatSourceId}>
+        <Select
+          id={chatSourceId}
+          value={chatModel.source}
+          choices={[
+            { value: 'inherit' as const, label: t.settings.models.chatInherit },
+            { value: 'anthropic' as const, label: 'Anthropic' },
+            { value: 'deepseek' as const, label: 'DeepSeek' },
+            { value: 'minimax' as const, label: 'MiniMax' },
+            { value: 'minimax-cn' as const, label: 'MiniMax CN' },
+          ]}
+          onPick={(value) => shell.setPref('chatModel', { source: value, apiKey: '', model: '' })}
+        />
+      </Row>
+      {chatModel.source !== 'inherit' && (
+        <StackedRow label={t.settings.models.chatApiKey} hint={t.settings.models.secretHint} htmlFor={chatKeyId}>
+          <SecretField
+            id={chatKeyId}
+            value={chatModel.apiKey}
+            onChange={(value) => setChat('apiKey', value)}
+            showLabel={t.settings.keys.showKey}
+            hideLabel={t.settings.keys.hideKey}
+          />
+        </StackedRow>
+      )}
+      {chatModel.source !== 'inherit' && (
+        <Row label={t.settings.models.chatModelName} htmlFor={chatNameId}>
+          <input
+            id={chatNameId}
+            className="set-input plain"
+            value={chatModel.model}
+            placeholder={t.settings.models.chatModelPlaceholder}
+            spellCheck={false}
+            onChange={(e) => setChat('model', e.target.value)}
+          />
+        </Row>
+      )}
     </Section>
   );
 }
@@ -338,7 +380,7 @@ export function KeysPage({ shell }: { shell?: ShellSettings }): ReactElement {
     <Section title={t.settings.pages.keys}>
       <StackedRow
         label={t.settings.keys.tavily}
-        hint={t.settings.keys.tavilyHint}
+        hint={<>{t.settings.keys.tavilyHint} {t.settings.models.secretHint}</>}
         htmlFor={keyId}
         aside={(
           <a

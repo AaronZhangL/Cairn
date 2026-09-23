@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { askLogFile, audioFile } from '@cairn/core/store/library';
+import { audioFile } from '@cairn/core/store/library';
 import type { LibraryEntry } from '@cairn/core/store/library';
-import { type AskRecord, stationHeat } from '@cairn/core/store/asks';
+import { stationHeat } from '@cairn/core/store/asks';
 import {
-  AskPane, DeckPane, StagePane, Splitter, PanelToggle, SettingsPanel, useSplit, useResume,
+  CompanionPane, DeckPane, StagePane, Splitter, PanelToggle, SettingsPanel, useSplit, useResume,
   useUi, columnWidth,
   DEFAULT_LEFT, DEFAULT_RIGHT, LEFT_LIMITS, RIGHT_LIMITS,
-  type Turn,
 } from '@cairn/ui';
 import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
-  ask, askOutside, deleteBook, focusStation, inShell, libraryBase, listBooks, onDeckStatus,
-  resumeBook, setMenuLocale,
+  chatCancel, chatCompact, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
+  listBooks, onCompanionEvent, onDeckStatus, markBookFinished, resumeBook, setMenuLocale,
 } from './bridge';
 import { useBundle } from './useBundle';
 import { useShellSettings } from './useShellSettings';
+import { applyCompanionEvent, beginCompanionTurn, emptyCompanionView } from './companion-state';
 
 export function App(): ReactElement {
   const [books, setBooks] = useState<readonly LibraryEntry[]>([]);
@@ -40,9 +40,8 @@ export function App(): ReactElement {
   const right = useSplit('pane.right', DEFAULT_RIGHT, RIGHT_LIMITS, 'right');
 
   const [currentId, setCurrentId] = useState<string>();
-  const [turns, setTurns] = useState<readonly Turn[]>([]);
+  const [chat, setChat] = useState(() => emptyCompanionView(''));
   const [selection, setSelection] = useState<string>();
-  const [asks, setAsks] = useState<readonly AskRecord[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -75,19 +74,34 @@ export function App(): ReactElement {
     ));
   }), []);
 
-  // Where questions piled up last time through — read over the same channel as
-  // the books themselves, so it works without the shell too.
   useEffect(() => {
-    if (!bookId || !base) { setAsks([]); return; }
+    if (!bookId || !bundle?.path) return;
+    const generation = bundle.path.generatedAt;
     let live = true;
-    void fetch(`${base}/${askLogFile(bookId)}`)
-      .then((r) => (r.ok ? (r.json() as Promise<AskRecord[]>) : []))
-      .then((log) => { if (live) setAsks(Array.isArray(log) ? log : []); })
-      .catch(() => undefined);
+    setChat(emptyCompanionView(bookId));
+    void chatHistory(bookId).then((session) => {
+      if (live && session.pathGeneratedAt === generation) {
+        setChat((state) => state.bookId === bookId && !state.pendingTurn
+          ? { ...state, messages: session.messages } : state);
+      }
+    }).catch((cause: unknown) => console.error('chatHistory', cause));
     return () => { live = false; };
-  }, [bookId, base, turns.length]);
+  }, [bookId, bundle?.path?.generatedAt]);
 
-  const heat = useMemo(() => stationHeat(asks), [asks]);
+  useEffect(() => onCompanionEvent((event) => {
+    setChat((state) => applyCompanionEvent(state, event));
+    if (event.type === 'final' || event.type === 'error') {
+      void chatHistory(event.bookId).then((session) => {
+        setChat((state) => state.bookId === event.bookId && !state.pendingTurn
+          ? { ...state, messages: session.messages } : state);
+      }).catch((cause: unknown) => console.error('chatHistory', cause));
+    }
+  }), []);
+
+  const heat = useMemo(() => stationHeat(chat.messages.flatMap((message) =>
+    message.role === 'user' && message.atNode
+      ? [{ at: message.at, nodeId: message.atNode, question: message.text, grounded: true }]
+      : [])), [chat.messages]);
 
   const path = bundle?.path;
   /** Where the reader stopped in this book, read once per book, before any render. */
@@ -139,26 +153,23 @@ export function App(): ReactElement {
     return () => window.removeEventListener('keydown', onKey);
   }, [step, left, right]);
 
-  const askQuestion = useCallback(async (question: string) => {
+  const askQuestion = useCallback((question: string) => {
     if (!node || !bookId) return;
-    const id = `t${Date.now()}`;
+    const id = crypto.randomUUID();
     const sel = selection;
     setSelection(undefined);
-    setTurns((t) => [...t, { id, question, selection: sel, pending: true }]);
-
-    const answer = await ask({
-      bookId, question, selection: sel, nodeId: node.id, sourceChapters: node.sourceChapters,
-    });
-    setTurns((t) => t.map((x) => (x.id === id ? { ...x, answer, pending: false } : x)));
-  }, [node, bookId, selection]);
-
-  // Going outside the book is the reader's call, never the model's
-  const searchOutside = useCallback(async (turnId: string) => {
-    const turn = turns.find((t) => t.id === turnId);
-    if (!turn || !path) return;
-    const outside = await askOutside(turn.question, path.title);
-    setTurns((t) => t.map((x) => (x.id === turnId ? { ...x, outside } : x)));
-  }, [turns, path]);
+    setChat((state) => beginCompanionTurn(state, id, question, sel, node.id));
+    void chatSend({ turnId: id, bookId, nodeId: node.id, question, selection: sel })
+      .then((started) => {
+        if (!started) setChat((state) => applyCompanionEvent(state, {
+          bookId, turnId: id, type: 'error', code: 'busy', message: t.companion.busy,
+        }));
+      })
+      .catch((cause: unknown) => setChat((state) => applyCompanionEvent(state, {
+        bookId, turnId: id, type: 'error', code: 'request_failed',
+        message: cause instanceof Error ? cause.message : String(cause),
+      })));
+  }, [node, bookId, selection, t.companion.busy]);
 
   /** Opening a book is what makes it the one to reopen next launch. */
   const openBook = useCallback((id: string) => {
@@ -170,7 +181,7 @@ export function App(): ReactElement {
     setBooks((b) => [entry, ...b.filter((x) => x.id !== entry.id)]);
     setAdding(false);
     setCurrentId(undefined);
-    setTurns([]);
+    setChat(emptyCompanionView(entry.id));
     if (entry.id === bookId) reload(); else openBook(entry.id);
   }, [bookId, reload, openBook]);
 
@@ -187,8 +198,9 @@ export function App(): ReactElement {
     resume.close();
     setBookId(undefined);
     setCurrentId(undefined);
-    setTurns([]);
-  }, [resume]);
+    if (chat.pendingTurn) void chatCancel(chat.pendingTurn);
+    setChat(emptyCompanionView(''));
+  }, [resume, chat.pendingTurn]);
 
   const modal = (
     <>
@@ -260,7 +272,7 @@ export function App(): ReactElement {
         currentId={node.id}
         onPick={setCurrentId}
         books={books}
-        onSwitchBook={(id) => { openBook(id); setCurrentId(undefined); setTurns([]); }}
+        onSwitchBook={(id) => { if (chat.pendingTurn) void chatCancel(chat.pendingTurn); openBook(id); setCurrentId(undefined); setChat(emptyCompanionView(id)); }}
         onAdd={inShell ? () => setAdding(true) : undefined}
         onHome={goHome}
         onSettings={() => setSettingsOpen(true)}
@@ -281,17 +293,32 @@ export function App(): ReactElement {
         resumeAt={place}
         onSelect={setSelection}
         // The reader chose whether a finished chapter rolls into the next one
-        onEnded={() => { if (prefs.autoNext) step(1); }}
+        onEnded={() => {
+          if (node.kind === 'recap') {
+            void markBookFinished(path.bookId, node.id).catch((cause: unknown) => console.error('markBookFinished', cause));
+          }
+          if (prefs.autoNext) step(1);
+        }}
         onProgress={(ms) => resume.record(path.bookId, { nodeId: node.id, ms })}
       />
 
       <Splitter split={right} label={t.panel.askPane} />
 
-      <AskPane
-        turns={turns}
+      <CompanionPane
+        messages={chat.messages}
+        pending={chat.pendingTurn !== undefined}
+        draftAnswer={chat.draft}
+        error={chat.error}
+        errorCode={chat.errorCode}
         onAsk={askQuestion}
-        onSearchOutside={searchOutside}
-        onJumpToChapter={() => undefined}
+        onCancel={() => { if (chat.pendingTurn) void chatCancel(chat.pendingTurn); }}
+        onCompact={() => { if (bookId) void chatCompact(bookId).catch(() => setChat((state) => ({ ...state, error: t.companion.compactFailed }))); }}
+        onJumpToChapter={(chapter) => {
+          const target = path.nodes.find((item) => item.sourceChapters.includes(chapter));
+          if (target) setCurrentId(target.id);
+          return target !== undefined;
+        }}
+        onOpenShelf={(id, nodeId) => { if (chat.pendingTurn) void chatCancel(chat.pendingTurn); openBook(id); setCurrentId(nodeId); setChat(emptyCompanionView(id)); }}
         selection={selection}
         onClearSelection={() => setSelection(undefined)}
         collapsed={right.state.collapsed}

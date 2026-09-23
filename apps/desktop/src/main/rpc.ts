@@ -1,36 +1,26 @@
-/**
- * RPC handlers.
- *
- * `ask` and `askOutside` stay separate on purpose: `ask` never touches the
- * network, and `askOutside` only runs once the reader has said yes. Merging them
- * would let the model decide to leave the book on its own.
- */
 import { openFileDialog } from 'electrobun/main/utils';
-import { askAnchored, askBook, noteIndexLocator, singleBook } from '@cairn/core/pipeline/ask';
-import { askOutside as askWeb } from '@cairn/core/pipeline/ask-outside';
 import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
-import type { Answer } from '@cairn/core/pipeline/ask';
-import type { OutsideAnswer } from '@cairn/core/pipeline/ask-outside';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
-import { isRecap } from '@cairn/core/pipeline/recap';
-import type { LibraryEntry } from '@cairn/core/store/library';
+import { isBookId, type LibraryEntry } from '@cairn/core/store/library';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { findEdgeTts, forgetEdgeTts, speakSample } from '@cairn/core/runtime';
-import { effectiveTavilyKey, readSettings, writeSettings } from './settings';
+import { readSettings, readSettingsForRenderer, writeSettings } from './settings';
+import { redactSettings } from '../shared/settings';
 import type {
   ContentLocale, ModelStatus, ShellSettingsValues, UiLocale,
 } from '../shared/settings';
-import { promptsFor } from '@cairn/core/pipeline/prompts';
 import { installMenu } from './menu';
-import { tavily } from './tavily';
 import { library } from './library';
-import { DATA_DIR, loadChapter, loadNotes, loadPath } from './store';
-import { modelStatus, plainProvider } from './provider';
-import { recordAsk } from './asks';
+import { DATA_DIR, loadPath } from './store';
+import { markBookFinished } from './reading';
+import { loadSession } from './companion/session';
+import { compactBookChat, runTurn } from './companion/run';
+import type { CompanionEvent } from './companion/events';
+import { modelStatus } from './provider';
 import type { BookPreview, Progress } from '../shared/types';
 import {
-  generate, inspect, listBooks, pauseBackgroundBuilds, removeBook, resume, schedulerFor,
+  generate, inspect, listBooks, removeBook, resume, schedulerFor,
 } from './generate';
 import { CairnError } from '@cairn/core/errors';
 import { encodingErrors } from '../shared/errors';
@@ -45,6 +35,13 @@ export function onProgress(fn: (p: Progress) => void): void {
   emitProgress = fn;
 }
 
+let emitCompanion: (event: CompanionEvent) => void = () => undefined;
+export function onCompanionEvent(fn: (event: CompanionEvent) => void): void {
+  emitCompanion = fn;
+}
+
+let activeChat: { readonly turnId: string; readonly controller: AbortController } | undefined;
+
 /**
  * The last progress of the run in flight.
  *
@@ -53,23 +50,6 @@ export function onProgress(fn: (p: Progress) => void): void {
  * that takes minutes. Keeping the value here lets the window ask instead.
  */
 let latest: Progress | undefined;
-
-/**
- * Run a reader-facing model call with background building held off.
- *
- * Prefetching stations and answering a question go through the same codex
- * process pool, and the reader is watching only one of the two. Holding is
- * per-call rather than global state so a failed question cannot wedge the
- * builder permanently.
- */
-async function foreground<T>(work: () => Promise<T>): Promise<T> {
-  const release = pauseBackgroundBuilds();
-  try {
-    return await work();
-  } finally {
-    release();
-  }
-}
 
 const rawHandlers = {
   /** Where the webview reads generated books from. Token included; do not log it. */
@@ -118,6 +98,48 @@ const rawHandlers = {
     return resume(params.bookId).catch(() => false);
   },
 
+  async markBookFinished(params: { bookId: string; nodeId: string }): Promise<boolean> {
+    return markBookFinished(params.bookId, params.nodeId);
+  },
+
+  async chatHistory(params: { bookId: string }) {
+    if (!isBookId(params.bookId)) throw new Error('invalid_book_id');
+    const path = await loadPath(params.bookId);
+    return loadSession(DATA_DIR, params.bookId, path.generatedAt);
+  },
+
+  async chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }): Promise<boolean> {
+    if (activeChat) return false;
+    const controller = new AbortController();
+    activeChat = { turnId: params.turnId, controller };
+    let terminal = false;
+    void runTurn({ ...params, signal: controller.signal }, (event) => {
+      if (event.type === 'final' || event.type === 'error') terminal = true;
+      emitCompanion(event);
+    })
+      .catch((cause: unknown) => {
+        if (!terminal) emitCompanion({
+          type: 'error', turnId: params.turnId, bookId: params.bookId,
+          code: 'model_failed', message: cause instanceof Error ? cause.message : String(cause),
+        });
+        console.error('chatSend failed', cause);
+      })
+      .finally(() => { if (activeChat?.turnId === params.turnId) activeChat = undefined; });
+    return true;
+  },
+
+  async chatCancel(params: { turnId: string }): Promise<boolean> {
+    if (activeChat?.turnId !== params.turnId) return false;
+    activeChat.controller.abort();
+    return true;
+  },
+
+  async chatCompact(params: { bookId: string }): Promise<boolean> {
+    if (activeChat) return false;
+    await compactBookChat(params.bookId);
+    return true;
+  },
+
   /** Irreversible, and the reader has already confirmed it in the shelf. */
   async deleteBook(params: { bookId: string }): Promise<boolean> {
     try {
@@ -132,68 +154,14 @@ const rawHandlers = {
     }
   },
 
-  async ask(params: {
-    bookId: string; question: string; selection?: string; nodeId: string;
-  }): Promise<Answer> {
-    // Answers are written in the book's language, not the reader's interface
-    // language: the material being quoted back is the book's own text.
-    const locale = await localeOfBook(params.bookId);
-    const prompts = promptsFor(locale);
-    const provider = await plainProvider();
-    const { nodes } = await loadPath(params.bookId);
-    const node = nodes.find((n) => n.id === params.nodeId);
-    if (!node) throw new CairnError('unknown_node', { id: params.nodeId });
-
-    const answer = await foreground(async () => {
-      // A highlighted passage already points at its chapters — nothing to search
-      // for. Except on the recap station, whose sources are the whole book:
-      // loading them all would put every chapter into one prompt. There the
-      // highlight rides along with the question and the locator picks chapters.
-      if (params.selection && !isRecap(node)) {
-        const chapters = (await Promise.all(
-          node.sourceChapters.map((i) => loadChapter(params.bookId, i)),
-        )).filter((c) => c !== undefined);
-        return askAnchored(
-          { question: params.question, selection: params.selection, node, chapters },
-          provider,
-          locale,
-        );
-      }
-
-      return askBook({
-        question: params.selection
-          ? prompts.ask.anchored(params.selection, params.question)
-          : params.question,
-        locator: noteIndexLocator(singleBook(await loadNotes(params.bookId)), provider, locale),
-        loadChapter: (ref) => loadChapter(params.bookId, ref.chapter),
-      }, provider, locale);
-    });
-
-    // Where the reader stopped to ask is the closest thing to a quality signal
-    // this tool has; a station asked about repeatedly did not make itself clear.
-    await recordAsk(params.bookId, {
-      at: new Date().toISOString(),
-      nodeId: node.id,
-      question: params.question,
-      grounded: answer.grounded,
-    });
-
-    return answer;
-  },
-
-  async askOutside(params: { question: string; bookTitle?: string }): Promise<OutsideAnswer> {
-    const [search, provider] = await Promise.all([tavilySearch(), plainProvider()]);
-    return foreground(() => askWeb(params, search, provider));
-  },
-
   /* ---- settings ---- */
 
   async getSettings(): Promise<ShellSettingsValues> {
-    return readSettings();
+    return readSettingsForRenderer();
   },
 
   async setSettings(patch: Partial<ShellSettingsValues>): Promise<ShellSettingsValues> {
-    return writeSettings(patch);
+    return redactSettings(await writeSettings(patch));
   },
 
   /** Where generated books live, as a path a human can read and open. */
@@ -257,27 +225,11 @@ const rawHandlers = {
   },
 };
 
-/**
- * What language a book's own content is in.
- *
- * Recorded when it was added. Missing on books built before that, which were
- * all Chinese-prompted, so that is what they resolve to.
- */
-async function localeOfBook(bookId: string): Promise<ContentLocale> {
-  const entry = (await listBooks()).find((b) => b.id === bookId);
-  return entry?.language ?? 'zh';
-}
-
 /** One sentence per language, each written in that language on purpose. */
 const SAMPLE: Readonly<Record<ContentLocale, string>> = {
   en: 'A chapter that cannot make one thing clear is worth nothing.',
   zh: '一章讲不清一件事，就什么都不是。',
 };
-
-/** The search tool, with whichever key is in force — the panel's, then the environment's. */
-async function tavilySearch(): Promise<ReturnType<typeof tavily>> {
-  return tavily(await effectiveTavilyKey());
-}
 
 /**
  * Every failure leaves here as an encoded payload, so the player can word it in

@@ -25,7 +25,7 @@ export { Gauntlet } from './slides/Gauntlet';
 export { PlayMark, PauseMark, FastMark, ChevronMark, TrashMark } from './panes/icons';
 export { StagePane } from './panes/StagePane';
 export { DeckPane } from './panes/DeckPane';
-export { AskPane, type Turn } from './panes/AskPane';
+export { CompanionPane } from './panes/CompanionPane';
 export { useTransport, RATES, type Transport } from './panes/useTransport';
 export { useSplit, type Split } from './panes/useSplit';
 export { useResume, type Resume } from './panes/useResume';

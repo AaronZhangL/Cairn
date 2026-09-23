@@ -16,8 +16,9 @@ Electrobun window
 │   ├── rpc.ts      typed bridge  ◄──────► bridge.ts
 │   ├── generate.ts pipeline driver        App / AddBook / Home
 │   ├── library.ts  loopback file server   packages/ui panes + slide layouts
-│   ├── provider.ts codex exec wrapper
-│   ├── tavily.ts   outside search
+│   ├── provider.ts generation model route
+│   ├── companion/  chat agent, tools, session
+│   ├── tavily.ts   web search
 │   └── store.ts    data dir resolution
 └── packages/core   pure domain + pipeline, used by the main process only
 ```
@@ -43,9 +44,10 @@ packages/core/     Domain types, parsing, pipeline, storage — no framework imp
   parse/           epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
   llm/             LlmProvider interface + tracing wrapper. No implementations.
   pipeline/        map · classify · reduce · recap · slides · tts · build ·
-                   budget · caption · fingerprint · ask · ask-outside
+                   budget · caption · fingerprint
                    job.ts (batch state machine) · scheduler.ts (interactive one)
-  store/           library.ts, file-store.ts, asks.ts
+  companion/       citation and chat contracts, web search interface
+  store/           library.ts, file-store.ts, reading.ts
   runtime/         codex-cli.ts, edge-tts.ts, trace-dir.ts
 packages/ui/       React components, design tokens, slide layout renderers
 apps/desktop/      Electrobun shell: main process + webview
@@ -103,6 +105,8 @@ $CAIRN_DATA_DIR/            default ~/Library/Application Support/Cairn/
   books/<id>/
     path.json               the station list; installed the moment reduce finishes
     notes.json              ChapterNote[]
+    chat.json               complete companion conversation archive
+    reading.json            completed-reading marker
     decks/<key>.json        one file per station, content-keyed
     decks/index.json        readiness list the player polls
   library.json              LibraryEntry[] incl. PathQuality and last position
@@ -164,18 +168,16 @@ It is the only process that listens, and it is not reachable from outside the ma
 | Desktop shell | Electrobun | Small native shell; the reference project ships Mac and Windows with it |
 | Build (webview) | Vite | Small output, fast dev |
 | UI | React | The slide layouts are components; nothing heavier is needed |
-| Model | `codex exec` subprocess behind `LlmProvider` | Already installed, no API spend. See below |
+| Generation model | `LlmProvider` | Codex login, API key, or CLI fallback. See below |
+| Companion model | Pi agent core + Pi AI | Streaming tool loop, cancellation, and selected model route |
 | Narration | `edge-tts`, voice `zh-CN-YunjianNeural` | Free, no key, sentence-level subtitles alongside the audio; Microsoft tunes this voice for audiobooks and commentary |
-| Web search | Tavily | One function, called only on the reader's explicit yes |
+| Web search | Tavily | The companion may search when it helps answer accurately |
 | EPUB parsing | JSZip, then our own extraction | We only need the text; epub.js brings a whole rendering engine |
-| Chat surface | **none — `AskPane.tsx` is ours** | assistant-ui was chosen for its shell and is not installed; the pane turned out to need no container library. Message bodies were always going to be ours, because answers are structured objects (`Answer`, `OutsideAnswer`), not markdown streams |
+| Chat surface | `CompanionPane.tsx` | App-owned messages, tool trail, and source citations |
 
-**Why no chat framework:** the Vercel AI SDK's `useChat` assumes the model sits behind an HTTP
-streaming endpoint; ours is a local subprocess over IPC. CopilotKit brings its own runtime and
-backend assumptions. assistant-ui's runtime is pluggable and would connect, but the one thing it
-would supply — the container — is a scroller and an input, and the things that matter here are
-the quoted-selection block, the chapter chip that jumps back, and the book/web separation. All
-three are ours either way.
+The companion's model loop runs in the main process. Pi supplies the streaming agent and model
+adapters; Cairn supplies read-only book and web tools, evidence validation, and the renderer.
+See [COMPANION.md](./COMPANION.md) for the source and context rules.
 
 **The cost of `codex exec`:** each call carries roughly 18k tokens of agent harness overhead,
 several times the chapter text itself. That is why the map stage batches chapters

@@ -13,8 +13,8 @@ modules fit together; [DESIGN.md](./DESIGN.md) covers how they look.
 | 3 | Path generation | `pipeline/map` → `classify` → `reduce` → `recap` |
 | 4 | Decks: slides and narration | `pipeline/slides.ts`, `tts.ts`, `build.ts`, `packages/ui` |
 | 5 | Player: the three panes | `apps/desktop`, `packages/ui` |
-| 6 | Ask: three layers | `pipeline/ask.ts`, `ask-outside.ts` |
-| 7 | Memory across books | not built |
+| 6 | Companion | [`COMPANION.md`](./COMPANION.md) |
+| 7 | Memory across books | Finished-book recall in the companion; generation use not built |
 | 8 | Quality signals | `PathQuality` on each `LibraryEntry` |
 | 9 | Boundaries | — |
 
@@ -28,8 +28,8 @@ One owner, one machine, run locally.
 
 ### What it is not
 
-- **Not a chat-based reading assistant.** Asking questions is a side path; **finishing the walk
-  is the main line.**
+- **Not a chat-first reading product.** The companion is a side path; **finishing the walk is the
+  main line.**
 - **Not a video generator.** Slides are data; the player is one way of rendering them.
 - **Not a course platform.** There is no curriculum, no grading, no schedule.
 
@@ -302,6 +302,9 @@ launch after that opens on the shelf; each book's position is still kept.
 
 ## 6. Ask: three layers
 
+> **Historical design, superseded by [`COMPANION.md`](./COMPANION.md).** This section describes
+> the retired ask pane, not the current implementation.
+
 | Layer | Trigger | Mechanism | Calls |
 | --- | --- | --- | --- |
 | **Anchored** | Select a passage and ask | The station's `sourceChapters` already point at the text — no retrieval | 1 |
@@ -342,10 +345,11 @@ web, and labelling the source is the entire value of the feature.
 
 ---
 
-## 7. Memory across books — planned, not built
+## 7. Memory across books — companion recall built
 
-Today each book is an island. The intended next capability: **keep what the reader has already
-walked, and use it when they walk something new.**
+The companion can recall stations from paths the reader has finished, with citations back to
+each book and station. Using that memory while generating new paths or slides remains planned.
+The following design notes describe the longer-term direction.
 
 - Every completed path, its station briefs, and the quotes kept are retained across books.
 - When `slides` builds a station, or `ask` answers a question, prior material that genuinely

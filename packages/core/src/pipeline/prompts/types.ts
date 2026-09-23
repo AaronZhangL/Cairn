@@ -107,35 +107,6 @@ export interface Prompts {
     readonly brief: string;
   };
 
-  readonly ask: {
-    readonly system: string;
-    readonly user: (request: {
-      readonly nodeTitle: string;
-      readonly brief: string;
-      readonly selection?: string;
-      readonly question: string;
-      readonly material: string;
-    }) => string;
-    readonly locatorSystem: string;
-    readonly locatorUser: (question: string, max: number, index: string) => string;
-    /** Answers the pipeline gives without asking a model. */
-    readonly notFound: string;
-    readonly rephrase: string;
-    readonly textGone: string;
-    /** Wraps a highlighted passage with the question it was asked about. */
-    readonly anchored: (selection: string, question: string) => string;
-    /** How a chapter is delimited inside a prompt. The tag name is localised too. */
-    readonly chapterTag: (idx: number, title: string, body: string) => string;
-    /** Asking without a station to anchor to: just the question and the material. */
-    readonly plainUser: (question: string, material: string) => string;
-  };
-
-  readonly outside: {
-    readonly system: string;
-    readonly user: (question: string, results: string) => string;
-    readonly nothingFound: string;
-  };
-
   /** Chapter titles invented during parsing, which end up in the path. */
   readonly parse: {
     readonly untitled: string;

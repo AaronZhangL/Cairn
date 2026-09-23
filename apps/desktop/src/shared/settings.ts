@@ -79,6 +79,14 @@ export interface ModelSettings {
   readonly model: string;
 }
 
+export type ChatModelSource = 'inherit' | 'anthropic' | 'deepseek' | 'minimax' | 'minimax-cn';
+
+export interface ChatModelSettings {
+  readonly source: ChatModelSource;
+  readonly apiKey: string;
+  readonly model: string;
+}
+
 export interface ModelStatus {
   /** Which route is in force. */
   readonly provider: 'chatgpt-codex' | 'http' | 'codex-cli';
@@ -90,6 +98,7 @@ export interface ModelStatus {
 
 export interface ShellSettingsValues {
   readonly model: ModelSettings;
+  readonly chatModel: ChatModelSettings;
   readonly narration: NarrationLanguage;
   readonly voices: Readonly<Record<ContentLocale, string>>;
   /** Empty means "read `TAVILY_API_KEY` from the environment instead". */
@@ -102,11 +111,15 @@ const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];
 
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
+/** A display-only stand-in; persisted credentials never cross the renderer bridge. */
+export const REDACTED_SECRET = '••••••••';
+
 export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
   // Borrowing the CLI's login is what makes this work with no setup at all on
   // the machine it was developed on. A distributed build is expected to change
   // this to `key`; see the note at the top of `runtime/chatgpt-codex.ts`.
   model: { source: 'codex', apiKey: '', baseUrl: '', model: '' },
+  chatModel: { source: 'inherit', apiKey: '', model: '' },
   narration: 'follow',
   // From `pipeline/voice.ts`, not a second copy: the terminal path has no
   // settings file and falls back to those, and two lists would drift.
@@ -139,6 +152,9 @@ export function parseSettings(
   const narration = raw.narration;
   const model = (typeof raw.model === 'object' && raw.model !== null ? raw.model : {}) as
     Partial<Record<keyof ModelSettings, unknown>>;
+  const chatModel = (typeof raw.chatModel === 'object' && raw.chatModel !== null ? raw.chatModel : {}) as
+    Partial<Record<keyof ChatModelSettings, unknown>>;
+  const chatSource = chatModel.source;
 
   return {
     model: {
@@ -146,6 +162,12 @@ export function parseSettings(
       apiKey: typeof model.apiKey === 'string' ? model.apiKey : fallback.model.apiKey,
       baseUrl: typeof model.baseUrl === 'string' ? model.baseUrl : fallback.model.baseUrl,
       model: typeof model.model === 'string' ? model.model : fallback.model.model,
+    },
+    chatModel: {
+      source: chatSource === 'inherit' || chatSource === 'anthropic' || chatSource === 'deepseek' || chatSource === 'minimax' || chatSource === 'minimax-cn'
+        ? chatSource : fallback.chatModel.source,
+      apiKey: typeof chatModel.apiKey === 'string' ? chatModel.apiKey : fallback.chatModel.apiKey,
+      model: typeof chatModel.model === 'string' ? chatModel.model : fallback.chatModel.model,
     },
     narration: narration === 'follow' || narration === 'en' || narration === 'zh'
       ? narration
@@ -159,6 +181,21 @@ export function parseSettings(
     defaultBudget: BUDGET_IDS.includes(raw.defaultBudget as BudgetId)
       ? (raw.defaultBudget as BudgetId)
       : fallback.defaultBudget,
+  };
+}
+
+export function redactSettings(settings: ShellSettingsValues): ShellSettingsValues {
+  return {
+    ...settings,
+    model: {
+      ...settings.model,
+      apiKey: settings.model.apiKey ? REDACTED_SECRET : '',
+    },
+    chatModel: {
+      ...settings.chatModel,
+      apiKey: settings.chatModel.apiKey ? REDACTED_SECRET : '',
+    },
+    tavilyKey: settings.tavilyKey ? REDACTED_SECRET : '',
   };
 }
 

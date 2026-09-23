@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cairn Desktop Verify"
+  short_description: "Verify Cairn in Vite or the real desktop app"
+  default_prompt: "Use $cairn-desktop-verify to check the changed behavior in the appropriate Cairn desktop surface."

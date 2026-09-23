@@ -17,9 +17,10 @@ import {
   LIBRARY_INDEX, type LibraryEntry, normalizeEntry,
 } from '@cairn/core/store/library';
 import type { Chapter, ChapterNote, NodeDeck, Path } from '@cairn/core/types';
-import { DATA_DIR, forget } from './store';
+import { forget } from './store';
+import { libraryDir } from './library';
 
-const at = (relative: string): string => join(DATA_DIR, relative);
+const at = (relative: string): string => join(libraryDir(), relative);
 
 /**
  * Every write to the index goes through one chain.

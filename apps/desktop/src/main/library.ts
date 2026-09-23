@@ -13,6 +13,7 @@
  */
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { isBookId } from '@cairn/core/store/library';
 
 const APP_DIR = 'Cairn';
 
@@ -46,9 +47,20 @@ export function resolveInLibrary(
 
   const rel = parts.slice(1);
   if (rel.some((p) => p === undefined || p === '.' || p === '..')) return undefined;
+  if (!publicPlayerFile(rel as string[])) return undefined;
 
   const target = resolve(root, ...(rel as string[]));
   return target.startsWith(resolve(root) + sep) ? target : undefined;
+}
+
+function publicPlayerFile(parts: readonly string[]): boolean {
+  if (parts.length === 1) return parts[0] === 'books.json';
+  if (parts.length === 2 && parts[0] === '.preview') return /^(en|zh)\.mp3$/.test(parts[1] ?? '');
+  if (parts[0] !== 'books' || !isBookId(parts[1] ?? '')) return false;
+  if (parts.length === 3) return ['path.json', 'asks.json', 'decks-ordered.json'].includes(parts[2] ?? '');
+  if (parts.length !== 4 || !/^[A-Za-z0-9_-]+\.(json|mp3)$/.test(parts[3] ?? '')) return false;
+  return (parts[2] === 'decks' && (parts[3] ?? '').endsWith('.json'))
+    || (parts[2] === 'audio' && (parts[3] ?? '').endsWith('.mp3'));
 }
 
 function decodeSafely(part: string): string {

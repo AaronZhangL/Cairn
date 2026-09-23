@@ -10,46 +10,13 @@
  * `TAVILY_API_KEY` were the only way to set these before this file existed, and
  * a machine configured that way should not silently start ignoring them.
  */
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import {
-  DEFAULT_SHELL_SETTINGS, parseSettings, type ShellSettingsValues,
-} from '../shared/settings';
 import { DATA_DIR } from './store';
+import { createSettingsStore } from './settings-store';
 
-const FILE = join(DATA_DIR, 'settings.json');
-
-let cached: ShellSettingsValues | undefined;
-
-/** One chain, as the library index has: two writes racing lose one of them. */
-let queue: Promise<unknown> = Promise.resolve();
-
-function serialize<T>(work: () => Promise<T>): Promise<T> {
-  const next = queue.then(work, work);
-  queue = next.catch(() => undefined);
-  return next;
-}
-
-export async function readSettings(): Promise<ShellSettingsValues> {
-  if (cached) return cached;
-  try {
-    cached = parseSettings(JSON.parse(await readFile(FILE, 'utf8')));
-  } catch {
-    // No file yet, or one this build cannot read. Either way the defaults work.
-    cached = DEFAULT_SHELL_SETTINGS;
-  }
-  return cached;
-}
-
-export function writeSettings(patch: Partial<ShellSettingsValues>): Promise<ShellSettingsValues> {
-  return serialize(async () => {
-    const current = await readSettings();
-    const next = parseSettings({ ...current, ...patch }, current);
-    await writeFile(FILE, JSON.stringify(next, null, 2));
-    cached = next;
-    return next;
-  });
-}
+const settingsStore = createSettingsStore(DATA_DIR);
+export const readSettings = settingsStore.read;
+export const readSettingsForRenderer = settingsStore.readForRenderer;
+export const writeSettings = settingsStore.write;
 
 /**
  * The key actually used for a search.

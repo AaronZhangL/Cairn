@@ -1,4 +1,4 @@
-import type { SearchResult, WebSearch } from '@cairn/core/pipeline/ask-outside';
+import type { SearchResult, WebSearch } from '@cairn/core/companion/web-search';
 import { CairnError } from '@cairn/core/errors';
 
 const ENDPOINT = 'https://api.tavily.com/search';

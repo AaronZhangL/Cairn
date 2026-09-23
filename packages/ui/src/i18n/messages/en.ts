@@ -105,6 +105,27 @@ export const en = {
     dropQuote: 'Drop this quote',
   },
 
+  companion: {
+    placeholder: 'Ask about this book or anything else…',
+    send: 'Send',
+    thinking: 'Thinking…',
+    stop: 'Stop',
+    compact: 'Compact context',
+    webSource: 'Web source',
+    readingSource: 'Earlier reading',
+    chapter: (n: number) => `Ch. ${n}`,
+    busy: 'Another answer is still running.',
+    compactFailed: 'Could not compact this conversation.',
+    error: (code: string) => ({
+      no_credential: 'Set up a model in Settings to use the companion.',
+      model_unavailable: 'The selected chat model is unavailable.',
+      bad_citation: 'The answer could not be verified against its sources. Please try again.',
+      aborted: 'Answer stopped.',
+      tool_limit: 'The answer needed too many tool calls. Try a narrower question.',
+      busy: 'Another answer is still running.',
+    } as Record<string, string>)[code] ?? 'The companion could not finish that answer.',
+  },
+
   menu: {
     addBook: 'Add a book',
     backToShelf: 'Back to the shelf',
@@ -211,14 +232,15 @@ export const en = {
       sampleCue: 'The sentence being read is lit like this',
     },
     models: {
-      desc: 'Where the slides and narration are written. Nothing else in the app uses it.',
+      desc: 'Choose models for station generation and the reading companion.',
       source: 'Model',
       sourceCodex: 'Use the Codex login on this machine',
       sourceKey: 'Use an API key',
       codexHint:
         'Borrows whatever `codex` already stored in ~/.codex. Nothing to set up, but it reaches ChatGPT’s own backend rather than the public API — fine for personal use, worth a thought before distributing a build that defaults to it.',
-      keyHint: 'Any OpenAI-compatible endpoint. The key stays in the main process.',
+      keyHint: 'An OpenAI-compatible endpoint. The key stays in the main process.',
       apiKey: 'API key',
+      secretHint: 'A saved key appears as dots. Replace the dots to change it, or erase them to clear it.',
       baseUrl: 'Endpoint',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       modelName: 'Model name',
@@ -228,6 +250,12 @@ export const en = {
       statusNoKey: 'No API key yet — generation will fail until one is set.',
       statusNoLogin: 'No Codex login found. Run `codex` once, or switch to an API key.',
       recheck: 'Check again',
+      chatSource: 'Companion model',
+      chatHint: 'Only affects conversations. Station generation keeps the model above.',
+      chatInherit: 'Use the generation model',
+      chatApiKey: 'Companion API key',
+      chatModelName: 'Companion model name',
+      chatModelPlaceholder: 'leave empty for the provider default',
     },
     playback: {
       desc: 'Where a deck starts and what happens when it ends.',

@@ -10,6 +10,8 @@
     "package": "electrobun prepare && vite build && electrobun build --env=stable"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.87.1",
+    "@earendil-works/pi-ai": "0.87.1",
     "@cairn/core": "workspace:*",
     "@cairn/ui": "workspace:*",
     "react": "^19.0.0",

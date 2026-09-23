@@ -27,6 +27,14 @@ export interface ModelSettings {
   readonly model: string;
 }
 
+export type ChatModelSource = 'inherit' | 'anthropic' | 'deepseek' | 'minimax' | 'minimax-cn';
+
+export interface ChatModelSettings {
+  readonly source: ChatModelSource;
+  readonly apiKey: string;
+  readonly model: string;
+}
+
 export interface ModelStatus {
   readonly provider: 'chatgpt-codex' | 'http' | 'codex-cli';
   readonly ready: boolean;
@@ -36,6 +44,7 @@ export interface ModelStatus {
 
 export interface ShellPrefs {
   readonly model: ModelSettings;
+  readonly chatModel: ChatModelSettings;
   readonly narration: NarrationLanguage;
   /** Voice id per language, e.g. `en-US-AndrewNeural`. */
   readonly voices: Readonly<Record<Locale, string>>;
