@@ -14,7 +14,7 @@ export {
 } from './settings/SettingsPanel';
 export {
   BUDGET_IDS,
-  type EngineStatus, type ModelSettings, type ModelSource, type ModelStatus,
+  type ModelSettings, type ModelSource, type ModelStatus,
   type NarrationLanguage, type SettingsBudgetId,
   type ShellPrefs, type ShellSettings, type VoiceOption,
 } from './settings/shell';

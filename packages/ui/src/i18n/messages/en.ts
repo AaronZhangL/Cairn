@@ -27,10 +27,9 @@ export const en = {
     llm_bad_output: 'The model returned something this app could not read.',
     llm_failed: 'The model command failed. Check that `codex` is installed and on PATH.',
 
-    tts_missing:
-      'edge-tts was not found, so nothing can be narrated. Install it (pip install edge-tts), or put the path in CAIRN_EDGE_TTS.',
-    tts_failed: 'edge-tts failed while synthesising.',
-    tts_no_cues: 'edge-tts produced no subtitle timings.',
+    tts_missing: 'The narration service could not be reached, so nothing can be narrated. Check the network and try again.',
+    tts_failed: 'Narration failed while synthesising.',
+    tts_no_cues: 'The narration service returned no subtitle timings.',
     tts_unaligned: 'Without subtitle timings the narration cannot be aligned.',
 
     map_empty: 'Reading the chapters produced nothing.',
@@ -50,6 +49,9 @@ export const en = {
       `${p.path ?? 'A file'} could not be loaded (${p.status ?? '?'}).`,
     tavily_key_missing: 'No Tavily API key is set, so the web cannot be searched.',
     tavily_failed: (p: { status?: number }) => `Tavily answered with ${p.status ?? '?'}.`,
+    brave_key_missing: 'No Brave Search API key is set, so it cannot search the web.',
+    brave_failed: (p: { status?: number }) => `Brave Search answered with ${p.status ?? '?'}.`,
+    firecrawl_failed: (p: { status?: number }) => `Firecrawl search answered with ${p.status ?? '?'}.`,
 
     offline_pick: 'Choosing a file needs the desktop app — run `bun run start`.',
     offline_generate: 'Building a path needs the desktop app — run `bun run start`.',
@@ -283,10 +285,6 @@ export const en = {
       voiceStyle: {
         narration: 'narration', warm: 'warm', casual: 'casual', youth: 'youthful',
       },
-      engine: 'edge-tts',
-      engineFound: (path: string) => `Found · ${path}`,
-      engineMissing: 'Not found · install it (pip install edge-tts), or set CAIRN_EDGE_TTS',
-      recheck: 'Check again',
       budget: 'Default budget',
       budgetHint: 'Pre-selected when a book is added.',
       budgets: {
@@ -298,9 +296,18 @@ export const en = {
     },
     keys: {
       desc: 'Credentials stay in the main process; the player never holds one.',
+      searchProvider: 'Web search',
+      searchProviderHint: 'Search queries are sent to the selected provider. Fetching pages remains separate.',
+      braveProvider: 'Brave Search',
+      firecrawlProvider: 'Firecrawl · key optional',
+      tavilyProvider: 'Tavily · API key',
+      brave: 'Brave Search API Key',
+      braveHint: 'Required when Brave is selected. An empty field reads BRAVE_SEARCH_API_KEY.',
+      firecrawl: 'Firecrawl API Key',
+      firecrawlHint: 'Optional. Without a key, Firecrawl uses its limited free tier. An empty field reads FIRECRAWL_API_KEY.',
       tavily: 'Tavily API Key',
       tavilyHint:
-        'Only used by “search outside the book”. Left empty, the TAVILY_API_KEY environment variable is read.',
+        'Used only when Tavily is selected. Left empty, the TAVILY_API_KEY environment variable is read.',
       getKey: 'Get a key ↗',
       showKey: 'Show key',
       hideKey: 'Hide key',

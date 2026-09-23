@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT, type ShellSettings, type VoiceOption } from '@cairn/ui';
 import {
-  clearCache, dataDir, engineStatus, getSettings, inShell, modelStatus, previewVoice,
+  clearCache, dataDir, getSettings, inShell, modelStatus, previewVoice,
   revealDataDir, setSettings,
 } from './bridge';
 import {
@@ -23,7 +23,6 @@ import {
 export function useShellSettings(): ShellSettings | undefined {
   const t = useT();
   const [values, setValues] = useState<ShellSettingsValues>();
-  const [engine, setEngine] = useState<{ found: boolean; path?: string }>({ found: false });
   const [dir, setDir] = useState('');
   const [model, setModel] = useState<ModelStatus>();
   const [previewing, setPreviewing] = useState<ContentLocale>();
@@ -35,13 +34,12 @@ export function useShellSettings(): ShellSettings | undefined {
     if (!inShell) return;
     let live = true;
     void (async () => {
-      const [stored, where, status, model] = await Promise.all([
-        getSettings(), dataDir(), engineStatus(), modelStatus(),
+      const [stored, where, model] = await Promise.all([
+        getSettings(), dataDir(), modelStatus(),
       ]);
       if (!live) return;
       setValues(stored ?? DEFAULT_SHELL_SETTINGS);
       setDir(where);
-      setEngine(status);
       setModel(model);
     })();
     return () => { live = false; };
@@ -93,14 +91,10 @@ export function useShellSettings(): ShellSettings | undefined {
         element.onended = () => setPreviewing(undefined);
         return element.play();
       })
-      // Synthesis can fail for the same reasons a book's can — a missing
-      // binary, a voice id this account cannot use. Silence is the signal.
+      // Synthesis can fail for the same reasons a book's can — no network, a
+      // voice id this account cannot use. Silence is the signal.
       .catch(() => setPreviewing(undefined));
   }, [previewing]);
-
-  const recheck = useCallback(() => {
-    void engineStatus(true).then(setEngine);
-  }, []);
 
   const recheckModel = useCallback(() => {
     void modelStatus().then(setModel);
@@ -112,8 +106,6 @@ export function useShellSettings(): ShellSettings | undefined {
       prefs: values,
       setPref,
       voicesFor,
-      engine,
-      recheckEngine: recheck,
       recheckModel,
       ...(model ? { modelStatus: model } : {}),
       previewVoice: audition,
@@ -122,5 +114,5 @@ export function useShellSettings(): ShellSettings | undefined {
       revealDataDir: () => void revealDataDir(),
       clearCache,
     } satisfies ShellSettings;
-  }, [values, setPref, voicesFor, engine, recheck, recheckModel, model, audition, previewing, dir]);
+  }, [values, setPref, voicesFor, recheckModel, model, audition, previewing, dir]);
 }

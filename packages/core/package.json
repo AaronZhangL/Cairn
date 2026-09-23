@@ -17,6 +17,7 @@
     "./runtime/*": "./src/runtime/*.ts"
   },
   "dependencies": {
+    "edge-tts-universal": "^1.4.0",
     "jszip": "^3.10.1"
   }
 }

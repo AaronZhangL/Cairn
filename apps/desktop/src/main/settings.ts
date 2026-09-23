@@ -12,22 +12,21 @@
  */
 import { DATA_DIR } from './store';
 import { createSettingsStore } from './settings-store';
+import type { ShellSettingsValues } from '../shared/settings';
 
 const settingsStore = createSettingsStore(DATA_DIR);
 export const readSettings = settingsStore.read;
 export const readSettingsForRenderer = settingsStore.readForRenderer;
 export const writeSettings = settingsStore.write;
 
-/**
- * The key actually used for a search.
- *
- * A key typed into the panel wins over the environment, because it is the more
- * recent and more deliberate of the two. An empty field means "use the
- * environment", not "use nothing" — which is why the panel's hint says so.
- */
-export async function effectiveTavilyKey(): Promise<string | undefined> {
-  const { tavilyKey } = await readSettings();
-  return tavilyKey.trim() || process.env.TAVILY_API_KEY || undefined;
+/** A saved key takes precedence over the selected provider's environment key. */
+export function effectiveSearchKey(
+  settings: ShellSettingsValues,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string | undefined {
+  if (settings.searchProvider === 'brave') return settings.braveKey.trim() || env.BRAVE_SEARCH_API_KEY || undefined;
+  if (settings.searchProvider === 'firecrawl') return settings.firecrawlKey.trim() || env.FIRECRAWL_API_KEY || undefined;
+  return settings.tavilyKey.trim() || env.TAVILY_API_KEY || undefined;
 }
 
 /** Either switch turns tracing on; the environment cannot be overridden to off. */

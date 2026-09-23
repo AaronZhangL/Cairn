@@ -1,8 +1,9 @@
 # Cairn — the reading companion
 
 > **Status: implemented in the desktop app; live model, book chat, finished-book recall, and
-> public-page fetch have been verified with synthetic data. Search requires a Tavily key and
-> remains unverified.** This
+> public-page fetch have been verified with synthetic data. Firecrawl is the keyless search
+> default; Brave Search and Tavily are selectable with keys. The three search adapters have
+> mock-response tests, but Firecrawl and Brave have not had live-query verification.** This
 > replaces §6 of [`SPEC.md`](./SPEC.md) ("Ask: three layers") and overrides invariant 4 in
 > [`AGENTS.md`](../AGENTS.md). Read §1 before changing either.
 

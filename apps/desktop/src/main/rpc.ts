@@ -4,7 +4,7 @@ import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { isBookId, type LibraryEntry } from '@cairn/core/store/library';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { findEdgeTts, forgetEdgeTts, speakSample } from '@cairn/core/runtime';
+import { speakSample } from '@cairn/core/runtime';
 import { readSettings, readSettingsForRenderer, writeSettings } from './settings';
 import { redactSettings } from '../shared/settings';
 import type {
@@ -167,17 +167,6 @@ const rawHandlers = {
   /** Where generated books live, as a path a human can read and open. */
   async dataDir(): Promise<string> {
     return DATA_DIR;
-  },
-
-  /**
-   * Whether a voice can be spoken at all.
-   * `recheck` drops the memoised lookup, so "I just installed it" is answerable
-   * without restarting the app.
-   */
-  async engineStatus(params: { recheck?: boolean }): Promise<{ found: boolean; path?: string }> {
-    if (params.recheck) forgetEdgeTts();
-    const path = await findEdgeTts();
-    return path ? { found: true, path } : { found: false };
   },
 
   /**

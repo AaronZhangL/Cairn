@@ -305,21 +305,6 @@ export function NarrationPage({ shell }: { shell?: ShellSettings }): ReactElemen
             one a given book uses is decided by the book, not here. */}
         <VoiceRow shell={shell} locale="en" />
         <VoiceRow shell={shell} locale="zh" />
-
-        <Row
-          label={t.settings.narration.engine}
-          hint={(
-            <span className={shell.engine.found ? 'set-hint ok' : 'set-hint warn'}>
-              {shell.engine.found
-                ? t.settings.narration.engineFound(shell.engine.path ?? '')
-                : t.settings.narration.engineMissing}
-            </span>
-          )}
-        >
-          <button type="button" className="set-btn" onClick={shell.recheckEngine}>
-            {t.settings.narration.recheck}
-          </button>
-        </Row>
       </Section>
 
       <Section title={t.settings.narration.budget}>
@@ -358,8 +343,6 @@ function VoiceRow({ shell, locale }: { shell: ShellSettings; locale: Locale }): 
         <button
           type="button"
           className={playing ? 'set-btn busy' : 'set-btn'}
-          // A voice cannot be heard without the binary that speaks it
-          disabled={!shell.engine.found}
           onClick={() => shell.previewVoice(locale)}
         >
           {playing ? t.settings.narration.stop : t.settings.narration.preview}
@@ -371,17 +354,58 @@ function VoiceRow({ shell, locale }: { shell: ShellSettings; locale: Locale }): 
 
 export function KeysPage({ shell }: { shell?: ShellSettings }): ReactElement {
   const { t } = useUi();
-  const keyId = useId();
+  const providerId = useId();
+  const braveKeyId = useId();
+  const firecrawlKeyId = useId();
+  const tavilyKeyId = useId();
   const traceId = useId();
 
   if (!shell) return <Offline title={t.settings.pages.keys} />;
 
   return (
     <Section title={t.settings.pages.keys}>
+      <Row label={t.settings.keys.searchProvider} hint={t.settings.keys.searchProviderHint} htmlFor={providerId}>
+        <Select
+          id={providerId}
+          value={shell.prefs.searchProvider}
+          choices={[
+            { value: 'brave', label: t.settings.keys.braveProvider },
+            { value: 'firecrawl', label: t.settings.keys.firecrawlProvider },
+            { value: 'tavily', label: t.settings.keys.tavilyProvider },
+          ]}
+          onPick={(value) => shell.setPref('searchProvider', value)}
+        />
+      </Row>
+      <StackedRow
+        label={t.settings.keys.brave}
+        hint={<>{t.settings.keys.braveHint} {t.settings.models.secretHint}</>}
+        htmlFor={braveKeyId}
+      >
+        <SecretField
+          id={braveKeyId}
+          value={shell.prefs.braveKey}
+          onChange={(value) => shell.setPref('braveKey', value)}
+          showLabel={t.settings.keys.showKey}
+          hideLabel={t.settings.keys.hideKey}
+        />
+      </StackedRow>
+      <StackedRow
+        label={t.settings.keys.firecrawl}
+        hint={<>{t.settings.keys.firecrawlHint} {t.settings.models.secretHint}</>}
+        htmlFor={firecrawlKeyId}
+      >
+        <SecretField
+          id={firecrawlKeyId}
+          value={shell.prefs.firecrawlKey}
+          onChange={(value) => shell.setPref('firecrawlKey', value)}
+          showLabel={t.settings.keys.showKey}
+          hideLabel={t.settings.keys.hideKey}
+        />
+      </StackedRow>
       <StackedRow
         label={t.settings.keys.tavily}
         hint={<>{t.settings.keys.tavilyHint} {t.settings.models.secretHint}</>}
-        htmlFor={keyId}
+        htmlFor={tavilyKeyId}
         aside={(
           <a
             className="set-link"
@@ -394,7 +418,7 @@ export function KeysPage({ shell }: { shell?: ShellSettings }): ReactElement {
         )}
       >
         <SecretField
-          id={keyId}
+          id={tavilyKeyId}
           value={shell.prefs.tavilyKey}
           onChange={(value) => shell.setPref('tavilyKey', value)}
           showLabel={t.settings.keys.showKey}

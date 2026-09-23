@@ -10,10 +10,10 @@ import { isBookId } from '@cairn/core/store/library';
 import { isFinished } from '@cairn/core/store/reading';
 import { pauseBackgroundBuilds } from '../generate';
 import { listBooks } from '../install';
-import { effectiveTavilyKey, readSettings } from '../settings';
+import { effectiveSearchKey, readSettings } from '../settings';
 import { readReadingRecord } from '../reading';
 import { DATA_DIR, loadNotes, loadPath } from '../store';
-import { tavily } from '../tavily';
+import { webSearch } from './search-provider';
 import { readChapters, readNotes } from './book-tools';
 import { resolveChatModel, type ChatModelResolution } from './model';
 import { recallReading } from './shelf-tools';
@@ -213,6 +213,7 @@ export async function compactBookChat(bookId: string): Promise<void> {
 function makeTools(
   bookId: string, signal: AbortSignal | undefined,
   record: (name: string, resultId: string, text: string, evidence?: EvidenceRecord) => void,
+  searchProvider: 'brave' | 'firecrawl' | 'tavily',
   searchKey: string | undefined,
   fetched: Map<string, ReadonlyMap<number, string>>,
   clarify: (question: string, options: readonly string[]) => void,
@@ -271,7 +272,7 @@ function makeTools(
       name: 'search_web', label: 'Search the web',
       description: '<tool>Search public web pages using a short query. Search snippets are leads, not citations.</tool>',
       parameters: query300,
-      execute: async (_id, args: unknown) => result('search_web', await searchWeb(stringArg(args, 'query'), tavily(searchKey), signal)),
+      execute: async (_id, args: unknown) => result('search_web', await searchWeb(stringArg(args, 'query'), webSearch(searchProvider, searchKey), signal)),
     } satisfies AgentTool<typeof query300>,
     {
       name: 'fetch_web', label: 'Fetch a web page',
@@ -315,8 +316,8 @@ export async function runTurn(input: RunTurnInput, emit: EmitCompanionEvent): Pr
   let draft = '';
   try {
     if (input.signal?.aborted) throw new CompanionRunError('aborted');
-    const [path, notes, settings, searchKey, entries] = await Promise.all([
-      loadPath(input.bookId), loadNotes(input.bookId), readSettings(), effectiveTavilyKey(),
+    const [path, notes, settings, entries] = await Promise.all([
+      loadPath(input.bookId), loadNotes(input.bookId), readSettings(),
       listBooks(),
     ]);
     if (input.nodeId && !path.nodes.some((node) => node.id === input.nodeId)) throw new CompanionRunError('unknown_node');
@@ -356,7 +357,7 @@ export async function runTurn(input: RunTurnInput, emit: EmitCompanionEvent): Pr
     const tools = makeTools(input.bookId, input.signal, (name, resultId, text, evidence) => {
       if (evidence) turnEvidence.push(evidence);
       toolMessages.push({ id: randomUUID(), role: 'tool', name, resultId, text, at: new Date().toISOString() });
-    }, searchKey, fetchedChapters, (question, options) => { clarification = { question, options }; });
+    }, settings.searchProvider, effectiveSearchKey(settings), fetchedChapters, (question, options) => { clarification = { question, options }; });
     let calls = 0;
     let visibleCurrent = new Set<string>();
     let contextFraction = 0.7;

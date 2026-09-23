@@ -5,17 +5,18 @@ import {
   type ShellSettingsValues,
 } from '../shared/settings';
 
-export function createSettingsStore(root: string) {
+export function createSettingsStore(root: string, tavilyEnvKey = process.env.TAVILY_API_KEY) {
   const file = join(root, 'settings.json');
+  const fallback = tavilyEnvKey ? { ...DEFAULT_SHELL_SETTINGS, searchProvider: 'tavily' as const } : DEFAULT_SHELL_SETTINGS;
   let cached: ShellSettingsValues | undefined;
   let queue: Promise<unknown> = Promise.resolve();
 
   const read = async (): Promise<ShellSettingsValues> => {
     if (cached) return cached;
     try {
-      cached = parseSettings(JSON.parse(await readFile(file, 'utf8')));
+      cached = parseSettings(JSON.parse(await readFile(file, 'utf8')), fallback);
     } catch {
-      cached = DEFAULT_SHELL_SETTINGS;
+      cached = fallback;
     }
     return cached;
   };
@@ -39,6 +40,8 @@ export function createSettingsStore(root: string) {
         ...(model ? { model } : {}),
         ...(chatModel ? { chatModel } : {}),
         tavilyKey: patch.tavilyKey === REDACTED_SECRET ? current.tavilyKey : patch.tavilyKey,
+        braveKey: patch.braveKey === REDACTED_SECRET ? current.braveKey : patch.braveKey,
+        firecrawlKey: patch.firecrawlKey === REDACTED_SECRET ? current.firecrawlKey : patch.firecrawlKey,
       }, current);
       await writeFile(file, JSON.stringify(next, null, 2));
       cached = next;

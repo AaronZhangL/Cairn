@@ -38,11 +38,6 @@ export type BunSchema = RPCSchema<{
     setSettings: { params: Partial<ShellSettingsValues>; response: ShellSettingsValues };
     /** The library path, for showing and for revealing in Finder. */
     dataDir: { params: void; response: string };
-    /** `recheck` drops the memoised edge-tts lookup before answering. */
-    engineStatus: {
-      params: { recheck?: boolean };
-      response: { found: boolean; path?: string };
-    };
     /** Writes a sample under the library root and returns its relative path. */
     previewVoice: { params: { locale: ContentLocale }; response: string };
     revealDataDir: { params: void; response: null };

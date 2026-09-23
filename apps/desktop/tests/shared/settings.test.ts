@@ -23,6 +23,9 @@ describe('parseSettings', () => {
       model: { source: 'key', apiKey: 'sk-x', baseUrl: 'https://example.test/v1', model: 'm' },
       narration: 'en',
       voices: { en: 'en-US-AvaNeural', zh: 'zh-CN-XiaoxiaoNeural' },
+      searchProvider: 'firecrawl',
+      braveKey: 'brave-x',
+      firecrawlKey: 'fire-x',
       tavilyKey: 'tvly-x',
       trace: true,
       defaultBudget: 'solid',
@@ -33,6 +36,23 @@ describe('parseSettings', () => {
   test('the model route defaults to borrowing the Codex login', () => {
     expect(DEFAULT_SHELL_SETTINGS.model.source).toBe('codex');
     expect(DEFAULT_SHELL_SETTINGS.chatModel.source).toBe('inherit');
+  });
+
+  test('a reader without a search key gets keyless web search by default', () => {
+    expect(parseSettings({}).searchProvider).toBe('firecrawl');
+  });
+
+  test('persists Tavily selection and rejects an unknown search provider', () => {
+    expect(parseSettings({ searchProvider: 'tavily' }).searchProvider).toBe('tavily');
+    expect(parseSettings({ searchProvider: 'brave' }).searchProvider).toBe('brave');
+    expect(parseSettings({ searchProvider: 'unknown' }).searchProvider).toBe('firecrawl');
+  });
+
+  test('an older saved Tavily key keeps its search destination after upgrade', () => {
+    expect(parseSettings({ tavilyKey: 'old-key' }).searchProvider).toBe('tavily');
+    expect(parseSettings({ searchProvider: 'keenable', tavilyKey: 'old-key' }).searchProvider).toBe('firecrawl');
+    expect(parseSettings({ searchProvider: 'keenable' }, { ...DEFAULT_SHELL_SETTINGS, searchProvider: 'tavily' }).searchProvider)
+      .toBe('firecrawl');
   });
 
   test('parses a separate Companion provider without changing generation', () => {
@@ -58,11 +78,14 @@ describe('parseSettings', () => {
   test('redacts stored credentials before settings reach the renderer', () => {
     const stored = parseSettings({
       model: { source: 'key', apiKey: 'private-model-key' }, tavilyKey: 'private-search-key',
+      braveKey: 'private-brave-key', firecrawlKey: 'private-firecrawl-key',
     });
     const visible = redactSettings(stored);
     expect(visible.model.source).toBe('key');
     expect(visible.model.apiKey).toBe(REDACTED_SECRET);
     expect(visible.tavilyKey).toBe(REDACTED_SECRET);
+    expect(visible.braveKey).toBe(REDACTED_SECRET);
+    expect(visible.firecrawlKey).toBe(REDACTED_SECRET);
     expect(JSON.stringify(visible)).not.toContain('private-');
     expect(redactSettings(DEFAULT_SHELL_SETTINGS).model.apiKey).toBe('');
   });

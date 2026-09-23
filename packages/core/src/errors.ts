@@ -29,6 +29,7 @@ export type ErrorCode =
   // The desktop shell
   | 'book_not_listed' | 'delete_failed' | 'main_silent' | 'bundle_failed'
   | 'tavily_key_missing' | 'tavily_failed'
+  | 'brave_key_missing' | 'brave_failed' | 'firecrawl_failed'
   // Asked of a webview with no main process behind it (`bun run dev`)
   | 'offline_pick' | 'offline_generate' | 'offline_search' | 'offline_delete'
   /** A code this build does not know — an older shell talking to a newer player. */

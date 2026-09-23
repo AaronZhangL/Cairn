@@ -40,9 +40,6 @@ type Rpc = {
       p: Partial<ShellSettingsValues>, o?: RequestOptions,
     ): Promise<ShellSettingsValues>;
     dataDir(p: undefined, o?: RequestOptions): Promise<string>;
-    engineStatus(
-      p: { recheck?: boolean }, o?: RequestOptions,
-    ): Promise<{ found: boolean; path?: string }>;
     previewVoice(p: { locale: ContentLocale }, o?: RequestOptions): Promise<string>;
     revealDataDir(p: undefined, o?: RequestOptions): Promise<null>;
     clearCache(p: undefined, o?: RequestOptions): Promise<null>;
@@ -230,13 +227,6 @@ export async function dataDir(): Promise<string> {
 export async function modelStatus(): Promise<ModelStatus | undefined> {
   if (!inShell) return undefined;
   return (await connect()).request.modelStatus(undefined, POLL_LIMIT).catch(() => undefined);
-}
-
-export async function engineStatus(recheck = false): Promise<{ found: boolean; path?: string }> {
-  if (!inShell) return { found: false };
-  return (await connect()).request
-    .engineStatus({ recheck }, POLL_LIMIT)
-    .catch(() => ({ found: false }));
 }
 
 /**

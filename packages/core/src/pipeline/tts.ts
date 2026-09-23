@@ -3,7 +3,7 @@
  *
  * This file is the *pure* half — sizing, SRT parsing, sentence alignment and
  * deck assembly, none of which touch the file system or spawn anything. The
- * half that does lives in `runtime/edge-tts.ts` behind the `Narrator` interface
+ * half that does lives in `runtime/edge-tts-ws.ts` behind the `Narrator` interface
  * below, for the same reason model calls live behind `LlmProvider`: a stage
  * that shells out cannot be tested without the tool installed, and a domain
  * package that spawns processes is not a domain package.
@@ -78,6 +78,71 @@ function parseTimestamp(value: string): number | undefined {
   const m = value.match(/(\d+):(\d{2}):(\d{2})[,.](\d{1,3})/);
   if (!m) return undefined;
   return Number(m[1]) * 3_600_000 + Number(m[2]) * 60_000 + Number(m[3]) * 1000 + Number(m[4]);
+}
+
+/** One `WordBoundary` event: offsets are in 100-nanosecond units, as the wire sends them. */
+export interface SpeechBoundary {
+  readonly text: string;
+  readonly offset: number;
+  readonly duration: number;
+}
+
+/** What closes a cue. Matches the sentence-level granularity edge-tts's SRT used to give. */
+const SENTENCE_END = /[。！？!?…\n]|\.(?=\s|$)/;
+
+/**
+ * Turn word-boundary events into sentence-level cues.
+ *
+ * Two things have to hold, and each was a bug before it was a rule.
+ *
+ * The cues must concatenate back to exactly the text that was spoken, because
+ * `alignSentences` locates a sentence by cumulative character offset. Joining the
+ * event texts instead drops every space and most punctuation, which silently shifts
+ * later sentences — two seconds, on one measured English paragraph. So each cue's
+ * text is *sliced from the original*, never rebuilt from the events.
+ *
+ * And the cues must stay at least as coarse as our sentences, because
+ * `alignSentences` takes the cue holding a sentence's midpoint. Word-level cues put
+ * that midpoint on some word in the middle, timing every sentence late.
+ */
+export function cuesFromBoundaries(
+  text: string,
+  boundaries: readonly SpeechBoundary[],
+): readonly SrtCue[] {
+  if (boundaries.length === 0) return [];
+
+  // Where each spoken word sits in the original. A word the synthesiser normalised or
+  // expanded is not found; it then shares its neighbour's span rather than consuming
+  // text that belongs to someone else.
+  const starts: number[] = [];
+  let cursor = 0;
+  for (const b of boundaries) {
+    const at = b.text.length > 0 ? text.indexOf(b.text, cursor) : -1;
+    starts.push(at);
+    if (at >= 0) cursor = at + b.text.length;
+  }
+
+  const cues: SrtCue[] = [];
+  let from = 0;
+  let startMs: number | undefined;
+
+  for (let i = 0; i < boundaries.length; i += 1) {
+    const b = boundaries[i]!;
+    startMs ??= Math.round(b.offset / 10_000);
+
+    const nextStart = starts.slice(i + 1).find((s) => s >= 0);
+    const last = i === boundaries.length - 1;
+    const to = last || nextStart === undefined ? text.length : nextStart;
+    const slice = text.slice(from, Math.max(from, to));
+
+    if (last || SENTENCE_END.test(slice)) {
+      cues.push({ text: slice, startMs, endMs: Math.round((b.offset + b.duration) / 10_000) });
+      from = Math.max(from, to);
+      startMs = undefined;
+    }
+  }
+
+  return cues;
 }
 
 /**

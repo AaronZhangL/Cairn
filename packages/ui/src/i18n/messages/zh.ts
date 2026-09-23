@@ -18,10 +18,9 @@ export const zh: Messages = {
     llm_bad_output: '模型返回了这个程序读不懂的内容。',
     llm_failed: 'codex 命令失败了。确认它已安装并在 PATH 上。',
 
-    tts_missing:
-      '找不到 edge-tts，无法合成旁白。装一个（pip install edge-tts），或把可执行文件路径写进 CAIRN_EDGE_TTS 环境变量。',
-    tts_failed: 'edge-tts 合成失败。',
-    tts_no_cues: 'edge-tts 没有产出字幕时间轴。',
+    tts_missing: '连不上朗读服务，无法合成旁白。检查网络后重试。',
+    tts_failed: '旁白合成失败。',
+    tts_no_cues: '朗读服务没有返回字幕时间轴。',
     tts_unaligned: '没有字幕时间轴，无法对齐旁白。',
 
     map_empty: '逐章压缩没有产出任何内容。',
@@ -41,6 +40,9 @@ export const zh: Messages = {
       `${p.path ?? '有个文件'} 载入失败（${p.status ?? '?'}）。`,
     tavily_key_missing: '没有设置 Tavily API Key，无法联网搜索。',
     tavily_failed: (p: { status?: number }) => `Tavily 返回 ${p.status ?? '?'}。`,
+    brave_key_missing: '没有设置 Brave Search API Key，无法用它联网搜索。',
+    brave_failed: (p: { status?: number }) => `Brave Search 返回 ${p.status ?? '?'}。`,
+    firecrawl_failed: (p: { status?: number }) => `Firecrawl 搜索返回 ${p.status ?? '?'}。`,
 
     offline_pick: '选择文件需要桌面应用，用 `bun run start` 启动。',
     offline_generate: '生成路径需要桌面应用，用 `bun run start` 启动。',
@@ -271,10 +273,6 @@ export const zh: Messages = {
       voiceStyle: {
         narration: '旁白', warm: '温暖', casual: '随性', youth: '少年',
       },
-      engine: 'edge-tts',
-      engineFound: (path: string) => `已找到 · ${path}`,
-      engineMissing: '没找到 · 装一个（pip install edge-tts），或写进 CAIRN_EDGE_TTS',
-      recheck: '重新检测',
       budget: '默认预算',
       budgetHint: '添加新书时预选的那一档。',
       budgets: {
@@ -286,8 +284,17 @@ export const zh: Messages = {
     },
     keys: {
       desc: '密钥只存在主进程，播放器永远拿不到。',
+      searchProvider: '网页搜索',
+      searchProviderHint: '搜索词会发给所选服务；网页抓取独立进行。',
+      braveProvider: 'Brave Search',
+      firecrawlProvider: 'Firecrawl · 密钥可选',
+      tavilyProvider: 'Tavily · API 密钥',
+      brave: 'Brave Search API Key',
+      braveHint: '选择 Brave 时需要。留空则读环境变量 BRAVE_SEARCH_API_KEY。',
+      firecrawl: 'Firecrawl API Key',
+      firecrawlHint: '可选。无密钥时使用有额度限制的免费服务；留空则读环境变量 FIRECRAWL_API_KEY。',
       tavily: 'Tavily API Key',
-      tavilyHint: '只用于「去书外面找」。留空则读环境变量 TAVILY_API_KEY。',
+      tavilyHint: '仅在选择 Tavily 时使用。留空则读环境变量 TAVILY_API_KEY。',
       getKey: '获取密钥 ↗',
       showKey: '显示密钥',
       hideKey: '隐藏密钥',

@@ -77,8 +77,9 @@ describe('errorText', () => {
 
   test.each(LOCALES)('%s words a plain code', (locale) => {
     const text = errorText(payload('tts_missing'), messagesFor(locale));
+    // A sentence, not the code echoed back — which is what a missing key gives
     expect(text.length).toBeGreaterThan(0);
-    expect(text).toContain('edge-tts');
+    expect(text).not.toContain('tts_missing');
   });
 
   test('fills a code that takes values', () => {

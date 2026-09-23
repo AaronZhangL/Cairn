@@ -48,6 +48,9 @@ export interface ShellPrefs {
   readonly narration: NarrationLanguage;
   /** Voice id per language, e.g. `en-US-AndrewNeural`. */
   readonly voices: Readonly<Record<Locale, string>>;
+  readonly searchProvider: 'brave' | 'firecrawl' | 'tavily';
+  readonly braveKey: string;
+  readonly firecrawlKey: string;
   readonly tavilyKey: string;
   readonly trace: boolean;
   readonly defaultBudget: SettingsBudgetId;
@@ -59,20 +62,13 @@ export interface VoiceOption {
   readonly label: string;
 }
 
-export interface EngineStatus {
-  readonly found: boolean;
-  readonly path?: string;
-}
-
 export interface ShellSettings {
   readonly prefs: ShellPrefs;
   readonly setPref: <K extends keyof ShellPrefs>(key: K, value: ShellPrefs[K]) => void;
-  /** Voices edge-tts offers, per language. */
+  /** Voices the narrator offers, per language. */
   readonly voicesFor: (locale: Locale) => readonly VoiceOption[];
-  readonly engine: EngineStatus;
   /** What the model settings currently resolve to. */
   readonly modelStatus?: ModelStatus;
-  readonly recheckEngine: () => void;
   readonly recheckModel: () => void;
   /**
    * Speak a sample in that voice's own language — never a Chinese sentence in

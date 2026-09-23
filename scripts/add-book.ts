@@ -16,7 +16,7 @@ import { reduceToPath } from '../packages/core/src/pipeline/reduce';
 import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
 import { defaultVoiceFor } from '../packages/core/src/pipeline/tts';
 import type { ContentLocale } from '../packages/core/src/parse/language';
-import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts';
+import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts-ws';
 import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
 
 const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];

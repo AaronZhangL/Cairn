@@ -101,6 +101,9 @@ export interface ShellSettingsValues {
   readonly chatModel: ChatModelSettings;
   readonly narration: NarrationLanguage;
   readonly voices: Readonly<Record<ContentLocale, string>>;
+  readonly searchProvider: 'brave' | 'firecrawl' | 'tavily';
+  readonly braveKey: string;
+  readonly firecrawlKey: string;
   /** Empty means "read `TAVILY_API_KEY` from the environment instead". */
   readonly tavilyKey: string;
   readonly trace: boolean;
@@ -124,6 +127,9 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
   // From `pipeline/voice.ts`, not a second copy: the terminal path has no
   // settings file and falls back to those, and two lists would drift.
   voices: { en: DEFAULT_VOICES.en, zh: DEFAULT_VOICES.zh },
+  searchProvider: 'firecrawl',
+  braveKey: '',
+  firecrawlKey: '',
   tavilyKey: '',
   trace: false,
   defaultBudget: 'brief',
@@ -176,6 +182,11 @@ export function parseSettings(
       en: known('en', voices.en) ?? fallback.voices.en,
       zh: known('zh', voices.zh) ?? fallback.voices.zh,
     },
+    searchProvider: raw.searchProvider === 'brave' || raw.searchProvider === 'firecrawl' || raw.searchProvider === 'tavily'
+      ? raw.searchProvider : raw.searchProvider === 'keenable' ? 'firecrawl'
+        : typeof raw.tavilyKey === 'string' && raw.tavilyKey.trim() ? 'tavily' : fallback.searchProvider,
+    braveKey: typeof raw.braveKey === 'string' ? raw.braveKey : fallback.braveKey,
+    firecrawlKey: typeof raw.firecrawlKey === 'string' ? raw.firecrawlKey : fallback.firecrawlKey,
     tavilyKey: typeof raw.tavilyKey === 'string' ? raw.tavilyKey : fallback.tavilyKey,
     trace: typeof raw.trace === 'boolean' ? raw.trace : fallback.trace,
     defaultBudget: BUDGET_IDS.includes(raw.defaultBudget as BudgetId)
@@ -196,6 +207,8 @@ export function redactSettings(settings: ShellSettingsValues): ShellSettingsValu
       apiKey: settings.chatModel.apiKey ? REDACTED_SECRET : '',
     },
     tavilyKey: settings.tavilyKey ? REDACTED_SECRET : '',
+    braveKey: settings.braveKey ? REDACTED_SECRET : '',
+    firecrawlKey: settings.firecrawlKey ? REDACTED_SECRET : '',
   };
 }
 

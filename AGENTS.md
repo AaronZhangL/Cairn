@@ -30,20 +30,23 @@ bun run start     # the real desktop app
 bun run package   # a distributable .app
 ```
 
-`bun run start` needs `codex` on PATH, `edge-tts` reachable, and — only for outside-the-book
-search — `TAVILY_API_KEY` in the environment. `bun run dev` needs none of them and says so in the
+`bun run start` needs `codex` on PATH and a network path to the narration service. Outside-the-book search defaults
+to keyless Firecrawl; Brave Search and Tavily are selectable with keys. `bun run dev` needs none of them and says so in the
 answer pane rather than faking a reply.
 
 | Environment variable | Effect |
 | --- | --- |
 | `CAIRN_DATA_DIR` | Where generated books live. Default `~/Library/Application Support/Cairn/` — never beside the app, whose cwd is rebuilt on every `electrobun dev` |
-| `CAIRN_EDGE_TTS` | Path to `edge-tts`. Otherwise looked up beyond PATH: `~/.local/bin`, Homebrew, every pyenv version |
 | `CAIRN_TRACE=1` | Record every model call (prompt, schema, raw reply, ms) under the book's cache. Off by default: a trace of the map stage is the book's text a second time |
-| `TAVILY_API_KEY` | Outside-the-book search. Read in the main process only |
+| `BRAVE_SEARCH_API_KEY` | Optional Brave Search key; required when Brave is selected |
+| `FIRECRAWL_API_KEY` | Optional Firecrawl key; without it, search uses Firecrawl's limited anonymous tier |
+| `TAVILY_API_KEY` | Optional Tavily search key. Read in the main process only |
 
 **The settings panel writes `settings.json` beside the library**, and both sources are honoured.
-A key typed into the panel wins over `TAVILY_API_KEY`; an empty field means "read the
-environment". Tracing is on if *either* `CAIRN_TRACE=1` or the stored switch says so — a machine
+The search-provider picker defaults to keyless Firecrawl. Existing Tavily keys keep Tavily selected
+on upgrade; a reader can switch providers explicitly. A key typed into the panel wins over
+that provider's environment variable; an empty field means "read the environment". Tracing is on if *either*
+`CAIRN_TRACE=1` or the stored switch says so — a machine
 configured the old way does not silently stop working. `main/settings.ts` folds the two into one
 answer, so nothing downstream reads `process.env` for these.
 
@@ -51,8 +54,8 @@ The reader's own preferences — interface language, theme, text size, default s
 the main process at all. They live in `localStorage` (`packages/ui/src/settings/prefs.ts`),
 because everything they affect is drawn by the webview.
 
-`edge-tts` is checked **before the first model call**, because synthesis runs last and a missing
-binary would otherwise surface only after paying for every station's slides.
+The narration service is reached **before the first model call**, because synthesis runs last
+and an unreachable one would otherwise surface only after paying for every station's slides.
 
 ## Project structure
 
@@ -69,7 +72,7 @@ packages/
                  map/classify/reduce/slides/tts stages — all pure or interface-driven
     store/       Path helpers, file-backed JobStore, ask log
     runtime/     Everything that spawns a process or writes a file:
-                 codex-cli.ts, edge-tts.ts, trace-dir.ts
+                 codex-cli.ts, edge-tts-ws.ts, trace-dir.ts
   ui/            Shared React components and design tokens; slide layout renderers
     i18n/        Two dictionaries and the type that keeps them in step
     settings/    The settings panel, and the preferences the webview owns
@@ -249,8 +252,10 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 
 ## Security
 
-- **No secret is hardcoded.** `TAVILY_API_KEY` comes from the environment and is read in the main
-  process only; the webview never holds a key. That boundary is why the RPC bridge exists.
+- **No secret is hardcoded.** Optional `TAVILY_API_KEY` comes from the environment and is read in
+  the main process only; the webview never holds a key. The selected search service receives
+  model-written queries, which may contain brief book context, not whole chapters. That boundary
+  is why the RPC bridge exists.
 - **The loopback server is scoped, not open.** `main/library.ts` binds `127.0.0.1` on a random
   port (because `<audio>` needs a range-requestable URL), answers GET and HEAD only, serves one
   directory, and requires a per-launch token as the first path segment. Traversal is rejected
@@ -281,7 +286,7 @@ sync (iCloud) and are read on an iPhone. Nothing is built for it yet, but three 
 already bind:
 
 1. **The phone can only be a player.** An iOS app ships through the App Store, so it *is*
-   sandboxed: no subprocess, no `codex`, no `edge-tts`. Generation stays on the Mac. This is
+   sandboxed: no subprocess, no `codex`. Generation stays on the Mac. This is
    already the shape the data model implies — "slides are data, not video" — so keep the split
    clean rather than letting anything player-side depend on a generation-side artifact.
 2. **A book must be movable.** Everything the player needs lives under `books/<id>/`, and
