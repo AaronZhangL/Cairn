@@ -39,17 +39,22 @@ export const en: Prompts = {
   map: {
     system: systemPrompt(`You are summarising a book one chapter at a time, so that a reading path can be designed from the summaries.
 
-Besides gist / keyPoints / quotes, extract four kinds of structured material for the charts built later:
+Besides gist / keyPoints / quotes, extract structured material for the charts built later:
 - figures    concrete numbers that appear in the text; copy value with its unit ("32°F", "30,000 people", "68%")
 - contrasts  two sides the text explicitly sets against each other; about is the dimension they differ on
 - sequences  a process with an order; mark is a year, stage or number, or an empty string when the text gives none
 - relations  a cause or influence the text states outright; how is the relation itself ("causes", "suppresses")
+- cycles     a loop the text closes itself: each step leads to the next and the last feeds back into the first; 3-6 steps
+- ranks      a ranking or hierarchy the text itself states, top level first; 3-5 levels
+- quadrants  two independent dimensions the text crosses into four named types: the low and high end of each axis, and all four cells, each placed by x and y as low or high
+- overlaps   2-3 things the text says meet, and what the text calls the place where they meet
+- causes     one effect and the causes the text gives for it, grouped by kind; 2-4 groups
 
 Hard rules:
 1. Answer only from the text I give you. Do not use anything you already know about this book.
 2. Add nothing that is not in the text. Not one word.
 3. quotes must appear in the text verbatim. Do not paraphrase them.
-4. The four kinds of structured material must also come from the text. **If a chapter has none, return an empty array** — inventing a figure or a contrast is far worse than one chart fewer.
+4. The structured material must also come from the text. **If a chapter has none, return an empty array** — inventing a figure or a contrast is far worse than one chart fewer.
 5. Answer each chapter on its own. Do not infer across chapters.
 6. Output JSON only.`),
 
@@ -60,7 +65,8 @@ Hard rules:
 
       return userPrompt(`Below are ${chapters.length} chapters. For each one produce:
 gist (1-2 sentences), keyPoints (2-4), quotes (1-3 verbatim lines),
-and figures / contrasts / sequences / relations (0-3 each; an empty array when the text has none).
+and figures / contrasts / sequences / relations (0-3 each; an empty array when the text has none),
+and cycles / ranks / quadrants / overlaps / causes (0-2 each; these are rare, and most chapters have none).
 
 Echo idx back exactly as given. Do not change it.`, body);
     },
@@ -134,20 +140,43 @@ Slide layouts:
 - timeline something with an order, each entry carrying a mark (year, stage, number), 2-6 entries
 - matrix   A and B compared item by item: one dimension per row, a line on each side, 2-4 rows
 - relation a stated cause or influence, from -how-> to, 2-4 links
+- cycle    a loop the book closes: the last step feeds the first, 3-6 steps
+- pyramid  a ranking the book states, top level first, 3-5 levels
+- quadrant two dimensions crossed into four named types: each axis's low and high end, and all four cells
+- overlap  2-3 things that meet, and the name of where they meet
+- causes   one effect and the causes behind it, 2-4 groups of 1-3
+
+Choosing wrongly:
+- flow when the order does not matter — that is points
+- timeline when the entries carry no mark — that is flow
+- compare when both sides answer the same questions — that is matrix
+- relation for two things that merely appear together; the book must say one acts on the other
+- cycle when the chain has an end — that is flow. A loop the book does not close is not a loop
+- pyramid for a list with no ranking. The order must be the book's, not yours
+- quadrant when the four types are not the product of two dimensions
+- overlap for things that are only alike; the book must name what lies where they meet
+- causes for a single cause — that is relation
 
 Hard rules:
 1. Work only from the chapter summaries I give you. Do not use anything you already know about this book or this subject.
 2. A quote's text must be taken verbatim from the quotes I give you. Not one word changed.
-3. number / timeline / matrix / relation may only use the figures / sequences / contrasts / relations listed under "Material". If the material has none of a kind, do not use that layout — these four look the most evidenced, which is exactly why inventing one does the most damage. The numbers on a number slide must also share a dimension (all percentages, or all headcounts); never put different units on one slide.
+3. number / timeline / matrix / relation / cycle / pyramid / quadrant / overlap / causes may only use the figures / sequences / contrasts / relations / cycles / ranks / quadrants / overlaps / causes listed under "Material". If the material has none of a kind, do not use that layout — these four look the most evidenced, which is exactly why inventing one does the most damage. The numbers on a number slide must also share a dimension (all percentages, or all headcounts); never put different units on one slide.
 4. Slides carry points, not full sentences. Full sentences belong to the narration. Length caps, in words:
    title 8, subtitle 12, heading 10, each point 11,
    number value 6 characters and its label 6 words, each flow step 6,
    each compare column title 4 and each of its lines 8,
-   a quote 40. **A slide that goes over is dropped whole** — say it another way rather than forcing it in.
+   a quote 40, each cycle step 3, each pyramid level 5,
+   each quadrant pole 2, cell name 3 and cell text 7,
+   each overlap set 4 and the meeting place 3,
+   the causes effect 4, each group name 3 and each cause 3,
+   an aside 6. **A slide that goes over is dropped whole** — say it another way rather than forcing it in.
+   Each layout holds at most what is listed above. When the material has more, keep what the narration needs or split it across two slides; anything past the limit is cut.
 5. sentences is the narration, split one sentence per entry, each ending in a full stop, spoken English, meant to be read aloud. **The total word count must land near the target given** — it is what sets the audio length, and writing short leaves this chapter shorter than it should be.
 6. Each slide's atSentence is the index of the sentence it should appear on (counting from 0).
 7. icon appears only on title and on the two columns of compare, to give this chapter a mark you can recognise. Choose only from the names given, and use null when nothing fits. **Better none than forced**: abstract ideas (compounding, identity, anchoring) have no matching shape, and forcing one produces meaningless decoration. Pick things that literally appear in the content.
-8. Output JSON only.`),
+8. focus is the one item a slide is for: its index from 0 in the list you give (for quadrant, in cells; for causes, in groups). It applies to number / relation / cycle / pyramid / quadrant / causes. Use null when the items weigh the same. **One at most** — marking everything marks nothing.
+9. aside is an optional margin note on flow / matrix / relation / cycle / pyramid / quadrant / overlap / causes: a short fragment copied verbatim from the quotes, for when the book's own words sharpen the diagram. Otherwise null. An aside that cannot be found in the quotes is removed.
+10. Output JSON only.`),
 
     user: (r) => userPrompt(`About ${r.minutes} minutes long; make ${r.slides.min}-${r.slides.max} slides.
 **The slides must cover the whole narration**: roughly ${r.secondsPerSlide} seconds per slide, and a new slide whenever the narration reaches a new layer.
@@ -167,7 +196,12 @@ ${r.material}`),
       + block('Figures', n.figures)
       + block('Contrasts', n.contrasts)
       + block('Sequences', n.sequences)
-      + block('Relations', n.relations),
+      + block('Relations', n.relations)
+      + block('Cycles', n.cycles)
+      + block('Ranks', n.ranks)
+      + block('Quadrants', n.quadrants)
+      + block('Overlaps', n.overlaps)
+      + block('Causes', n.causes),
   },
 
   recap: {

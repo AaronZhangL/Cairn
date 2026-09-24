@@ -46,6 +46,11 @@ export interface ChapterNote {
   readonly contrasts?: readonly ChapterContrast[];
   readonly sequences?: readonly ChapterSequence[];
   readonly relations?: readonly ChapterRelation[];
+  readonly cycles?: readonly ChapterCycle[];
+  readonly ranks?: readonly ChapterRank[];
+  readonly quadrants?: readonly ChapterQuadrant[];
+  readonly overlaps?: readonly ChapterOverlap[];
+  readonly causes?: readonly ChapterCauses[];
 }
 
 /** A quantity as the book writes it, unit included — `magnitude` reads the unit back out. */
@@ -71,6 +76,53 @@ export interface ChapterRelation {
   readonly from: string;
   readonly how: string;
   readonly to: string;
+}
+
+/** A loop the text closes itself: the last step feeds the first. */
+export interface ChapterCycle {
+  readonly title: string;
+  readonly steps: readonly string[];
+}
+
+/** A ranking the text states, top level first. */
+export interface ChapterRank {
+  readonly title: string;
+  readonly levels: readonly string[];
+}
+
+export type Pole = 'low' | 'high';
+
+/** Two dimensions crossed into four named types; one cell per corner. */
+export interface ChapterQuadrant {
+  readonly xLow: string;
+  readonly xHigh: string;
+  readonly yLow: string;
+  readonly yHigh: string;
+  readonly cells: readonly QuadrantCorner[];
+}
+
+export interface QuadrantCorner {
+  readonly x: Pole;
+  readonly y: Pole;
+  readonly name: string;
+  readonly text: string;
+}
+
+/** Two or three things the text says meet, and what it calls the place they meet. */
+export interface ChapterOverlap {
+  readonly sets: readonly string[];
+  readonly meet: string;
+}
+
+/** One effect and the causes the text gives for it, grouped by kind. */
+export interface ChapterCauses {
+  readonly effect: string;
+  readonly groups: readonly CauseGroup[];
+}
+
+export interface CauseGroup {
+  readonly name: string;
+  readonly causes: readonly string[];
 }
 
 /**
@@ -120,7 +172,7 @@ export interface Path {
 export type Slide =
   | { readonly layout: 'title'; readonly kicker?: string; readonly title: string; readonly subtitle?: string; readonly icon?: IconName }
   | { readonly layout: 'points'; readonly heading: string; readonly points: readonly string[] }
-  | { readonly layout: 'number'; readonly heading?: string; readonly items: readonly NumberItem[]; readonly note?: string }
+  | ({ readonly layout: 'number'; readonly heading?: string; readonly items: readonly NumberItem[]; readonly note?: string } & Focus)
   | {
       readonly layout: 'quote';
       readonly text: string;
@@ -129,16 +181,53 @@ export type Slide =
       readonly source?: QuoteSource;
     }
   | { readonly layout: 'compare'; readonly heading?: string; readonly left: ComparePane; readonly right: ComparePane }
-  | { readonly layout: 'flow'; readonly heading?: string; readonly steps: readonly string[] }
+  | ({ readonly layout: 'flow'; readonly heading?: string; readonly steps: readonly string[] } & Aside)
   | { readonly layout: 'timeline'; readonly heading?: string; readonly items: readonly TimelineItem[] }
-  | {
+  | ({
       readonly layout: 'matrix';
       readonly heading?: string;
       readonly left: string;
       readonly right: string;
       readonly rows: readonly MatrixRow[];
-    }
-  | { readonly layout: 'relation'; readonly heading?: string; readonly links: readonly RelationLink[] };
+    } & Aside)
+  | ({ readonly layout: 'relation'; readonly heading?: string; readonly links: readonly RelationLink[] } & Focus & Aside)
+  | ({ readonly layout: 'cycle'; readonly heading?: string; readonly steps: readonly string[] } & Focus & Aside)
+  | ({ readonly layout: 'pyramid'; readonly heading?: string; readonly levels: readonly string[] } & Focus & Aside)
+  | ({
+      readonly layout: 'quadrant';
+      readonly heading?: string;
+      readonly x: AxisPoles;
+      readonly y: AxisPoles;
+      /** Reading order: top-left, top-right, bottom-left, bottom-right. */
+      readonly cells: readonly QuadrantCell[];
+    } & Focus & Aside)
+  | ({ readonly layout: 'overlap'; readonly heading?: string; readonly sets: readonly string[]; readonly meet: string } & Aside)
+  | ({
+      readonly layout: 'causes';
+      readonly heading?: string;
+      readonly effect: string;
+      readonly groups: readonly CauseGroup[];
+    } & Focus & Aside);
+
+/** The one item the slide is for, by index. Absent when the items weigh the same. */
+export interface Focus {
+  readonly focus?: number;
+}
+
+/** A margin note in the book's own words; slides.ts drops one it cannot find in the quotes. */
+export interface Aside {
+  readonly aside?: string;
+}
+
+export interface AxisPoles {
+  readonly low: string;
+  readonly high: string;
+}
+
+export interface QuadrantCell {
+  readonly name: string;
+  readonly text: string;
+}
 
 /**
  * Provenance for one quoted line, down to the excerpt it came from.

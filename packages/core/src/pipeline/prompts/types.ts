@@ -67,6 +67,11 @@ export interface NoteMaterial {
   readonly contrasts: readonly string[];
   readonly sequences: readonly string[];
   readonly relations: readonly string[];
+  readonly cycles: readonly string[];
+  readonly ranks: readonly string[];
+  readonly quadrants: readonly string[];
+  readonly overlaps: readonly string[];
+  readonly causes: readonly string[];
 }
 
 export interface Prompts {

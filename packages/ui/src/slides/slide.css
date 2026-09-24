@@ -365,26 +365,63 @@
   background: #e0a45859;
 }
 
+/* ---- focus ----
+
+   One item per slide may carry the accent, and only when the model named it.
+   Without a focus the items stay in their own colour: marking every one of
+   them marks none. */
+.s-bars.focused .s-bar-row:not(.hl) .s-bar-v { color: var(--stage-ink); }
+.s-bars.focused .s-bar-row:not(.hl) .s-bar-fill { background: #ffffff38; }
+
+/* ---- aside ----
+
+   The book's own words in the margin. Serif, and italic where the face has one:
+   `font-synthesis: none` keeps a CJK line upright rather than slanted by the
+   browser. Set apart from the figure by a dashed lead-in, not a solid arrow,
+   because a solid line reads as part of the diagram. */
+.s-aside {
+  align-self: flex-end; max-width: 60cqw; margin-top: -.6cqw;
+  display: flex; align-items: center; gap: 1.2cqw;
+  font-family: Georgia, 'Songti SC', serif; font-style: italic; font-synthesis: none;
+  font-size: calc(1.7cqw * var(--fit, 1)); color: var(--stage-dim);
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  white-space: nowrap;
+}
+.s-aside::before { content: ''; flex: none; width: 3cqw; border-top: 1px dashed #ffffff40; }
+
 /* ---- reveal ----
 
    Items arrive with the narration. Kept as opacity and transform only, so it
-   costs one composited layer and never reflows mid-sentence. */
-.s-points li, .s-flow li, .s-pane, .s-bar-row, .s-tl li, .s-mx-row, .s-rel li {
+   costs one composited layer and never reflows mid-sentence. Layouts that
+   position items absolutely centre them with `translate`, which composes with
+   the `transform` here instead of being overwritten by it. */
+.s-points li, .s-flow li, .s-pane, .s-bar-row, .s-tl li, .s-mx-row, .s-rel li,
+.s-cy-node, .s-cy-arrow, .s-py li, .s-qd-cell, .s-ov-item, .s-ov-meet, .s-fb-group, .s-aside {
   transition: opacity .24s ease, transform .24s cubic-bezier(.2,.7,.3,1);
 }
 .s-bar-fill { transition: transform .24s cubic-bezier(.2,.7,.3,1); }
 .s-points li.out, .s-flow li.out, .s-pane.out,
-.s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out {
+.s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out,
+.s-cy-node.out, .s-py li.out, .s-qd-cell.out, .s-ov-item.out, .s-ov-meet.out,
+.s-fb-group.out, .s-aside.out {
   opacity: 0; transform: translateY(1.2cqw);
 }
+/* The arrow carries its rotation in `transform`, so it fades without moving. */
+.s-cy-arrow.out { opacity: 0; }
 .s-points li.in, .s-flow li.in, .s-pane.in,
-.s-bar-row.in, .s-tl li.in, .s-mx-row.in, .s-rel li.in { opacity: 1; transform: none; }
+.s-bar-row.in, .s-tl li.in, .s-mx-row.in, .s-rel li.in,
+.s-cy-node.in, .s-py li.in, .s-qd-cell.in, .s-ov-item.in, .s-ov-meet.in,
+.s-fb-group.in, .s-aside.in { opacity: 1; transform: none; }
+.s-cy-arrow.in { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .s-points li, .s-flow li, .s-pane, .s-bar-row, .s-tl li, .s-mx-row, .s-rel li,
+  .s-cy-node, .s-cy-arrow, .s-py li, .s-qd-cell, .s-ov-item, .s-ov-meet, .s-fb-group, .s-aside,
   .s-bar-fill, .s-dots i { transition: none; }
   .s-points li.out, .s-flow li.out, .s-pane.out,
-  .s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out { opacity: 1; transform: none; }
+  .s-bar-row.out, .s-tl li.out, .s-mx-row.out, .s-rel li.out,
+  .s-cy-node.out, .s-cy-arrow.out, .s-py li.out, .s-qd-cell.out, .s-ov-item.out, .s-ov-meet.out,
+  .s-fb-group.out, .s-aside.out { opacity: 1; transform: none; }
   .s-bar-row.out .s-bar-fill { transform: scaleX(1); }
 }
 

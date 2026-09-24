@@ -1,17 +1,23 @@
 import type { ReactElement } from 'react';
 import type { Slide } from '@cairn/core/types';
 import { Chrome, type SlideChrome } from './Chrome';
+import { Causes } from './layouts/Causes';
 import { Compare } from './layouts/Compare';
+import { Cycle } from './layouts/Cycle';
 import { Title } from './layouts/Title';
 import { Flow } from './layouts/Flow';
 import { Matrix } from './layouts/Matrix';
 import { NumberSlide } from './layouts/NumberSlide';
+import { Overlap } from './layouts/Overlap';
 import { Points } from './layouts/Points';
+import { Pyramid } from './layouts/Pyramid';
+import { Quadrant } from './layouts/Quadrant';
 import { Quote } from './layouts/Quote';
 import { Relation } from './layouts/Relation';
 import { Timeline } from './layouts/Timeline';
 import { type Cue, type Phrase, revealCount, revealShown } from './reveal';
 import './slide.css';
+import './diagram.css';
 
 /** Where this slide sits on the narration, so items can arrive as they are spoken. */
 export interface RevealWindow {
@@ -89,6 +95,21 @@ function body(
     case 'relation':
       return (
         <Relation {...slide} shown={shownOf(slide.links.map((l) => [l.from, l.to, l.how]))} />
+      );
+    case 'cycle':
+      return <Cycle {...slide} shown={shownOf(slide.steps)} />;
+    case 'pyramid':
+      return <Pyramid {...slide} shown={shownOf(slide.levels)} />;
+    case 'quadrant':
+      return <Quadrant {...slide} shown={shownOf(slide.cells.map((c) => [c.name, c.text]))} />;
+    case 'overlap':
+      return <Overlap {...slide} shown={shownOf([...slide.sets, slide.meet])} />;
+    case 'causes':
+      return (
+        <Causes
+          {...slide}
+          shown={shownOf([slide.effect, ...slide.groups.map((g) => [g.name, ...g.causes])])}
+        />
       );
   }
 }

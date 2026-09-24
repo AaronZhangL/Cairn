@@ -308,3 +308,143 @@ describe('slideCount', () => {
     }
   });
 });
+
+describe('makeDeck 图示版式', () => {
+  const cell = (x: string, y: string, name: string) => ({ x, y, name, text: `${name}的说明` });
+  const corners = [
+    cell('low', 'low', '删除'), cell('high', 'high', '立即做'),
+    cell('high', 'low', '授权'), cell('low', 'high', '计划做'),
+  ];
+  const quadrant = (cells: unknown[], focus: number | null = null) => ({
+    layout: 'quadrant', xLow: '不紧急', xHigh: '紧急', yLow: '不重要', yHigh: '重要',
+    cells, focus, atSentence: 0,
+  });
+
+  test('cycle 要 3-6 步，两步的循环不成立', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'cycle', steps: ['焦虑', '拖延'], atSentence: 0 },
+      { layout: 'cycle', steps: ['提示', '渴望', '反应', '奖赏'], atSentence: 1 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+    expect(d.slides[0]!.slide.layout).toBe('cycle');
+  });
+
+  test('pyramid 至少三层，超过五层截掉', async () => {
+    const levels = ['一', '二', '三', '四', '五', '六'];
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'pyramid', levels: ['上', '下'], atSentence: 0 },
+      { layout: 'pyramid', levels, atSentence: 1 },
+    ])));
+    const s = d.slides[0]!.slide;
+    expect(d.slides).toHaveLength(1);
+    expect(s.layout === 'pyramid' && s.levels).toHaveLength(5);
+  });
+
+  test('quadrant 按阅读顺序排好四格，focus 跟着那一格走', async () => {
+    // The model named 立即做 (its second cell) as the focus; in reading order it is top-right.
+    const d = await makeDeck(node, notes, stub(deck([quadrant(corners, 1)])));
+    const s = d.slides[0]!.slide;
+    if (s.layout !== 'quadrant') throw new Error(s.layout);
+    expect(s.cells.map((c) => c.name)).toEqual(['计划做', '立即做', '删除', '授权']);
+    expect(s.focus).toBe(1);
+    expect(s.x).toEqual({ low: '不紧急', high: '紧急' });
+  });
+
+  test('quadrant 缺一角或重复一角就整张丢弃', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      quadrant(corners.slice(0, 3)),
+      quadrant([...corners.slice(0, 3), cell('low', 'low', '又一个')]),
+    ])));
+    expect(d.slides).toHaveLength(0);
+  });
+
+  test('overlap 要 2-3 个集合和交集的名字', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'overlap', sets: ['热爱'], meet: '天职', atSentence: 0 },
+      { layout: 'overlap', sets: ['甲', '乙', '丙', '丁'], meet: '天职', atSentence: 0 },
+      { layout: 'overlap', sets: ['热爱', '擅长'], meet: '', atSentence: 0 },
+      { layout: 'overlap', sets: ['热爱', '擅长', '有人付钱'], meet: '天职', atSentence: 1 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+
+  test('causes 要结果和至少两组原因', async () => {
+    const group = (name: string) => ({ name, causes: ['一条'] });
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'causes', effect: '中断', groups: [group('环境')], atSentence: 0 },
+      { layout: 'causes', effect: '', groups: [group('环境'), group('身份')], atSentence: 0 },
+      { layout: 'causes', effect: '中断', groups: [group('环境'), group('身份')], atSentence: 1 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+  });
+});
+
+describe('makeDeck 焦点', () => {
+  const links = [
+    { from: '提示', how: '触发', to: '渴望' },
+    { from: '环境', how: '提高', to: '概率' },
+  ];
+
+  test('focus 指向存在的一项时保留', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'relation', links, focus: 1, atSentence: 0 },
+    ])));
+    const s = d.slides[0]!.slide;
+    expect(s.layout === 'relation' && s.focus).toBe(1);
+  });
+
+  test('越界、非整数或 null 的 focus 被去掉，卡片保留', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'relation', links, focus: 2, atSentence: 0 },
+      { layout: 'relation', links, focus: 0.5, atSentence: 1 },
+      { layout: 'relation', links, focus: null, atSentence: 2 },
+    ])));
+    expect(d.slides).toHaveLength(3);
+    for (const { slide } of d.slides) expect('focus' in slide).toBe(false);
+  });
+});
+
+describe('makeDeck 旁注', () => {
+  const steps = ['提示', '渴望', '反应'];
+
+  test('在摘句里找得到的旁注保留', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'flow', steps, aside: '锚定是系统1的产物', atSentence: 0 },
+    ])));
+    const s = d.slides[0]!.slide;
+    expect(s.layout === 'flow' && s.aside).toBe('锚定是系统1的产物');
+  });
+
+  test('找不到出处的旁注被去掉——编的话不能以原书的口吻出现', async () => {
+    const d = await makeDeck(node, notes, stub(deck([
+      { layout: 'flow', steps, aside: '这是模型自己说的一句话', atSentence: 0 },
+    ])));
+    expect(d.slides).toHaveLength(1);
+    expect('aside' in d.slides[0]!.slide).toBe(false);
+  });
+});
+
+describe('makeDeck 图示材料', () => {
+  test('循环、层级、象限、交集与成因都交给模型', async () => {
+    const rich = [{
+      ...notes[0]!,
+      cycles: [{ title: '习惯回路', steps: ['提示', '渴望', '反应'] }],
+      ranks: [{ title: '需求层次', levels: ['自我实现', '尊重', '生理'] }],
+      quadrants: [{
+        xLow: '不紧急', xHigh: '紧急', yLow: '不重要', yHigh: '重要',
+        cells: [{ x: 'high' as const, y: 'high' as const, name: '立即做', text: '马上处理' }],
+      }],
+      overlaps: [{ sets: ['热爱', '擅长'], meet: '天职' }],
+      causes: [{ effect: '中断', groups: [{ name: '环境', causes: ['看不见', '太远'] }] }],
+    }];
+    const provider = stub(deck([]));
+    await makeDeck(node, rich, provider);
+
+    const prompt = provider.seen[0]!.prompt;
+    expect(prompt).toContain('提示 → 渴望 → 反应 → 提示');
+    expect(prompt).toContain('1. 自我实现 2. 尊重 3. 生理');
+    expect(prompt).toContain('(high, high) 立即做: 马上处理');
+    expect(prompt).toContain('热爱 ∩ 擅长 = 天职');
+    expect(prompt).toContain('中断 ← 环境: 看不见, 太远');
+  });
+});

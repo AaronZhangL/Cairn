@@ -1,11 +1,12 @@
 import type { ReactElement } from 'react';
 import { fitAll, fitOf } from '@cairn/core/fit';
 import type { Slide } from '@cairn/core/types';
+import { Aside } from './Aside';
 
 type Props = Extract<Slide, { layout: 'matrix' }> & { readonly shown: number };
 
 /** The same question asked of both sides: here the pairing is the layout. */
-export function Matrix({ heading, left, right, rows, shown }: Props): ReactElement {
+export function Matrix({ heading, left, right, rows, aside, shown }: Props): ReactElement {
   const headFit = fitAll([left, right], 'matrixHead');
   const aspectFit = fitAll(rows.map((r) => r.aspect), 'matrixAspect');
   const cellFit = fitAll(rows.flatMap((r) => [r.left, r.right]), 'matrixCell');
@@ -27,6 +28,7 @@ export function Matrix({ heading, left, right, rows, shown }: Props): ReactEleme
           </div>
         ))}
       </div>
+      <Aside text={aside} shown={shown >= rows.length} />
     </div>
   );
 }

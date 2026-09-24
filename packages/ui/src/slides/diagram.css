@@ -1,0 +1,146 @@
+/* The five layouts drawn from diagram material. Shares the stage, the fit
+   ladder and the reveal rules in slide.css; only the shapes live here. */
+
+/* ---- cycle ----
+
+   Nodes sit on one ellipse, clockwise from the top. Its radii (30cqw by 10cqw)
+   are also written in Cycle.tsx, which places the nodes on it. */
+.s-cy { position: relative; height: 26cqw; }
+.s-cy ol { list-style: none; }
+.s-cy-ring {
+  position: absolute; left: calc(50% - 30cqw); top: calc(50% - 10cqw);
+  width: 60cqw; height: 20cqw; border-radius: 50%;
+  border: 1px solid #e0a45840;
+}
+.s-cy-node {
+  position: absolute; translate: -50% -50%;
+  max-width: 24cqw; white-space: nowrap;
+  font-size: calc(1.9cqw * var(--fit, 1)); font-weight: 600;
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  padding: .8cqw 1.4cqw; border: 1px solid #ffffff21; border-radius: .8cqw;
+  background: #26231d;
+}
+.s-cy-node.hl { border-color: #e0a45866; background: #3a2c1c; color: var(--stage-accent); }
+.s-cy-arrow {
+  position: absolute; width: 0; height: 0;
+  border-left: .9cqw solid #e0a458a6;
+  border-top: .45cqw solid transparent; border-bottom: .45cqw solid transparent;
+}
+
+/* ---- pyramid ---- */
+
+.s-py { list-style: none; display: flex; flex-direction: column; gap: .5cqw; }
+.s-py li { display: grid; grid-template-columns: 26cqw minmax(0, 1fr); gap: 2cqw; align-items: center; }
+.s-py-band { height: 4.4cqw; background: #ffffff17; }
+.s-py li.hl .s-py-band { background: #e0a45873; }
+.s-py-label {
+  min-width: 0; white-space: nowrap;
+  font-size: calc(2cqw * var(--fit, 1)); font-weight: 600;
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+}
+.s-py li.hl .s-py-label { color: var(--stage-accent); }
+
+/* ---- quadrant ---- */
+
+.s-qd {
+  display: grid; grid-template-columns: 11cqw minmax(0, 1fr);
+  column-gap: 1.4cqw; row-gap: .8cqw;
+}
+.s-qd-y { display: flex; flex-direction: column; justify-content: space-between; text-align: right; }
+.s-qd-x { grid-column: 2; display: flex; justify-content: space-between; }
+.s-qd-pole {
+  font-size: calc(1.5cqw * var(--fit, 1)); letter-spacing: calc(.06em + var(--fit-track, 0em));
+  color: var(--stage-dim); white-space: nowrap;
+}
+.s-qd-grid { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* The cross is the axes: each cell draws only its inner edges. */
+.s-qd-cell {
+  min-width: 0; display: flex; flex-direction: column; gap: .4cqw;
+  padding: 1.4cqw 1.8cqw;
+}
+.s-qd-cell:nth-child(1) { border-right: 1px solid #ffffff38; border-bottom: 1px solid #ffffff38; }
+.s-qd-cell:nth-child(2) { border-bottom: 1px solid #ffffff38; }
+.s-qd-cell:nth-child(3) { border-right: 1px solid #ffffff38; }
+.s-qd-cell.hl { background: #e0a4580f; }
+.s-qd-name {
+  font-size: calc(2cqw * var(--fit, 1)); font-weight: 700; white-space: nowrap;
+  letter-spacing: calc(-.01em + var(--fit-track, 0em));
+}
+.s-qd-cell.hl .s-qd-name { color: var(--stage-accent); }
+.s-qd-text {
+  font-size: calc(1.6cqw * var(--fit, 1)); line-height: calc(1.45 + var(--fit-lead, 0));
+  letter-spacing: calc(.004em + var(--fit-track, 0em)); color: var(--stage-dim);
+}
+
+/* ---- overlap ----
+
+   Circle tints are faint so they compound where the circles cross, which is
+   what makes the meeting place darker without drawing it. Set names sit
+   outside their circle so no word crosses a stroke. */
+.s-ov { position: relative; height: 26cqw; }
+.s-ov-circle {
+  position: absolute; border-radius: 50%;
+  border: 1px solid #ffffff38; background: #ffffff08;
+}
+.s-ov-set {
+  position: absolute; translate: 0 -50%; max-width: 18cqw;
+  font-size: calc(1.8cqw * var(--fit, 1)); font-weight: 600;
+  line-height: calc(1.35 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+}
+/* Opaque, so the strokes underneath do not run through the words. */
+.s-ov-meet {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  max-width: 18cqw; text-align: center;
+  font-size: calc(1.9cqw * var(--fit, 1)); font-weight: 700;
+  line-height: calc(1.35 + var(--fit-lead, 0));
+  letter-spacing: calc(0em + var(--fit-track, 0em));
+  color: var(--stage-accent);
+  padding: .7cqw 1.3cqw; border: 1px solid #e0a45866; border-radius: .8cqw;
+  background: #2c2419;
+}
+
+/* ---- causes ----
+
+   A fishbone: the spine runs into the effect, and each group's bone is the
+   diagonal of its own strip, drawn as a gradient so it scales with the cell. */
+.s-fb { position: relative; display: grid; grid-template-rows: 1fr 1fr; column-gap: 1.6cqw; }
+.s-fb-spine {
+  position: absolute; left: 0; right: 17cqw; top: 50%;
+  height: 1px; background: #e0a45873;
+}
+.s-fb-spine::after {
+  content: ''; position: absolute; right: -.2cqw; top: -.4cqw;
+  border-left: .8cqw solid #e0a45873;
+  border-top: .4cqw solid transparent; border-bottom: .4cqw solid transparent;
+}
+.s-fb-group { --bone: #ffffff4d; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 4cqw; }
+.s-fb-group.hl { --bone: #e0a458; }
+.s-fb-words { min-width: 0; display: flex; flex-direction: column; gap: .5cqw; text-align: right; }
+.s-fb-group.above .s-fb-words { padding-bottom: 1.4cqw; }
+.s-fb-group.below .s-fb-words { flex-direction: column-reverse; padding-top: 1.4cqw; }
+.s-fb-words ul { list-style: none; display: flex; flex-direction: column; gap: .3cqw; }
+.s-fb-group.below .s-fb-words ul { flex-direction: column-reverse; }
+.s-fb-name {
+  font-size: calc(1.9cqw * var(--fit, 1)); font-weight: 700; white-space: nowrap;
+  letter-spacing: calc(-.01em + var(--fit-track, 0em));
+}
+.s-fb-cause {
+  font-size: calc(1.6cqw * var(--fit, 1)); white-space: nowrap; color: var(--stage-dim);
+  letter-spacing: calc(.004em + var(--fit-track, 0em));
+}
+.s-fb-group.above .s-fb-bone {
+  background: linear-gradient(to top right, transparent calc(50% - 1px), var(--bone) calc(50% - .5px), var(--bone) calc(50% + .5px), transparent calc(50% + 1px));
+}
+.s-fb-group.below .s-fb-bone {
+  background: linear-gradient(to bottom right, transparent calc(50% - 1px), var(--bone) calc(50% - .5px), var(--bone) calc(50% + .5px), transparent calc(50% + 1px));
+}
+.s-fb-group.hl .s-fb-name { color: var(--stage-accent); }
+.s-fb-effect {
+  grid-row: 1 / span 2; align-self: center;
+  font-size: calc(2cqw * var(--fit, 1)); font-weight: 700;
+  line-height: calc(1.4 + var(--fit-lead, 0));
+  letter-spacing: calc(-.01em + var(--fit-track, 0em));
+  color: var(--stage-accent);
+  padding: 1.2cqw; border: 1px solid #e0a45866; border-radius: .8cqw; background: #e0a4580f;
+}

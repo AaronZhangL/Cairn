@@ -9,6 +9,9 @@ import type {
   Chapter, ChapterContrast, ChapterFigure, ChapterNote, ChapterRelation, ChapterSequence,
 } from '../types';
 import { type JobOptions, type JobStore, runJob, type JobResult } from './job';
+import {
+  MATERIAL_SCHEMA, toCauses, toCycles, toOverlaps, toQuadrants, toRanks,
+} from './material';
 import { promptsFor, type Prompts } from './prompts';
 
 /**
@@ -40,7 +43,10 @@ const SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['idx', 'gist', 'keyPoints', 'quotes', 'figures', 'contrasts', 'sequences', 'relations'],
+        required: [
+          'idx', 'gist', 'keyPoints', 'quotes', 'figures', 'contrasts', 'sequences', 'relations',
+          ...Object.keys(MATERIAL_SCHEMA),
+        ],
         properties: {
           idx: { type: 'integer' },
           gist: { type: 'string' },
@@ -56,6 +62,7 @@ const SCHEMA = {
             },
           },
           relations: listOf(['from', 'how', 'to']),
+          ...MATERIAL_SCHEMA,
         },
       },
     },
@@ -146,6 +153,11 @@ interface RawNote {
   contrasts?: unknown;
   sequences?: unknown;
   relations?: unknown;
+  cycles?: unknown;
+  ranks?: unknown;
+  quadrants?: unknown;
+  overlaps?: unknown;
+  causes?: unknown;
 }
 
 function toNote(chapter: Chapter, raw: RawNote | undefined): ChapterNote {
@@ -159,6 +171,11 @@ function toNote(chapter: Chapter, raw: RawNote | undefined): ChapterNote {
     contrasts: records<ChapterContrast>(raw?.contrasts, ['about', 'left', 'right']),
     sequences: toSequences(raw?.sequences),
     relations: records<ChapterRelation>(raw?.relations, ['from', 'how', 'to']),
+    cycles: toCycles(raw?.cycles),
+    ranks: toRanks(raw?.ranks),
+    quadrants: toQuadrants(raw?.quadrants),
+    overlaps: toOverlaps(raw?.overlaps),
+    causes: toCauses(raw?.causes),
   };
 }
 

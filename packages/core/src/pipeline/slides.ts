@@ -7,10 +7,14 @@
  * to have map extract more (numbers, comparisons), not to read the book again.
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
-import { type FitField, overBudget } from '../fit';
 import type { ContentLocale } from '../parse/language';
 import { type NoteMaterial, promptsFor } from './prompts';
 import { ICON_NAMES, toIconName } from '../icons';
+import { DIAGRAM_VARIANTS, toDiagramSlide } from './diagram-slides';
+import {
+  anyOverBudget, asText, extras, fitted, focusOf, nullableInt, nullableStr, opt, str, strList,
+  strs, variant,
+} from './slide-fields';
 import type {
   ChapterNote, ComparePane, DraftDeck, DraftSlide, MatrixRow, PathNode, QuoteSource,
   RelationLink, Slide, TimelineItem,
@@ -38,15 +42,6 @@ export function slideCount(estMinutes: number): SlideCount {
   return { min: Math.min(max - 1, Math.max(FEWEST, target - 2)), max };
 }
 
-/**
- * OpenAI structured output requires `required` to list every key in `properties`,
- * so a single wide object with per-layout optional fields is rejected. Each layout
- * is its own complete variant instead, and genuinely optional fields are declared
- * nullable rather than omitted.
- */
-const str = { type: 'string' } as const;
-const nullableStr = { type: ['string', 'null'] } as const;
-const strList = { type: 'array', items: str } as const;
 /** Nullable rather than omitted: structured output requires every key in `required`. */
 const nullableIcon = { type: ['string', 'null'], enum: [...ICON_NAMES, null] } as const;
 const pane = {
@@ -59,20 +54,6 @@ const rowsOf = (keys: readonly string[]): Record<string, unknown> => ({
   items: {
     type: 'object', additionalProperties: false, required: [...keys],
     properties: Object.fromEntries(keys.map((k) => [k, str])),
-  },
-});
-
-const variant = (
-  layout: string,
-  props: Record<string, unknown>,
-): Record<string, unknown> => ({
-  type: 'object',
-  additionalProperties: false,
-  required: ['layout', 'atSentence', ...Object.keys(props)],
-  properties: {
-    layout: { type: 'string', enum: [layout] },
-    atSentence: { type: 'integer' },
-    ...props,
   },
 });
 
@@ -90,15 +71,20 @@ const SLIDE_SCHEMA = {
       },
       heading: nullableStr,
       note: nullableStr,
+      focus: nullableInt,
     }),
     variant('quote', { text: str, cite: nullableStr }),
     variant('compare', { left: pane, right: pane, heading: nullableStr }),
-    variant('flow', { steps: strList, heading: nullableStr }),
+    variant('flow', { steps: strList, heading: nullableStr, aside: nullableStr }),
     variant('timeline', { items: rowsOf(['mark', 'text']), heading: nullableStr }),
     variant('matrix', {
       left: str, right: str, rows: rowsOf(['aspect', 'left', 'right']), heading: nullableStr,
+      aside: nullableStr,
     }),
-    variant('relation', { links: rowsOf(['from', 'how', 'to']), heading: nullableStr }),
+    variant('relation', {
+      links: rowsOf(['from', 'how', 'to']), heading: nullableStr, focus: nullableInt, aside: nullableStr,
+    }),
+    ...DIAGRAM_VARIANTS,
   ],
 } as const;
 
@@ -181,6 +167,15 @@ function materialOf(n: ChapterNote): NoteMaterial {
       (q) => `${q.title}: ${q.steps.map((t) => `${t.mark ? `${t.mark} ` : ''}${t.text}`).join(' → ')}`,
     ),
     relations: (n.relations ?? []).map((r) => `${r.from} ${r.how} ${r.to}`),
+    cycles: (n.cycles ?? []).map((c) => `${c.title}: ${[...c.steps, c.steps[0]].join(' → ')}`),
+    ranks: (n.ranks ?? []).map((r) => `${r.title}: ${r.levels.map((l, i) => `${i + 1}. ${l}`).join(' ')}`),
+    quadrants: (n.quadrants ?? []).map((q) => [
+      `x: ${q.xLow} → ${q.xHigh}; y: ${q.yLow} → ${q.yHigh}`,
+      ...q.cells.map((c) => `(${c.x}, ${c.y}) ${c.name}: ${c.text}`),
+    ].join('; ')),
+    overlaps: (n.overlaps ?? []).map((o) => `${o.sets.join(' ∩ ')} = ${o.meet}`),
+    causes: (n.causes ?? []).map((c) => `${c.effect} ← ${
+      c.groups.map((g) => `${g.name}: ${g.causes.join(', ')}`).join('; ')}`),
   };
 }
 
@@ -205,7 +200,7 @@ export async function composeDeck(
 
   const notes = request.notes ?? [];
   const slides = normalize(parsed.slides, sentences.length, request.maxSlides)
-    .map((draft) => attachSource(draft, notes));
+    .map((draft) => groundAside(attachSource(draft, notes), notes));
   return { nodeId: request.nodeId, sentences, slides };
 }
 
@@ -220,6 +215,18 @@ function attachSource(draft: DraftSlide, notes: readonly ChapterNote[]): DraftSl
   if (draft.slide.layout !== 'quote') return draft;
   const source = locateQuote(draft.slide.text, notes);
   return source ? { ...draft, slide: { ...draft.slide, source } } : draft;
+}
+
+/**
+ * An aside is set in the book's voice, so one that cannot be found in the
+ * quotes would be an invented line wearing a citation's typography.
+ */
+function groundAside(draft: DraftSlide, notes: readonly ChapterNote[]): DraftSlide {
+  const { slide } = draft;
+  if (!('aside' in slide) || slide.aside === undefined) return draft;
+  if (locateQuote(slide.aside, notes)) return draft;
+  const { aside: _unsourced, ...rest } = slide;
+  return { ...draft, slide: rest as Slide };
 }
 
 /**
@@ -329,6 +336,7 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
       return {
         layout: 'number', items,
         ...opt('heading', item, 'heading'), ...opt('note', item, 'note'),
+        ...focusOf(item.focus, items.length),
       };
     }
     case 'quote': {
@@ -347,7 +355,7 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
     case 'flow': {
       const steps = strs(item.steps).slice(0, 5);
       return steps.length > 1 && !anyOverBudget(steps, 'step')
-        ? { layout: 'flow', steps, ...opt('heading', item, 'heading') }
+        ? { layout: 'flow', steps, ...extras(item) }
         : undefined;
     }
     case 'timeline': {
@@ -365,17 +373,17 @@ function toSlide(item: Record<string, unknown>): Slide | undefined {
       if (anyOverBudget(matrixRows.map((r) => r.aspect), 'matrixAspect')) return undefined;
       const cells = matrixRows.flatMap((r) => [r.left, r.right]);
       if (anyOverBudget(cells, 'matrixCell')) return undefined;
-      return { layout: 'matrix', left, right, rows: matrixRows, ...opt('heading', item, 'heading') };
+      return { layout: 'matrix', left, right, rows: matrixRows, ...extras(item) };
     }
     case 'relation': {
       const links = rows<RelationLink>(item.links, ['from', 'how', 'to'], 4);
       if (links.length < 2) return undefined;
       if (anyOverBudget(links.flatMap((l) => [l.from, l.to]), 'relationNode')) return undefined;
       if (anyOverBudget(links.map((l) => l.how), 'relationHow')) return undefined;
-      return { layout: 'relation', links, ...opt('heading', item, 'heading') };
+      return { layout: 'relation', links, ...focusOf(item.focus, links.length), ...extras(item) };
     }
     default:
-      return undefined;
+      return toDiagramSlide(item);
   }
 }
 
@@ -403,22 +411,3 @@ function rows<T>(value: unknown, keys: readonly string[], limit: number): readon
     })
     .slice(0, limit);
 }
-
-const asText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-const strs = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : [];
-
-/** The text, or '' when no size would fit it — which reads as missing downstream. */
-const fitted = (v: unknown, field: FitField): string => {
-  const value = asText(v);
-  return value && !overBudget(value, field) ? value : '';
-};
-
-/** All or nothing: dropping one item of three quietly changes what was claimed. */
-const anyOverBudget = (texts: readonly string[], field: FitField): boolean =>
-  texts.some((text) => overBudget(text, field));
-
-const opt = (key: string, item: Record<string, unknown>, field: FitField): Record<string, string> => {
-  const value = fitted(item[key], field);
-  return value ? { [key]: value } : {};
-};

@@ -12,7 +12,7 @@ const MIN_WIDTH = 1.5;
  * Figures as bars, and no bars at all when the values are not comparable — a bar
  * drawn from a guess asserts a ratio the book never claimed. See DESIGN.md.
  */
-export function NumberSlide({ heading, items, note, shown }: Props): ReactElement {
+export function NumberSlide({ heading, items, note, focus, shown }: Props): ReactElement {
   const fractions = magnitudes(items.map((i) => i.value));
   const valueFit = fitAll(items.map((i) => i.value), 'value');
   const labelFit = fitAll(items.map((i) => i.label), 'label');
@@ -20,11 +20,11 @@ export function NumberSlide({ heading, items, note, shown }: Props): ReactElemen
   return (
     <div className="s">
       {heading && <h2 className="s-h2" data-fit={fitOf(heading, 'heading')}>{heading}</h2>}
-      <div className={fractions ? 's-bars' : 's-bars plain'}>
+      <div className={`s-bars${fractions ? '' : ' plain'}${focus === undefined ? '' : ' focused'}`}>
         {items.map((item, i) => {
           const fraction = fractions?.[i];
           return (
-            <div className={`s-bar-row ${i < shown ? 'in' : 'out'}`} key={item.label}>
+            <div className={`s-bar-row ${i < shown ? 'in' : 'out'}${i === focus ? ' hl' : ''}`} key={item.label}>
               <div className="s-bar-v" data-fit={valueFit}>{item.value}</div>
               {fraction !== undefined && (
                 <div className="s-bar-track">

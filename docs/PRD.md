@@ -185,14 +185,20 @@ NarrationCue { text, startMs, endMs }       // drives the caption
 | `timeline` | A dated or staged progression |
 | `matrix` | The same question asked of both sides |
 | `relation` | Cause and effect, as the book states it |
+| `cycle` | A loop the book closes: the last step feeds the first |
+| `pyramid` | A ranking the book states, apex first |
+| `quadrant` | Two dimensions crossed into four named types |
+| `overlap` | Two or three things that meet, and what the book calls the meeting place |
+| `causes` | One effect and its grouped causes, as a fishbone |
 
 Slides per station follow the station's length — roughly one per 22 seconds of narration, four
 at the fewest and fourteen at the most (`slideCount`). A fixed cap of six left a four-minute
 station holding one card for fifty seconds, which reads as a stall. `world` (a novel's setting)
 is not built.
 
-The last four draw only on material the map stage extracted verbatim — `figures`, `sequences`,
-`contrasts`, `relations` on each `ChapterNote`. A chapter that yields none of a kind produces no
+The last nine draw only on material the map stage extracted verbatim — `figures`, `sequences`,
+`contrasts`, `relations`, `cycles`, `ranks`, `quadrants`, `overlaps`, `causes` on each
+`ChapterNote`. A chapter that yields none of a kind produces no
 slide of that kind. These are the layouts that look most evidenced, so a fabricated one does the
 most damage; the rule is enforced in the prompt and in normalization, not left to taste.
 

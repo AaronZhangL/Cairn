@@ -57,6 +57,7 @@ function everyString(locale: ContentLocale): Record<string, string> {
     'slides.noteBlock': p.slides.noteBlock({
       idx: 0, title: 't', gist: 'g', keyPoints: ['k'], quotes: ['q'],
       figures: ['f'], contrasts: ['c'], sequences: ['s'], relations: ['r'],
+      cycles: ['cy'], ranks: ['ra'], quadrants: ['qu'], overlaps: ['ov'], causes: ['ca'],
     }),
     'recap.system': p.recap.system,
     'recap.user': p.recap.user(RECAP_REQUEST),

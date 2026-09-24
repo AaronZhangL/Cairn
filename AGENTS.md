@@ -192,7 +192,7 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 
 5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes — prose
    plus the structured material the chart layouts need (`figures`, `contrasts`, `sequences`,
-   `relations`) — and every downstream stage reads the notes, not the book. Map's task ids are
+   `relations`, `cycles`, `ranks`, `quadrants`, `overlaps`, `causes`) — and every downstream stage reads the notes, not the book. Map's task ids are
    positional, so notes cached before a field existed stay valid and stay thin; a book wants its
    cache cleared to gain one. Re-reading per stage multiplies cost ~5x for
    no gain. `pipeline/recap.ts` goes further and reads the *path* — the station briefs `reduce`

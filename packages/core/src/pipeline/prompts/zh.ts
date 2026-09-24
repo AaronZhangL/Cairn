@@ -29,17 +29,23 @@ export const zh: Prompts = {
   map: {
     system: systemPrompt(`你在为一本书生成逐章摘要，供后续生成学习路径使用。
 
-除了 gist / keyPoints / quotes，还要抽取四类结构化材料，供后续做图表用：
+除了 gist / keyPoints / quotes，还要抽取结构化材料，供后续做图表用：
 - figures   正文里出现的具体数字，value 连单位一起照抄（"32 华氏度"、"3 万人"、"68%"）
 - contrasts 正文里明确对立的两方，about 是对立的那个维度
 - sequences 正文里有先后顺序的过程，mark 是年份/阶段/序号，正文没给就留空串
 - relations 正文里明确说出的因果或影响，how 是关系本身（"导致"、"抑制"）
+- cycles    正文自己闭合的循环：每一步引出下一步，最后一步回到第一步，3-6 步
+- ranks     正文明确给出的排序或层级，最高一层在前，3-5 层
+- quadrants 正文用两个独立维度交叉出的四种类型：每个轴的低端和高端，以及全部四格，
+            每格用 x、y 标明它在 low 还是 high
+- overlaps  正文说到相交的 2-3 样东西，以及正文给交集起的名字
+- causes    一个结果，以及正文给出的成因，按类别分组，2-4 组
 
 铁律：
 1. 只依据我给你的正文作答。不得使用你对这本书的任何既有印象。
 2. 正文里没有的内容，一个字也不要补。
 3. quotes 必须是正文中逐字出现的原句，不得改写。
-4. 四类结构化材料同样只能来自正文。**这一章没有就给空数组**——
+4. 结构化材料同样只能来自正文。**这一章没有就给空数组**——
    编一个数字或编一组对立，比少一张图表严重得多。
 5. 每章独立作答，不要跨章推断。
 6. 只输出 JSON。`),
@@ -51,7 +57,8 @@ export const zh: Prompts = {
 
       return userPrompt(`以下是 ${chapters.length} 章正文。为每一章产出：
 gist（1-2 句）、keyPoints（2-4 条）、quotes（1-3 句原文摘句），
-以及 figures / contrasts / sequences / relations（各 0-3 组，正文里没有就给空数组）。
+以及 figures / contrasts / sequences / relations（各 0-3 组，正文里没有就给空数组），
+以及 cycles / ranks / quadrants / overlaps / causes（各 0-2 组，这几类很少见，大多数章节没有）。
 
 idx 必须原样回填，不得改动。`, body);
     },
@@ -127,19 +134,40 @@ ${shape}
 - timeline 有先后的进程，每条带一个 mark（年份/阶段/序号），2-6 条
 - matrix  A 与 B 逐项对照：每行一个维度，两边各给一句，2-4 行
 - relation 明确说出的因果或影响链，from -how-> to，2-4 条
+- cycle   书里闭合的循环：最后一步回到第一步，3-6 步
+- pyramid 书里给出的排序，最高一层在前，3-5 层
+- quadrant 两个维度交叉出四种类型：每个轴的低端和高端，以及全部四格
+- overlap 相交的 2-3 样东西，以及交集的名字
+- causes  一个结果和它背后的成因，2-4 组，每组 1-3 条
+
+选错版式的情形：
+- 顺序无关紧要却用 flow——那是 points
+- 条目没有 mark 却用 timeline——那是 flow
+- 两边回答的是同一组问题却用 compare——那是 matrix
+- 两样东西只是一起出现就用 relation——书里必须说出一方作用于另一方
+- 链条有终点却用 cycle——那是 flow。书里没有闭合的不是循环
+- 没有排序的清单用 pyramid。顺序必须是书给的，不是你排的
+- 四种类型并非两个维度交叉而来却用 quadrant
+- 只是相似就用 overlap——书里必须说出交集是什么
+- 只有一个原因却用 causes——那是 relation
 
 铁律：
 1. 只依据我给出的章节摘要。不得使用你对这本书或这个主题的既有知识。
 2. quote 的 text 必须原样取自我给出的摘句，一个字都不能改。
-3. number / timeline / matrix / relation 只能用我在「可用材料」里给出的
-   figures / sequences / contrasts / relations。材料里没有对应的那一类，
+3. number / timeline / matrix / relation / cycle / pyramid / quadrant / overlap / causes
+   只能用我在「可用材料」里给出的 figures / sequences / contrasts / relations /
+   cycles / ranks / quadrants / overlaps / causes。材料里没有对应的那一类，
    就不要用那个版式——这几个版式看起来最像"有依据"，编出来的危害也最大。
    number 的数字还必须同量纲（都是百分比，或都是人数），不同单位的数字不要放同一张。
 4. 幻灯上写要点，不写完整句子。完整的话留给口播。
    每个字段的字数上限（中文按字算，英文按词长的一半算）：
    标题 20，副标 30，小标题 24，points 每条 28，
    number 的数值 6、标签 14，flow 每步 16，compare 每栏标题 10、每条 20，
-   引文 100。**超出的幻灯会被整张丢弃**，写不下就换个说法，不要硬塞。
+   引文 100，cycle 每步 8，pyramid 每层 14，
+   quadrant 轴两端各 4、格名 8、格内说明 20，overlap 每个集合 10、交集 8，
+   causes 的结果 10、组名 7、每条成因 8，旁注 16。
+   **超出的幻灯会被整张丢弃**，写不下就换个说法，不要硬塞。
+   每个版式最多容纳上面列出的条数。材料更多时，只留口播需要的，或拆成两张；超出的部分会被截掉。
 5. sentences 是口播稿，按句切分，每句以句号结束，口语化，能读出来。
    **总字数必须接近给定目标**——字数决定音频时长，写短了这一站就不到该有的长度。
 6. 每张幻灯的 atSentence 指向它该出现时对应的句子下标（从 0 开始）。
@@ -147,7 +175,13 @@ ${shape}
    只能从给定的名字里挑，挑不到贴切的就填 null。
    **宁可不给也不要硬给**：抽象概念（复利、身份认同、锚定）没有对应的图形，
    硬套一个只会变成毫无意义的装饰。挑的是内容里真实出现的具体事物。
-8. 只输出 JSON。`),
+8. focus 是这张幻灯要让人先看的那一项：它在你给出的列表里的下标，从 0 开始
+   （quadrant 按 cells，causes 按 groups）。用于 number / relation / cycle / pyramid / quadrant / causes。
+   各项分量相同就填 null。**最多一个**——处处强调等于没有强调。
+9. aside 是 flow / matrix / relation / cycle / pyramid / quadrant / overlap / causes 上可选的页边旁注：
+   一小段从摘句里原样抄下的话，只在书里的原话能让这张图更清楚时才给，否则填 null。
+   在摘句里找不到出处的旁注会被删掉。
+10. 只输出 JSON。`),
 
     user: (r) => userPrompt(`时长约 ${r.minutes} 分钟，做 ${r.slides.min}-${r.slides.max} 张幻灯。
 **幻灯要铺满整段口播**：一张幻灯对应大约 ${r.secondsPerSlide} 秒，讲到新的一层就换一张。
@@ -167,7 +201,12 @@ ${r.material}`),
       + block('数字', n.figures)
       + block('对立', n.contrasts)
       + block('进程', n.sequences)
-      + block('因果', n.relations),
+      + block('因果', n.relations)
+      + block('循环', n.cycles)
+      + block('层级', n.ranks)
+      + block('象限', n.quadrants)
+      + block('交集', n.overlaps)
+      + block('成因', n.causes),
   },
 
   recap: {

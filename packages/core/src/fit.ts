@@ -15,7 +15,12 @@ export type FitField =
   | 'paneTitle' | 'panePoint' | 'step'
   | 'timelineMark' | 'timelineText'
   | 'matrixHead' | 'matrixAspect' | 'matrixCell'
-  | 'relationNode' | 'relationHow';
+  | 'relationNode' | 'relationHow'
+  | 'cycleStep' | 'pyramidLevel'
+  | 'quadrantName' | 'quadrantText' | 'quadrantPole'
+  | 'overlapSet' | 'overlapMeet'
+  | 'causeEffect' | 'causeGroup' | 'causeItem'
+  | 'aside';
 
 /** Content width is 86cqw: the 100cqw stage less `.s` padding of 7cqw a side. */
 export const BUDGETS: Readonly<Record<FitField, number>> = {
@@ -59,6 +64,28 @@ export const BUDGETS: Readonly<Record<FitField, number>> = {
   relationNode: 12,
   /** `.s-rel-how` 1.5cqw between two chips, one line. */
   relationHow: 10,
+  /** `.s-cy-node` 1.9cqw in a chip capped at 24cqw less 2.8cqw padding, one line — six chips clear each other at that width. */
+  cycleStep: 11,
+  /** `.s-py-label` 2cqw beside a 26cqw pyramid and 2cqw gap, one line. */
+  pyramidLevel: 29,
+  /** `.s-qd-name` 2cqw in a ~33cqw cell, one line. */
+  quadrantName: 16,
+  /** `.s-qd-text` 1.6cqw in the same cell, 2 lines. */
+  quadrantText: 41,
+  /** `.s-qd-pole` 1.5cqw in the 11cqw axis column, one line. */
+  quadrantPole: 7,
+  /** `.s-ov-set` 1.8cqw capped at 18cqw beside its circle, 2 lines. */
+  overlapSet: 20,
+  /** `.s-ov-meet` 1.9cqw in a pill capped at 18cqw less 2.6cqw padding, 2 lines. */
+  overlapMeet: 16,
+  /** `.s-fb-effect` 2cqw in a 17cqw box less 2.4cqw padding, 3 lines. */
+  causeEffect: 21,
+  /** `.s-fb-name` 1.9cqw in the ~28cqw beside a bone, one line. */
+  causeGroup: 14,
+  /** `.s-fb-cause` 1.6cqw in the same column, one line. */
+  causeItem: 17,
+  /** `.s-aside` 1.7cqw capped at 60cqw less its 3cqw lead-in and 1.2cqw gap, one line. */
+  aside: 32,
 };
 
 const STEP_1 = 1 / 0.8;

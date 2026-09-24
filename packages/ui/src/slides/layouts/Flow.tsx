@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { fitAll, fitOf } from '@cairn/core/fit';
 import type { Slide } from '@cairn/core/types';
+import { Aside } from './Aside';
 
 type Props = Extract<Slide, { layout: 'flow' }> & { readonly shown: number };
 
@@ -8,8 +9,7 @@ type Props = Extract<Slide, { layout: 'flow' }> & { readonly shown: number };
  * A causal chain, as a column that never wraps. The chain steps down one size
  * together so a long step cannot wrap a node into two lines. See DESIGN.md.
  */
-export function Flow({ heading, steps, shown }: Props): ReactElement {
-
+export function Flow({ heading, steps, aside, shown }: Props): ReactElement {
   return (
     <div className="s">
       {heading && <h2 className="s-h2" data-fit={fitOf(heading, 'heading')}>{heading}</h2>}
@@ -24,6 +24,7 @@ export function Flow({ heading, steps, shown }: Props): ReactElement {
           </li>
         ))}
       </ol>
+      <Aside text={aside} shown={shown >= steps.length} />
     </div>
   );
 }

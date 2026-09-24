@@ -144,11 +144,14 @@ emphasis nobody intended.
 
 Nothing here can be unit-tested: overflow is a property of real layout and there is no render
 setup. `?gauntlet` in `bun run dev` draws every layout at its worst, which is what the budgets
-are checked against.
+are checked against. It draws them with the caption band reserved, as the player does, and
+measures what it can: any text past the slide's content box, and any two pieces of text drawn
+over each other, are listed under the slide (`slides/faults.ts`). A clean list is not a pass —
+a label crowding a stroke is still for the eye.
 
 ## Slide layouts
 
-Nine layouts, each a different *shape of claim*. They are not interchangeable skins: picking the
+Fourteen layouts, each a different *shape of claim*. They are not interchangeable skins: picking the
 wrong one makes a true statement unreadable, so the reasoning behind each belongs here rather
 than in a comment on the component.
 
@@ -163,8 +166,13 @@ than in a comment on the component.
 | `timeline` | A dated or staged progression | Distinct from `flow`: the order is the book's own and the mark carries information a bare chain cannot show. Marks sit on one spine, because marks with gaps between them are a list, not a run |
 | `matrix` | The same question asked of both sides | `compare` sets two lists side by side and leaves the reader to pair them up; here the pairing *is* the layout, so a row that does not line up cannot exist |
 | `relation` | Cause and effect, as stated | The relation sits on the arrow rather than in a sentence, so the claim cannot be read as a loose association between two nearby nouns |
+| `cycle` | A loop the book closes | Nodes on one ellipse, clockwise from the top, and the arrow out of the last lands on the first. That return is the claim; a chain with an end is `flow` |
+| `pyramid` | A ranking the book states | Labels sit beside the shape, not in it: the apex is too narrow for a word, and a label shrunk to fit it would read as the least important level instead of the most |
+| `quadrant` | Two dimensions crossed into four types | The axes carry their ends as words — never arrows, never rotated text — and the cells are not coloured apart, because position already says which is which |
+| `overlap` | Where two or three things meet | Set names sit outside their circle so no word crosses a stroke; the meeting place is the one accent, because it is the claim and the sets are only its terms |
+| `causes` | One effect, its causes grouped | A fishbone. The effect arrives first because it is the question; groups alternate above and below the spine so no two bones share a side |
 
-Three rules hold across all nine:
+Four rules hold across all fourteen:
 
 - **Every layout builds with the narration, item by item.** An item appears at the caption that
   names it (`reveal.ts` matches the slide's words against the script), falling back to an even
@@ -172,11 +180,65 @@ Three rules hold across all nine:
   above it. Evenly spaced beats put a card on screen *after* the sentence that introduced it,
   which reads as the deck lagging the voice. Everything is derived from audio time, so a scrub
   backwards folds the slide up again — an entry animation would replay out of step.
-- **No layout invents its own material.** `number`, `timeline`, `matrix` and `relation` draw only
-  on `figures` / `sequences` / `contrasts` / `relations` extracted by the map stage. These four
-  look the most evidenced, so a fabricated one does the most damage.
+- **No layout invents its own material.** `number`, `timeline`, `matrix`, `relation` and the five
+  diagram layouts draw only on the material the map stage extracted (`figures`, `sequences`,
+  `contrasts`, `relations`, `cycles`, `ranks`, `quadrants`, `overlaps`, `causes`). These look
+  the most evidenced, so a fabricated one does the most damage.
+- **One focal item at most.** `number`, `relation`, `cycle`, `pyramid`, `quadrant` and `causes`
+  take an optional `focus`, and only that item carries the accent. Without one, nothing is
+  singled out: an accent on every row — which `relation` used to put on every effect — marks
+  none of them. `compare` and `matrix` keep their emphasised right side; there the emphasis is
+  the direction of the contrast, not a pick. `overlap` always accents the meeting place.
 - **Nothing is drawn.** Type, stroked shapes, and glyphs from the fixed local set. No generated
   images — see PRD.md.
+
+### Capacity, and when not to use a layout
+
+Every layout has a ceiling past which it stops reading at a glance. Past it, split the material
+across two slides or keep what the narration needs; normalization cuts the rest.
+
+| Layout | Holds |
+| --- | --- |
+| `points` | 1–3 claims |
+| `number` | 1–3 figures |
+| `flow` | 2–5 steps |
+| `timeline` | 2–6 entries |
+| `matrix` | 2–4 rows |
+| `relation` | 2–4 links |
+| `cycle` | 3–6 steps |
+| `pyramid` | 3–5 levels |
+| `quadrant` | exactly 4 cells |
+| `overlap` | 2–3 sets |
+| `causes` | 2–4 groups of 1–3 |
+
+The slides prompt names the wrong choices as well as the right ones, because the likeliest
+failure is a true claim in the wrong shape:
+
+- `flow` when the order does not matter — that is `points`
+- `timeline` when the entries carry no mark — that is `flow`
+- `compare` when both sides answer the same questions — that is `matrix`
+- `relation` for two things that merely appear together
+- `cycle` when the chain has an end — that is `flow`
+- `pyramid` for a list with no ranking of the book's own
+- `quadrant` when the four types are not the product of two dimensions
+- `overlap` for things that are only alike, with no named meeting place
+- `causes` for a single cause — that is `relation`
+
+### The aside
+
+`flow`, `matrix`, `relation` and the five diagram layouts may carry an `aside`: a short line in
+the margin, in serif and italic where the face has one, led in by a dashed rule rather than a
+solid one so it cannot be read as part of the figure. It is the book's voice, so
+`pipeline/slides.ts` keeps it only when it is found in the chapter's quotes; an aside nobody can
+locate is removed rather than shown. One per slide, arriving once the figure is complete.
+
+### Before adding a layout
+
+Ask whether the claim is a new *shape* or an existing shape with a different subject. A
+bottleneck, a feedback loop and a boundary are behaviours; most of them already have a layout
+that carries them. A new layout costs a map field, a cache clear for every existing book, a
+prompt entry in two languages, a fit budget per field, and a gauntlet entry — so it is for a
+shape nothing here can carry, not for a subject.
 
 Not built: `world` (a novel's setting; nothing in the notes supports it yet) and `stack`
 (proportional composition, which `number`'s bars already cover).
