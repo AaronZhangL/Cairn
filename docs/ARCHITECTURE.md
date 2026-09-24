@@ -2,7 +2,7 @@
 
 2026-09-22 · how the parts fit together, and why
 
-[SPEC.md](./SPEC.md) says what each module does. This says where the boundaries are, which way
+[PRD.md](./PRD.md) says what each module does. This says where the boundaries are, which way
 the dependencies point, and which arguments produced them. The decision record at the end (§8)
 holds the reasoning behind choices that are easy to undo by accident.
 
@@ -177,7 +177,21 @@ It is the only process that listens, and it is not reachable from outside the ma
 
 The companion's model loop runs in the main process. Pi supplies the streaming agent and model
 adapters; Cairn supplies read-only book and web tools, evidence validation, and the renderer.
-See [COMPANION.md](./COMPANION.md) for the source and context rules.
+See [PRD.md](./PRD.md) §6 for the source and context rules.
+
+**`LlmProvider` does not grow tool calling.** The pipeline is one shot, strict JSON schema, no
+tools, cacheable by content; the companion is multi-turn, tool-driven, streaming, not cacheable.
+Collapsing them would put a conversational loop behind the interface `deckKey` assumes is
+deterministic and single-shot, and the pipeline's whole caching story rests on that assumption.
+Two interfaces over one library is the deliberate shape.
+
+**Every model-facing prompt is XML-structured** — the companion, its compaction prompt, and the
+pipeline stages. Short named sections for role, behavior, tools and skills, with dynamic context
+in its own section, following [LLM Space](https://github.com/deer-flow/llm-space)'s General Agent
+prompt. Dynamic titles, book text, web text and reader input are escaped as character data and
+never interpolated into tag names or instruction sections; test rendered prompts with input
+containing `&`, `<`, quotes, and text that looks like a closing tag. The pipeline prompts are
+only partly tagged today, so this is a migration target, not a description of the code.
 
 **The cost of `codex exec`:** each call carries roughly 18k tokens of agent harness overhead,
 several times the chapter text itself. That is why the map stage batches chapters
@@ -256,7 +270,7 @@ hold a reply to a JSON Schema, under two different field names (`supportsStrictM
 OpenAI-shaped APIs, `supportsStrictTools` for Anthropic). Reading one and not the other marks
 every Claude model as unconstrained.
 
-The settings panel offers constrained models first and states the consequence when one is not.
+The settings panel lists constrained models first and the unconstrained ones after them.
 In pi-ai 0.87.1 that distinction is real: openai 41/41, anthropic 15/15, deepseek 2/2 and groq
 7/7 are fully constrained, while moonshotai 0/4, minimax 0/3, xai 0/4 and google 0/22 are not.
 That was already true before this change — the difference is that it is now visible.

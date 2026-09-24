@@ -40,6 +40,7 @@ function shellWith(overrides: Partial<ShellSettings['prefs']> = {}): ShellSettin
       searchProvider: 'firecrawl', braveKey: '', firecrawlKey: '', tavilyKey: '', trace: false,
       ...overrides,
     },
+    keptSecret: '••••••••',
     setPref: () => {},
     setProvider: () => {},
     providers: PROVIDERS,
@@ -62,15 +63,14 @@ describe('ModelsPage', () => {
     expect(html).toContain('gpt-5.4-mini');
   });
 
-  test('a provider with no constrained model is marked, not hidden', () => {
-    const html = render(shellWith());
-    expect(html).toContain('Moonshot');
-    expect(html.toLowerCase()).toContain('unconstrained');
+  test('a provider with no constrained model is offered like any other', () => {
+    expect(render(shellWith())).toContain('Moonshot');
   });
 
-  test('unconstrained models are withheld from the picker by default', () => {
-    // `legacy` is OpenAI's unconstrained entry in this fixture
-    expect(render(shellWith())).not.toContain('>Legacy<');
+  test('an unconstrained model is offered last, not withheld', () => {
+    // `legacy` is OpenAI's unconstrained entry, `gpt-5.4-mini` its constrained one
+    const html = render(shellWith());
+    expect(html.indexOf('>Legacy<')).toBeGreaterThan(html.indexOf('>GPT-5.4 mini<'));
   });
 
   test('a stored key renders as the stand-in, never as itself', () => {
@@ -78,6 +78,19 @@ describe('ModelsPage', () => {
       providers: { openai: { apiKey: '••••••••', baseUrl: '', model: '' } },
     }));
     expect(html).not.toContain('sk-');
+  });
+
+  /**
+   * The eye used to reveal the stand-in itself: the key never crosses the
+   * bridge, so there was nothing behind the dots to show.
+   */
+  test('a stored key offers clearing rather than revealing', () => {
+    const html = render(shellWith({
+      providers: { openai: { apiKey: '••••••••', baseUrl: '', model: '' } },
+    }));
+    expect(html).not.toContain('••••••••');
+    expect(html).not.toContain('set-eye');
+    expect(html).toContain('set-clear');
   });
 
   test('a custom endpoint takes a typed model id rather than a picker', () => {

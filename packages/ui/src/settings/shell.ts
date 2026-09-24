@@ -80,6 +80,8 @@ export interface VoiceOption {
 
 export interface ShellSettings {
   readonly prefs: ShellPrefs;
+  /** What a stored secret reads as here: the key itself never crosses the bridge. */
+  readonly keptSecret: string;
   readonly setPref: <K extends keyof ShellPrefs>(key: K, value: ShellPrefs[K]) => void;
   /** Patch one provider's profile, leaving every other provider's key untouched. */
   readonly setProvider: (id: ProviderId, patch: Partial<ProviderProfile>) => void;

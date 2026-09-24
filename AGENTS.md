@@ -188,7 +188,7 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 
 4. **Claims attributed to a source must be checkable.** The companion uses inline citations for
    claims about the current book, fetched web pages, and completed books; general explanation
-   can be uncited. See [`docs/COMPANION.md`](docs/COMPANION.md).
+   can be uncited. See [`docs/PRD.md`](docs/PRD.md) §6.2.
 
 5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes — prose
    plus the structured material the chart layouts need (`figures`, `contrasts`, `sequences`,
@@ -300,7 +300,7 @@ already bind:
 
 **In scope, not built:** the `world` layout (a novel's setting); the plain-text rendering of a
 deck; cross-book memory of what the reader has already walked
-([`docs/SPEC.md`](docs/SPEC.md) §7).
+([`docs/PRD.md`](docs/PRD.md) §7).
 
 **Ask before:** changing `tokens.css`, cache key derivation, budget arithmetic, or anything that
 sends data off the machine.
@@ -326,10 +326,9 @@ Use one root `CONTEXT.md` for Cairn's product vocabulary. See `docs/agents/domai
 
 | Document | Read it when |
 | --- | --- |
-| [`docs/SPEC.md`](docs/SPEC.md) | Before changing scope. The current product definition, organised by module |
+| [`docs/PRD.md`](docs/PRD.md) | Before changing scope. The current product definition, organised by module. §6 is the companion |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries, data flow, dependency choices, and the decision record behind them |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching `tokens.css` or any CSS that affects appearance |
-| [`docs/COMPANION.md`](docs/COMPANION.md) | Before touching the companion pane. It supersedes SPEC §6 |
 
 Two projects worth borrowing from:
 
@@ -345,8 +344,8 @@ Generation goes through **pi-ai**, which already knows each vendor's wire format
 that decides quality here — which of their models will hold a reply to a JSON Schema. The
 pipeline asks for structured output on roughly a hundred calls per book, so guessing that per
 vendor is how a schema quietly becomes a suggestion. `shared/providers.ts` reads pi-ai's
-generated catalog as plain data; the settings panel offers constrained models first and says so
-when one cannot be constrained.
+generated catalog as plain data; the settings panel lists constrained models first and the rest
+after them.
 
 Two details that are load-bearing and not obvious:
 

@@ -179,12 +179,15 @@ function VoiceRow({ shell, locale }: { shell: ShellSettings; locale: Locale }): 
   );
 }
 
+const SEARCH_KEY_URL: Readonly<Record<'brave' | 'firecrawl' | 'tavily', string>> = {
+  brave: 'https://api-dashboard.search.brave.com/app/keys',
+  firecrawl: 'https://www.firecrawl.dev/app/api-keys',
+  tavily: 'https://app.tavily.com/home',
+};
+
 export function SearchPage({ shell }: { shell?: ShellSettings }): ReactElement {
   const { t } = useUi();
   const providerId = useId();
-  const braveKeyId = useId();
-  const firecrawlKeyId = useId();
-  const tavilyKeyId = useId();
 
   if (!shell) return <Offline title={t.settings.pages.search} />;
 
@@ -202,56 +205,60 @@ export function SearchPage({ shell }: { shell?: ShellSettings }): ReactElement {
           onPick={(value) => shell.setPref('searchProvider', value)}
         />
       </Row>
-      <StackedRow
+      <SearchKeyRow
+        shell={shell}
+        which="brave"
         label={t.settings.search.brave}
-        hint={<>{t.settings.search.braveHint} {t.settings.models.secretHint}</>}
-        htmlFor={braveKeyId}
-      >
-        <SecretField
-          id={braveKeyId}
-          value={shell.prefs.braveKey}
-          onChange={(value) => shell.setPref('braveKey', value)}
-          showLabel={t.settings.search.showKey}
-          hideLabel={t.settings.search.hideKey}
-        />
-      </StackedRow>
-      <StackedRow
+        hint={t.settings.search.braveHint}
+      />
+      <SearchKeyRow
+        shell={shell}
+        which="firecrawl"
         label={t.settings.search.firecrawl}
-        hint={<>{t.settings.search.firecrawlHint} {t.settings.models.secretHint}</>}
-        htmlFor={firecrawlKeyId}
-      >
-        <SecretField
-          id={firecrawlKeyId}
-          value={shell.prefs.firecrawlKey}
-          onChange={(value) => shell.setPref('firecrawlKey', value)}
-          showLabel={t.settings.search.showKey}
-          hideLabel={t.settings.search.hideKey}
-        />
-      </StackedRow>
-      <StackedRow
+        hint={t.settings.search.firecrawlHint}
+      />
+      <SearchKeyRow
+        shell={shell}
+        which="tavily"
         label={t.settings.search.tavily}
-        hint={<>{t.settings.search.tavilyHint} {t.settings.models.secretHint}</>}
-        htmlFor={tavilyKeyId}
-        aside={(
-          <a
-            className="set-link"
-            href="https://app.tavily.com/home"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t.settings.search.getKey}
-          </a>
-        )}
-      >
-        <SecretField
-          id={tavilyKeyId}
-          value={shell.prefs.tavilyKey}
-          onChange={(value) => shell.setPref('tavilyKey', value)}
-          showLabel={t.settings.search.showKey}
-          hideLabel={t.settings.search.hideKey}
-        />
-      </StackedRow>
+        hint={t.settings.search.tavilyHint}
+      />
     </Section>
+  );
+}
+
+function SearchKeyRow({ shell, which, label, hint }: {
+  shell: ShellSettings;
+  which: 'brave' | 'firecrawl' | 'tavily';
+  label: string;
+  hint: string;
+}): ReactElement {
+  const { t } = useUi();
+  const id = useId();
+  const field = `${which}Key` as const;
+
+  return (
+    <StackedRow
+      label={label}
+      hint={<>{hint} {t.settings.models.secretHint}</>}
+      htmlFor={id}
+      aside={(
+        <a className="set-link" href={SEARCH_KEY_URL[which]} target="_blank" rel="noreferrer">
+          {t.settings.search.getKey}
+        </a>
+      )}
+    >
+      <SecretField
+        id={id}
+        value={shell.prefs[field]}
+        onChange={(value) => shell.setPref(field, value)}
+        showLabel={t.settings.search.showKey}
+        hideLabel={t.settings.search.hideKey}
+        keepValue={shell.keptSecret}
+        savedLabel={t.settings.search.savedKey}
+        clearLabel={t.settings.search.clearKey}
+      />
+    </StackedRow>
   );
 }
 

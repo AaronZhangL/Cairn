@@ -1,6 +1,6 @@
-# Cairn — product spec
+# Cairn — PRD
 
-2026-09-22 · the current product definition
+2026-09-25 · the current product definition
 
 Organised by module. Each section is one part of the system: what it does, the decisions inside
 it, and what is deliberately left out. [ARCHITECTURE.md](./ARCHITECTURE.md) covers how the
@@ -13,8 +13,8 @@ modules fit together; [DESIGN.md](./DESIGN.md) covers how they look.
 | 3 | Path generation | `pipeline/map` → `classify` → `reduce` → `recap` |
 | 4 | Decks: slides and narration | `pipeline/slides.ts`, `tts.ts`, `build.ts`, `packages/ui` |
 | 5 | Player: the three panes | `apps/desktop`, `packages/ui` |
-| 6 | Companion | [`COMPANION.md`](./COMPANION.md) |
-| 7 | Memory across books | Finished-book recall in the companion; generation use not built |
+| 6 | Companion | `main/companion/`, `CompanionPane.tsx` |
+| 7 | Memory across books | `main/companion/shelf-tools.ts`; generation use not built |
 | 8 | Quality signals | `PathQuality` on each `LibraryEntry` |
 | 9 | Boundaries | — |
 
@@ -301,73 +301,275 @@ launch after that opens on the shelf; each book's position is still kept.
 
 ---
 
-## 6. Ask: three layers
+## 6. Companion
 
-> **Historical design, superseded by [`COMPANION.md`](./COMPANION.md).** This section describes
-> the retired ask pane, not the current implementation.
+The right pane is a chat companion. The reader can ask about the current book, about other books
+they have finished, or about anything else. It reads local book material and searches the web
+when that helps it answer accurately.
 
-| Layer | Trigger | Mechanism | Calls |
+**Implemented in the desktop app**, with live model, book chat, finished-book recall and
+public-page fetch verified against synthetic data. Firecrawl is the keyless search default;
+Brave Search and Tavily are selectable with keys. The three search adapters have mock-response
+tests; Firecrawl and Brave have had no live-query verification.
+
+### 6.1 How heavy it is allowed to be
+
+**Lightweight describes the architecture, not a feature list.** Against a coding or research
+agent it has a small read-only tool surface and no subagents, shell, workspace editing, or task
+orchestration. It still needs the ordinary chat machinery: multi-turn conversation, streaming,
+interruption, tool calls and results, clarifying questions, persisted sessions, context
+management, provider selection, clear errors. That machinery lives in an existing agent library
+where it fits; Cairn owns the book context, the evidence rules, and the completed-reading
+memory. Tools are added for a concrete reader need and stay read-only.
+
+### 6.2 Evidence, not provenance theatre
+
+Three rules, and the reasoning behind each, because each replaces an earlier rule that said the
+opposite.
+
+**Sources may be mixed in one answer; source-dependent claims carry a citation.** The old rule
+rendered book-sourced and web-sourced content in separate blocks, never merged, so a reader who
+has not read the book could still tell them apart. Readable prose can do the same job with
+nearby citations. The model writes the whole answer — its synthesis is not an evidence source,
+and general explanation can be uncited. What must never happen is an unsupported claim
+masquerading as a quote or a sourced fact.
+
+| Source | What it is | Cited as |
+| --- | --- | --- |
+| `book` | The current book's text or notes returned by a tool | The chapter; quote only from text actually fetched |
+| `web` | A page fetched from a search result or a URL | Title and URL, next to the claim |
+| `shelf` | A completed book's station (§7) | The book and the station |
+
+**The model decides when to go outside.** The old rule made leaving the book the reader's click,
+on the grounds that the model should not decide to leave on its own. `search_web` and
+`fetch_web` are now model-directed; citations, not a permission gate, are what keep the answer
+checkable. `ask_user` is for genuine ambiguity, never as a web-permission prompt. A query
+carries the minimum context needed, not whole chapters.
+
+**Claims about this book come from book material the tools actually returned**, not from
+recollection of a known title. Exact quotations must occur in chapter text fetched in the
+current context, and that is checked mechanically — the same principle
+`PathQuality.unsourcedQuotes` applies to slides (§8). General questions may use the model's own
+knowledge; uncertain or current facts get a search and a fetch.
+
+Three things must not regress:
+
+- **An active turn pauses background deck building** (`pauseBackgroundBuilds`), and resumes it
+  when the model finishes or waits for the reader. An open chat must not pause generation
+  forever.
+- **Web access is visible.** Searches and fetched pages appear in the tool trail; source links
+  stay attached to the answer.
+- **The answer is in the interface's language**, not the book's. A reader with an English
+  interface can walk a Chinese book: the narration stays Chinese, the conversation is English.
+  The prompt names the language outright — "the reader's language" gets answered in whatever
+  language the book and the tool results happen to be in (AGENTS.md invariant 11).
+
+### 6.3 Book context ladder
+
+What is resident on every turn, and what is one tool call away:
+
+| Rung | Artifact | ~Size, 200k-word book | Reached by |
 | --- | --- | --- | --- |
-| **Anchored** | Select a passage and ask | The station's `sourceChapters` already point at the text — no retrieval | 1 |
-| **Whole book** | Type a question | Every `ChapterNote` *is* the index (~20k tokens for a 200k-word book); the model picks chapters, then they load | 2 |
-| **Outside** | Only when the first two cannot answer **and the reader says yes** | Tavily, rendered as a separate block with its sources | 1 + search |
+| 0 | The path — station titles and briefs | 1–2k | Resident |
+| 1 | One line per chapter: index, title, gist | ~3k | Resident |
+| 2 | The full `ChapterNote` — key points, quotes, figures | ~18k total | `read_notes` |
+| 3 | Raw chapter text | the book | `read_chapter` |
 
-### Three hard rules
+Rung 0 *is* the book already: curated, ordered, and the thing the reader is walking. Rung 1 sits
+beside it because the budget drops chapters, and a question about a dropped chapter must not be
+answered with "that is not in this book".
 
-1. A question about the book is answered from the book. If it cannot be, say so — **never
-   quietly go outside.**
-2. Going outside is the reader's click, not the model's decision.
-3. **Book-sourced and web-sourced content render separately and are never merged.** The reader
-   has not read the book; merged into one paragraph, the two become indistinguishable.
+An earlier draft kept every `ChapterNote` resident, on the argument that the notes *are* the
+index and ~18k fits. For a single question that is the right trade — one call, everything
+present, no round trip. A conversation changes the arithmetic: the 18k is paid **per turn**, so
+twenty turns pay it twenty times. Splitting the note into a resident gist and a fetchable body
+takes the standing context from ~20k to ~5k and loses nothing the model cannot ask for. The
+index is still complete; only its depth is deferred.
 
-Reader questions hold background deck building for their duration — both go through the same
-codex pool, and only one of them is being watched.
+### 6.4 Conversation compaction
 
-### Why no retrieval inside one book
+The ladder bounds book material; compaction bounds past chat and tool output. They are different
+problems, and a chat cannot be compacted with the book's chapter notes.
+
+The complete session stays on disk while the model gets a bounded working context. Tokens are
+estimated before each call — system prompt, book and shelf indexes, recent messages, tool
+results, room for the reply. Approaching the model's limit, older turns fold into a short
+structured summary and the most recent turns stay verbatim. **Cut only between user turns**, so a
+tool call never loses its result.
+
+The summary carries the reader's current goal, stable preferences stated in the chat, conclusions
+reached, open questions, and the references those conclusions rest on. It may record which
+chapters and pages were consulted; that does not make their contents available. Chapter text and
+large web results leave the working context and are fetched again for a fresh quotation.
+
+Compaction is automatic: a button the reader must press to keep a conversation working is a
+defect with a label on it. The original messages are kept for history and audit and are never
+overwritten. The trigger and the recent-turn budget come from the selected model's window and
+measured usage, not a fixed token count. Individual tool results are bounded before they enter
+the context, and a call is retried after compaction if the provider still reports overflow. A
+failed compaction leaves the durable transcript intact and surfaces an error.
+
+The pattern is borrowed, not invented:
+[Claude Code's auto-compact](https://support.claude.com/en/articles/14552983-models-usage-and-limits-in-claude-code),
+[nanobot's split of session history from durable memory](https://github.com/HKUDS/nanobot/blob/main/docs/architecture.md),
+and [Pi's compaction design](https://github.com/ai-cre/pi-mono/blob/main/packages/coding-agent/docs/compaction.md)
+for preserving whole turns and a full archive.
+
+### 6.5 Tools
+
+| Tool | Returns | Notes |
+| --- | --- | --- |
+| `read_chapter(idx[])` | Verbatim chapter text | Grounds current-book claims and quotations. N chapters per call, truncated per chapter |
+| `read_notes(idx[])` | Full `ChapterNote`s | Rung 2. Cheaper than raw text when the question is what a chapter argues, not how it worded it |
+| `recall_reading(query)` | Stations from other finished books | §7. `{ bookId, bookTitle, nodeId, title, brief }`, never another book's raw text |
+| `search_web(query)` | Titles, URLs, snippets | Model-directed |
+| `fetch_web(url)` | Bounded page text and metadata | Fetch before citing a page. Non-public and local addresses rejected |
+| `ask_user(question, options[])` | The reader's choice | A material ambiguity context cannot settle |
+
+The loop needs a tool-call limit, cancellation, and visible errors. A snippet alone does not
+support a detailed factual claim — fetch the page the answer uses.
+
+**Not built:** `load_skill(name)`, which would load a reader skill's instructions on demand. A
+skill adds guidance, never new machine permissions.
+
+Deliberately absent:
+
+- **`find_chapters`** — the index is already in context. A search tool would be a round trip to
+  re-derive what the model can read.
+- **Anything that writes.** The companion cannot edit the path, rebuild a station, or change
+  settings. A reading companion that can silently rebuild the thing being read is a different
+  product with a different risk profile.
+
+### 6.6 Data model
+
+The pane renders chat text with inline references; a reference points at a tool result the
+session actually received.
+
+```
+Message
+  | { role: 'user',  text: string, selection?: string, atNode?: string }
+  | { role: 'assistant', text: string, citations: Citation[] }
+  | { role: 'tool', name: string, summary: string, resultId: string }
+
+Citation = {
+  span: [start, end]        // range in assistant text
+  source: 'book' | 'web' | 'shelf'
+  resultId: string         // evidence returned by a tool in this session
+  ref: ChapterRef | WebRef | ShelfRef
+}
+```
+
+- **A citation is accepted only if its `resultId` exists and its reference was in that result.**
+- **`role: 'tool'` messages are kept and shown**, collapsed by default, so searches and book
+  reads stay inspectable. Their detailed output can be left out of the compacted context.
+- **A shelf reference cites a station, not a page.** `ShelfRef = { bookId, bookTitle, nodeId,
+  nodeTitle }` — enough to open that station and check, which is the only version of "you read
+  this before" worth making.
+- **`atNode`** replaces the old anchored / whole-book split. Where the reader was is context, not
+  a separate code path.
+
+One conversation per book, stored beside it (`books/<id>/chat.json`), for the same reason the
+resume position is: a path is walked over several sittings. A conversation therefore **syncs with
+the book**, and it contains quoted chapter text, so it inherits the question `chapters.json` has
+(see the iCloud note in AGENTS.md). The full transcript, the tool audit trail and the compaction
+summaries are separate records from the working context; a summary never replaces the original
+chat or the references needed to inspect an earlier answer.
+
+The ask log (`store/asks.ts`, `stationHeat`) survives from the retired ask pane: where the reader
+stopped to ask is still the closest thing to a quality signal this tool has, and a conversation
+knows which station it was on.
+
+### 6.7 Why no retrieval inside one book
 
 The pipeline is **sweep-driven**: every chapter is read exactly once, in a fixed order. Retrieval
-answers "find the relevant piece among many", and here we do not pick — we sweep. The list of
-`ChapterNote`s is the index, and it fits: ~18k tokens for a 200k-word book, ~42k for a 500k-word
-one. What crosses the line is a serial of a thousand chapters or more.
+answers "find the relevant piece among many", and here nothing is picked — it is swept. The
+chapter index fits: ~18k tokens for a 200k-word book, ~42k for a 500k-word one, and only rung 1
+of it is resident. The model picks chapters by reading the index it already has.
 
-For a book that size the bottleneck is still not retrieval. `map` is linear in chapter count, so
-2300 chapters is roughly 580 calls, and retrieval cannot remove them: a complete sweep is the
-point, and skipping `map` would leave `reduce` ordering stations from chapters the model never
-read. The answer there is **hierarchical summarisation**: fold every 20 `ChapterNote`s into a
-volume note, let `reduce` read the volume list (2300 chapters → 115 entries), and drill down for
-detail. About N/20 extra calls, and just another `runJob`.
+What crosses the line is a serial of a thousand chapters or more, and even there retrieval is not
+the answer. `map` is linear in chapter count, so 2300 chapters is roughly 580 calls, and skipping
+them would leave `reduce` ordering stations from chapters the model never read. The answer is
+**hierarchical summarisation**: fold every 20 `ChapterNote`s into a volume note, let `reduce`
+read the volume list (2300 chapters → 115 entries), and drill down for detail. About N/20 extra
+calls, and just another `runJob`.
 
-### Why not MCP
+### 6.8 Why no MCP
 
-One web search is a function, not a protocol. MCP earns its keep when tools are many and
-unpredictable — Obsidian, Zotero, later. We also do not use codex's own search: letting the model
-decide when to search means we no longer know what it searched or which sentence came from the
-web, and labelling the source is the entire value of the feature.
+One web search is a function, not a protocol. MCP earns its keep when the tools are many and
+unpredictable — Obsidian, Zotero, later. We also do not use the model's own built-in search:
+knowing what was searched and which sentence came from the web is the whole value of the
+citation rules in §6.2.
+
+### 6.9 Open questions
+
+1. **Cost per conversation.** §6.3 takes the standing book context from ~20k to ~5k per turn,
+   while compaction adds occasional model calls. Measure both before choosing a default model.
+2. **Which provider is the default**, and whether the companion and the pipeline should share
+   one. The pipeline needs strict schema support; the companion needs good tool calling.
+3. **Does the conversation sync?** It contains quoted book text (§6.6); the iCloud note in
+   AGENTS.md applies unchanged.
+4. **What "related" means in `recall_reading`.** Matching on the shelf index is a model
+   judgement, and a model asked for a connection will produce one. The citation rule in §7 makes
+   a bad connection checkable, not rare. Whether that needs a relevance floor — or just a reader
+   who can say "stop doing that" — is unresolved.
+5. **Streaming and citation timing.** Draft text streams, then validated citations attach before
+   the answer counts as complete. The UI needs an unambiguous provisional state, so an
+   unsupported draft claim is not mistaken for a cited one.
 
 ---
 
-## 7. Memory across books — companion recall built
+## 7. Memory across books
 
-The companion can recall stations from paths the reader has finished, with citations back to
-each book and station. Using that memory while generating new paths or slides remains planned.
-The following design notes describe the longer-term direction.
+The companion recalls stations from paths the reader has finished, cited back to each book and
+station. Using that memory while *generating* new paths or slides remains planned.
 
-- Every completed path, its station briefs, and the quotes kept are retained across books.
-- When `slides` builds a station, or `ask` answers a question, prior material that genuinely
-  connects is surfaced and **cited as prior reading** — "you met this as X in *Thinking, Fast and
-  Slow*" — so new knowledge attaches to old instead of arriving unanchored.
-- This is where a vector store finally earns its place. Retrieval across **one** book is
-  unnecessary (§6), because the index fits in context. Retrieval across **a library of books read
-  over years** does not fit, and is exactly the "find the relevant piece among many" problem
-  embeddings are for.
+### 7.1 The recap is the memory
 
-Constraints it must respect when built:
+It costs almost nothing, because the artifact already exists. `pipeline/recap.ts` reads the
+*path* — not the book — and writes a closing station whose whole job is "what this book finally
+argues". That is a compressed account of a finished book, generated once. Nothing new needs
+summarising, so the shelf index is derived rather than stored:
 
-1. Prior-reading material is a **third source**, rendered distinctly from book-sourced and
-   web-sourced content (§6, rule 3). Three kinds of provenance, three renderings.
-2. It never decides structure. Station count and ordering still come from the current book's real
-   text alone.
-3. It stays local, like everything else.
+```
+ShelfEntry = {
+  bookId, title, author?
+  finished: boolean        // LibraryEntry.complete, and the reader reached the recap
+  claim: string            // the recap station's brief
+}
+```
+
+Resident cost is ~30 tokens a book. Fifty books is ~1.5k, smaller than one chapter note. Other
+books' station titles and briefs are fetched on demand, never resident.
+
+### 7.2 Only books actually walked
+
+`finished` means the path completed **and the reader got to the end of it**, which `resume.ts`
+already knows. A book merely added to the shelf is not a book the reader has read, and "you met
+this in X" about a book they never opened is a lie that costs the feature its credibility the
+first time it happens.
+
+### 7.3 A shelf citation must point at a returned station
+
+Prior reading is a source like any other (§6.2), and the same mechanical rule applies: the
+station must be one `recall_reading` returned in this conversation. Cross-book connection is
+where a model most wants to confabulate — asked to find a resonance it will always find one — so
+the citation is what separates a real connection from a flattering one. An answer with no shelf
+citation is a normal answer; the companion is not scored on how often it connects.
+
+### 7.4 It never decides structure
+
+Station count and ordering come from the current book's real text alone. The companion has no
+write tools (§6.5), which makes this hold by construction rather than by discipline. And it
+stays local, like everything else.
+
+### 7.5 Why no vector store yet
+
+An earlier plan expected one, on the argument that retrieval across a library read over years
+does not fit in context. With the ladder in §6.3 it fits for far longer: a shelf line is ~30
+tokens, the model reads the shelf index the way it reads the chapter index, and drills into a
+specific book's path with a tool. The threshold is roughly **two hundred finished books**, where
+the resident index reaches ~6k and embeddings start to earn their keep. Until then a vector store
+is a dependency bought before it is needed.
 
 `ChapterLocator` already returns a `ChapterRef` with an optional `bookId` — that is the seam.
 
@@ -399,7 +601,7 @@ tell whether a prompt change made things better or worse.
 | Image generation | Abstract ideas do not yield informative illustrations |
 | MCP | One search is not worth a protocol |
 | Spaced repetition | Conflicts with "you walk it, then you are done" |
-| Retrieval **within** one book | The index fits in context (§6). Retrieval **across** books is a separate question, and the answer there is yes (§7) |
+| Retrieval **within** one book | The index fits in context (§6.7). Retrieval **across** books is a separate question, and the answer there is yes at ~200 finished books (§7.5) |
 
 **Not built yet, but in scope:** the `world` layout (a novel's setting); the plain-text
 rendering of a deck; cross-book memory (§7); pruning the pipeline cache — content-addressed keys

@@ -11,7 +11,7 @@ import {
 import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
-  chatCancel, chatCompact, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
+  chatCancel, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
   listBooks, onCompanionEvent, onDeckStatus, markBookFinished, resumeBook, setMenuLocale,
 } from './bridge';
 import { useBundle } from './useBundle';
@@ -159,7 +159,7 @@ export function App(): ReactElement {
     const sel = selection;
     setSelection(undefined);
     setChat((state) => beginCompanionTurn(state, id, question, sel, node.id));
-    void chatSend({ turnId: id, bookId, nodeId: node.id, question, selection: sel })
+    void chatSend({ turnId: id, bookId, nodeId: node.id, question, locale: prefs.locale, selection: sel })
       .then((started) => {
         if (!started) setChat((state) => applyCompanionEvent(state, {
           bookId, turnId: id, type: 'error', code: 'busy', message: t.companion.busy,
@@ -169,7 +169,7 @@ export function App(): ReactElement {
         bookId, turnId: id, type: 'error', code: 'request_failed',
         message: cause instanceof Error ? cause.message : String(cause),
       })));
-  }, [node, bookId, selection, t.companion.busy]);
+  }, [node, bookId, selection, prefs.locale, t.companion.busy]);
 
   /** Opening a book is what makes it the one to reopen next launch. */
   const openBook = useCallback((id: string) => {
@@ -312,7 +312,6 @@ export function App(): ReactElement {
         errorCode={chat.errorCode}
         onAsk={askQuestion}
         onCancel={() => { if (chat.pendingTurn) void chatCancel(chat.pendingTurn); }}
-        onCompact={() => { if (bookId) void chatCompact(bookId).catch(() => setChat((state) => ({ ...state, error: t.companion.compactFailed }))); }}
         onJumpToChapter={(chapter) => {
           const target = path.nodes.find((item) => item.sourceChapters.includes(chapter));
           if (target) setCurrentId(target.id);

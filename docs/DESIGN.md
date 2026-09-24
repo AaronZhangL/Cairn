@@ -176,7 +176,7 @@ Three rules hold across all nine:
   on `figures` / `sequences` / `contrasts` / `relations` extracted by the map stage. These four
   look the most evidenced, so a fabricated one does the most damage.
 - **Nothing is drawn.** Type, stroked shapes, and glyphs from the fixed local set. No generated
-  images — see SPEC.md.
+  images — see PRD.md.
 
 Not built: `world` (a novel's setting; nothing in the notes supports it yet) and `stack`
 (proportional composition, which `number`'s bars already cover).

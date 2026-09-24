@@ -1,15 +1,15 @@
 /**
  * Providers on the left, the selected one's settings on the right.
  *
- * The model picker offers constrained models first and hides the rest behind a
- * switch. That is not tidiness: the pipeline asks for structured output on
- * roughly a hundred calls per book, and a provider that treats the schema as a
- * suggestion fails in ones and twos, far from the setting that caused it.
+ * The model picker lists constrained models first and the rest after them. That
+ * order is not tidiness: the pipeline asks for structured output on roughly a
+ * hundred calls per book, and a provider that treats the schema as a suggestion
+ * fails in ones and twos, far from the setting that caused it.
  */
 import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useUi } from './SettingsProvider';
-import { Offline, Row, SecretField, Section, Select, StackedRow, Switch } from './rows';
+import { Offline, Row, SecretField, Section, Select, StackedRow } from './rows';
 import type { ProviderInfo, ShellSettings } from './shell';
 
 export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
@@ -53,7 +53,6 @@ function ProviderRow({ provider, active, isDefault, configured, onPick }: {
   onPick: () => void;
 }): ReactElement {
   const { t } = useUi();
-  const constrained = provider.models.some((m) => m.strict);
 
   return (
     <button
@@ -64,11 +63,6 @@ function ProviderRow({ provider, active, isDefault, configured, onPick }: {
     >
       <Favicon domain={provider.faviconDomain} />
       <span className="set-provider-name">{provider.label}</span>
-      {/* A provider whose models cannot be held to the schema is still offered —
-          hiding it would read as "not supported", which is a different claim. */}
-      {!constrained && provider.models.length > 0
-        ? <span className="set-provider-tag warn">{t.settings.models.unconstrainedTag}</span>
-        : null}
       {isDefault ? <span className="set-provider-tag">{t.settings.models.defaultLabel}</span> : null}
       {!isDefault && configured ? <span className="set-provider-dot" aria-hidden="true" /> : null}
     </button>
@@ -83,14 +77,10 @@ function ProviderDetail({ shell, provider }: {
   const keyId = useId();
   const urlId = useId();
   const modelId = useId();
-  const allId = useId();
-  const [showAll, setShowAll] = useState(false);
 
   const profile = shell.prefs.providers[provider.id];
-  const constrained = provider.models.filter((m) => m.strict);
-  const offered = showAll || constrained.length === 0 ? provider.models : constrained;
+  const offered = [...provider.models].sort((a, b) => Number(b.strict) - Number(a.strict));
   const chosen = profile?.model ?? '';
-  const chosenModel = provider.models.find((m) => m.id === chosen);
   const isDefault = shell.prefs.generationProvider === provider.id;
 
   return (
@@ -111,6 +101,9 @@ function ProviderDetail({ shell, provider }: {
           onChange={(value) => shell.setProvider(provider.id, { apiKey: value })}
           showLabel={t.settings.search.showKey}
           hideLabel={t.settings.search.hideKey}
+          keepValue={shell.keptSecret}
+          savedLabel={t.settings.search.savedKey}
+          clearLabel={t.settings.search.clearKey}
         />
       </StackedRow>
 
@@ -131,9 +124,7 @@ function ProviderDetail({ shell, provider }: {
       {provider.models.length > 0 ? (
         <Row
           label={t.settings.models.modelName}
-          hint={chosenModel && !chosenModel.strict
-            ? <span className="set-hint warn">{t.settings.models.unconstrainedHint}</span>
-            : t.settings.models.modelHint}
+          hint={t.settings.models.modelHint}
           htmlFor={modelId}
         >
           <Select
@@ -156,17 +147,6 @@ function ProviderDetail({ shell, provider }: {
           />
         </Row>
       )}
-
-      {constrained.length > 0 && constrained.length < provider.models.length ? (
-        <Row label={t.settings.models.showAll} hint={t.settings.models.showAllHint}>
-          <Switch
-            id={allId}
-            checked={showAll}
-            onChange={setShowAll}
-            label={t.settings.models.showAll}
-          />
-        </Row>
-      ) : null}
 
       <Row
         label={t.settings.models.status}

@@ -28,9 +28,8 @@ type Rpc = {
       p: { filePath: string; budgetId: BudgetId }, o?: RequestOptions,
     ): Promise<LibraryEntry>;
     chatHistory(p: { bookId: string }, o?: RequestOptions): Promise<ChatSession>;
-    chatSend(p: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }, o?: RequestOptions): Promise<boolean>;
+    chatSend(p: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }, o?: RequestOptions): Promise<boolean>;
     chatCancel(p: { turnId: string }, o?: RequestOptions): Promise<boolean>;
-    chatCompact(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
     markBookFinished(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<boolean>;
     focusStation(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<null>;
     resumeBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
@@ -188,7 +187,7 @@ export async function chatHistory(bookId: string): Promise<ChatSession> {
   return (await connect()).request.chatHistory({ bookId }, POLL_LIMIT).catch(rethrow);
 }
 
-export async function chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }): Promise<boolean> {
+export async function chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }): Promise<boolean> {
   if (!inShell) throw offline('offline_search');
   return (await connect()).request.chatSend(params, POLL_LIMIT).catch(rethrow);
 }
@@ -196,11 +195,6 @@ export async function chatSend(params: { turnId: string; bookId: string; nodeId?
 export async function chatCancel(turnId: string): Promise<boolean> {
   if (!inShell) return false;
   return (await connect()).request.chatCancel({ turnId }, POLL_LIMIT).catch(rethrow);
-}
-
-export async function chatCompact(bookId: string): Promise<boolean> {
-  if (!inShell) return false;
-  return (await connect()).request.chatCompact({ bookId }, ANSWER_LIMIT).catch(rethrow);
 }
 
 /* ---- settings the main process owns ---- */

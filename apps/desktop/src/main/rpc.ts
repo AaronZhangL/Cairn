@@ -15,7 +15,7 @@ import { library } from './library';
 import { DATA_DIR, loadPath } from './store';
 import { markBookFinished } from './reading';
 import { loadSession } from './companion/session';
-import { compactBookChat, runTurn } from './companion/run';
+import { runTurn } from './companion/run';
 import type { CompanionEvent } from './companion/events';
 import { modelStatus } from './provider';
 import type { BookPreview, Progress } from '../shared/types';
@@ -108,7 +108,7 @@ const rawHandlers = {
     return loadSession(DATA_DIR, params.bookId, path.generatedAt);
   },
 
-  async chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }): Promise<boolean> {
+  async chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }): Promise<boolean> {
     if (activeChat) return false;
     const controller = new AbortController();
     activeChat = { turnId: params.turnId, controller };
@@ -131,12 +131,6 @@ const rawHandlers = {
   async chatCancel(params: { turnId: string }): Promise<boolean> {
     if (activeChat?.turnId !== params.turnId) return false;
     activeChat.controller.abort();
-    return true;
-  },
-
-  async chatCompact(params: { bookId: string }): Promise<boolean> {
-    if (activeChat) return false;
-    await compactBookChat(params.bookId);
     return true;
   },
 
@@ -182,7 +176,9 @@ const rawHandlers = {
   async previewVoice(params: { locale: ContentLocale }): Promise<string> {
     const settings = await readSettings();
     const voice = settings.voices[params.locale];
-    const rel = join('.preview', `${params.locale}.mp3`);
+    // Named after the voice: a fixed name per language made the player replay
+    // the audio it already had, so every voice after the first sounded broken.
+    const rel = join('.preview', `${voice}.mp3`);
     await speakSample(SAMPLE[params.locale], voice, join(DATA_DIR, rel));
     return rel;
   },

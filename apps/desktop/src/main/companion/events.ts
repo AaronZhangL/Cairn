@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@cairn/core/companion/types';
+import type { UiLocale } from '../../shared/settings';
 
 export type AssistantChatMessage = Extract<ChatMessage, { readonly role: 'assistant' }>;
 
@@ -7,6 +8,8 @@ export interface RunTurnInput {
   readonly bookId: string;
   readonly nodeId?: string;
   readonly question: string;
+  /** The interface's language, which is the one the reader is asking in. */
+  readonly locale: UiLocale;
   readonly selection?: string;
   readonly signal?: AbortSignal;
 }

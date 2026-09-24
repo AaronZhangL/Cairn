@@ -5,7 +5,7 @@ import {
   revealDataDir, setSettings,
 } from './bridge';
 import {
-  DEFAULT_SHELL_SETTINGS, EMPTY_PROFILE, VOICES,
+  DEFAULT_SHELL_SETTINGS, EMPTY_PROFILE, REDACTED_SECRET, VOICES,
   type ContentLocale, type ModelStatus, type ProviderId, type ProviderProfile,
   type ShellSettingsValues,
 } from './shared/settings';
@@ -135,6 +135,7 @@ export function useShellSettings(): ShellSettings | undefined {
     if (!inShell || !values) return undefined;
     return {
       prefs: values,
+      keptSecret: REDACTED_SECRET,
       setPref,
       setProvider,
       providers: PROVIDERS,

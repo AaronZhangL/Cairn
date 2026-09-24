@@ -114,7 +114,7 @@ export interface Path {
 
 /**
  * Every layout renders from structured data, never from a generated image — see
- * SPEC.md. `icon` names a glyph from the fixed set in ./icons and appears on two
+ * PRD.md. `icon` names a glyph from the fixed set in ./icons and appears on two
  * layouts only, because decoration on every line is noise.
  */
 export type Slide =

@@ -7,7 +7,7 @@
  *      exist. A missing icon would render as a hole in the slide, and there is
  *      no runtime recovery from that.
  *   2. Every name here has to be drawable as a few stroked paths. Illustration
- *      is out of scope (see SPEC), so a name only earns its place if simple
+ *      is out of scope (see PRD), so a name only earns its place if simple
  *      line art actually reads as the thing.
  *
  * Abstract ideas are absent on purpose. There is no honest glyph for

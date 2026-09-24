@@ -19,9 +19,8 @@ export type BunSchema = RPCSchema<{
     pickBook: { params: void; response: BookPreview | null };
     generateBook: { params: { filePath: string; budgetId: BudgetId }; response: LibraryEntry };
     chatHistory: { params: { bookId: string }; response: ChatSession };
-    chatSend: { params: { turnId: string; bookId: string; nodeId?: string; question: string; selection?: string }; response: boolean };
+    chatSend: { params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }; response: boolean };
     chatCancel: { params: { turnId: string }; response: boolean };
-    chatCompact: { params: { bookId: string }; response: boolean };
     /**
      * Tell the builder which station the reader is on, so the next ones built
      * are the next ones they will reach.

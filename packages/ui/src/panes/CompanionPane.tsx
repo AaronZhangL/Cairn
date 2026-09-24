@@ -21,7 +21,7 @@ export function citationParts(text: string, citations: readonly Citation[]): rea
 
 export function CompanionPane({
   messages, pending, draftAnswer, error, errorCode, selection, collapsed = false,
-  onAsk, onCancel, onCompact, onClearSelection, onJumpToChapter, onOpenShelf,
+  onAsk, onCancel, onClearSelection, onJumpToChapter, onOpenShelf,
 }: {
   messages: readonly ChatMessage[];
   pending: boolean;
@@ -32,7 +32,6 @@ export function CompanionPane({
   collapsed?: boolean;
   onAsk: (question: string) => void;
   onCancel: () => void;
-  onCompact: () => void;
   onClearSelection: () => void;
   onJumpToChapter: (chapter: number) => boolean;
   onOpenShelf: (bookId: string, nodeId: string) => void;
@@ -80,10 +79,11 @@ export function CompanionPane({
       {pending && <div className="a pending">{draftAnswer || t.companion.thinking}</div>}
       {error && <div className="a companion-error" role="alert">{errorCode ? t.companion.error(errorCode) : error}</div>}
     </div>
-    <div className="companion-actions">
-      <button type="button" onClick={onCompact} disabled={pending}>{t.companion.compact}</button>
-      {pending && <button type="button" onClick={onCancel}>{t.companion.stop}</button>}
-    </div>
+    {/* Compaction is the turn's own business — `runTurn` summarises when the
+        context is nearly full, so there is nothing here to press. */}
+    {pending && <div className="companion-actions">
+      <button type="button" onClick={onCancel}>{t.companion.stop}</button>
+    </div>}
     {selection && <div className="sel-pending"><blockquote className="sel">{selection}</blockquote><button type="button" className="sel-drop" onClick={onClearSelection} aria-label={t.ask.dropQuote}>×</button></div>}
     <form className="composer" onSubmit={(event) => { event.preventDefault(); const question = draft.trim(); if (question && !pending) { onAsk(question); setDraft(''); } }}>
       <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t.companion.placeholder} />
