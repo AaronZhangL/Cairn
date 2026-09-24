@@ -20,7 +20,9 @@ describe('parseSettings', () => {
 
   test('keeps a valid record', () => {
     const stored = {
-      model: { source: 'key', apiKey: 'sk-x', baseUrl: 'https://example.test/v1', model: 'm' },
+      providers: { openai: { apiKey: 'sk-x', baseUrl: 'https://example.test/v1', model: 'gpt-5.4-mini' } },
+      generationProvider: 'openai',
+      chatProvider: 'inherit',
       narration: 'en',
       voices: { en: 'en-US-AvaNeural', zh: 'zh-CN-XiaoxiaoNeural' },
       searchProvider: 'firecrawl',
@@ -28,14 +30,33 @@ describe('parseSettings', () => {
       firecrawlKey: 'fire-x',
       tavilyKey: 'tvly-x',
       trace: true,
-      defaultBudget: 'solid',
     };
-    expect(parseSettings(stored)).toEqual({ ...stored, chatModel: DEFAULT_SHELL_SETTINGS.chatModel });
+    expect(parseSettings(stored)).toEqual(stored);
   });
 
-  test('the model route defaults to borrowing the Codex login', () => {
-    expect(DEFAULT_SHELL_SETTINGS.model.source).toBe('codex');
-    expect(DEFAULT_SHELL_SETTINGS.chatModel.source).toBe('inherit');
+  test('nothing is configured until the reader configures it', () => {
+    expect(DEFAULT_SHELL_SETTINGS.providers).toEqual({});
+    expect(DEFAULT_SHELL_SETTINGS.chatProvider).toBe('inherit');
+  });
+
+  test('a provider this build does not know is dropped, not stored', () => {
+    expect(parseSettings({ providers: { nope: { apiKey: 'x' } } }).providers).toEqual({});
+    expect(parseSettings({ generationProvider: 'nope' }).generationProvider)
+      .toBe(DEFAULT_SHELL_SETTINGS.generationProvider);
+    expect(parseSettings({ chatProvider: 'nope' }).chatProvider).toBe('inherit');
+  });
+
+  test('every provider keeps its own key', () => {
+    const parsed = parseSettings({
+      providers: {
+        openai: { apiKey: 'openai-key', baseUrl: '', model: '' },
+        anthropic: { apiKey: 'anthropic-key', baseUrl: '', model: '' },
+      },
+      chatProvider: 'anthropic',
+    });
+    expect(parsed.providers.openai?.apiKey).toBe('openai-key');
+    expect(parsed.providers.anthropic?.apiKey).toBe('anthropic-key');
+    expect(parsed.chatProvider).toBe('anthropic');
   });
 
   test('a reader without a search key gets keyless web search by default', () => {
@@ -55,61 +76,42 @@ describe('parseSettings', () => {
       .toBe('firecrawl');
   });
 
-  test('parses a separate Companion provider without changing generation', () => {
-    const parsed = parseSettings({
-      model: { source: 'key', apiKey: 'generation-key', baseUrl: 'https://generation.test', model: 'generation' },
-      chatModel: { source: 'deepseek', apiKey: 'chat-key', model: 'deepseek-v4-pro' },
-    });
-    expect(parsed.model.source).toBe('key');
-    expect(parsed.model.apiKey).toBe('generation-key');
-    expect(parsed.chatModel).toEqual({ source: 'deepseek', apiKey: 'chat-key', model: 'deepseek-v4-pro' });
-    expect(redactSettings(parsed).chatModel.apiKey).toBe(REDACTED_SECRET);
-  });
-
-  test('rejects unknown Companion providers', () => {
-    expect(parseSettings({ chatModel: { source: 'unknown', apiKey: 'x' } }).chatModel.source)
-      .toBe('inherit');
-  });
-
-  test('accepts the MiniMax China endpoint as a distinct provider', () => {
-    expect(parseSettings({ chatModel: { source: 'minimax-cn' } }).chatModel.source).toBe('minimax-cn');
-  });
-
   test('redacts stored credentials before settings reach the renderer', () => {
     const stored = parseSettings({
-      model: { source: 'key', apiKey: 'private-model-key' }, tavilyKey: 'private-search-key',
-      braveKey: 'private-brave-key', firecrawlKey: 'private-firecrawl-key',
+      providers: {
+        openai: { apiKey: 'private-model-key', baseUrl: '', model: '' },
+        anthropic: { apiKey: 'private-chat-key', baseUrl: '', model: '' },
+      },
+      tavilyKey: 'private-search-key',
+      braveKey: 'private-brave-key',
+      firecrawlKey: 'private-firecrawl-key',
     });
     const visible = redactSettings(stored);
-    expect(visible.model.source).toBe('key');
-    expect(visible.model.apiKey).toBe(REDACTED_SECRET);
+    expect(visible.providers.openai?.apiKey).toBe(REDACTED_SECRET);
+    expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
     expect(visible.tavilyKey).toBe(REDACTED_SECRET);
     expect(visible.braveKey).toBe(REDACTED_SECRET);
     expect(visible.firecrawlKey).toBe(REDACTED_SECRET);
     expect(JSON.stringify(visible)).not.toContain('private-');
-    expect(redactSettings(DEFAULT_SHELL_SETTINGS).model.apiKey).toBe('');
   });
 
-  test.each([
-    { value: 'chatgpt' }, { value: '' }, { value: 42 }, { value: null },
-  ])('a model source of $value is not honoured', ({ value }) => {
-    expect(parseSettings({ model: { source: value } }).model.source)
-      .toBe(DEFAULT_SHELL_SETTINGS.model.source);
+  test('redaction leaves an unset key empty rather than showing dots', () => {
+    const stored = parseSettings({ providers: { openai: { apiKey: '', baseUrl: '', model: '' } } });
+    expect(redactSettings(stored).providers.openai?.apiKey).toBe('');
   });
 
-  test('a model block that is not an object falls back whole', () => {
-    expect(parseSettings({ model: 'openai' }).model).toEqual(DEFAULT_SHELL_SETTINGS.model);
+  test('a providers block that is not an object falls back whole', () => {
+    expect(parseSettings({ providers: 'openai' }).providers).toEqual({});
   });
 
   /**
-   * Empty is meaningful for all three: "use the detected login's endpoint",
-   * "use the detected model". Coercing them to a default would silently pin a
-   * value the reader never chose.
+   * Empty is meaningful for all three: read the environment, use the catalog's
+   * endpoint, use the provider's default model. Coercing them would silently pin
+   * a value the reader never chose.
    */
-  test('empty endpoint and model are kept, not defaulted', () => {
-    const parsed = parseSettings({ model: { source: 'key', apiKey: 'k', baseUrl: '', model: '' } });
-    expect(parsed.model.baseUrl).toBe('');
-    expect(parsed.model.model).toBe('');
+  test('empty key, endpoint and model are kept, not defaulted', () => {
+    const parsed = parseSettings({ providers: { openai: { apiKey: '', baseUrl: '', model: '' } } });
+    expect(parsed.providers.openai).toEqual({ apiKey: '', baseUrl: '', model: '' });
   });
 
   /**
@@ -135,9 +137,10 @@ describe('parseSettings', () => {
     },
   );
 
-  test('a budget id this build dropped is not honoured', () => {
-    expect(parseSettings({ defaultBudget: 'skim' }).defaultBudget)
-      .toBe(DEFAULT_SHELL_SETTINGS.defaultBudget);
+  test('a stored default budget is read and dropped', () => {
+    // The budget belongs to one book, chosen when it is added. A remembered rung
+    // was a second answer that went stale as soon as a shorter book arrived.
+    expect(parseSettings({ defaultBudget: 'solid' })).not.toHaveProperty('defaultBudget');
   });
 
   test('an empty key is kept, because it means “read the environment”', () => {
@@ -149,6 +152,89 @@ describe('parseSettings', () => {
     { value: 'nonsense' }, { value: 42 }, { value: [] }, { value: true },
   ])('$value is not a settings record', ({ value }) => {
     expect(parseSettings(value)).toEqual(DEFAULT_SHELL_SETTINGS);
+  });
+});
+
+/**
+ * A settings file written before the provider registry existed.
+ *
+ * Losing a key here looks exactly like the panel quietly forgetting what the
+ * reader typed, and they would have no way to tell it apart from a bug in the
+ * field itself.
+ */
+describe('parseSettings — migration from the pre-registry shape', () => {
+  test('an API-key generation route becomes the OpenAI provider', () => {
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: 'sk-old', baseUrl: '', model: 'gpt-4o-mini' },
+      chatModel: { source: 'inherit', apiKey: '', model: '' },
+    });
+    expect(parsed.generationProvider).toBe('openai');
+    expect(parsed.providers.openai).toEqual({ apiKey: 'sk-old', baseUrl: '', model: 'gpt-4o-mini' });
+    expect(parsed.chatProvider).toBe('inherit');
+  });
+
+  test('an empty old route stores nothing rather than an empty profile', () => {
+    // The commonest real file: the key route selected, nothing typed into it yet
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: '', baseUrl: '', model: '' },
+      chatModel: { source: 'inherit', apiKey: '', model: '' },
+    });
+    expect(parsed.providers).toEqual({});
+  });
+
+  test('a base URL that was not OpenAI’s becomes the custom provider', () => {
+    // There was no other way to name a third-party endpoint in the old shape
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: 'sk-old', baseUrl: 'https://proxy.test/v1', model: 'local' },
+    });
+    expect(parsed.generationProvider).toBe('custom');
+    expect(parsed.providers.custom)
+      .toEqual({ apiKey: 'sk-old', baseUrl: 'https://proxy.test/v1', model: 'local' });
+  });
+
+  test('the Codex route leaves generation unconfigured rather than inventing a key', () => {
+    const parsed = parseSettings({ model: { source: 'codex', apiKey: '', baseUrl: '', model: '' } });
+    expect(parsed.providers).toEqual({});
+    expect(parsed.generationProvider).toBe(DEFAULT_SHELL_SETTINGS.generationProvider);
+  });
+
+  test('a Companion vendor becomes that provider, keeping its own key', () => {
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: 'generation-key', baseUrl: '', model: '' },
+      chatModel: { source: 'deepseek', apiKey: 'chat-key', model: 'deepseek-v4-pro' },
+    });
+    expect(parsed.chatProvider).toBe('deepseek');
+    expect(parsed.providers.deepseek)
+      .toEqual({ apiKey: 'chat-key', baseUrl: '', model: 'deepseek-v4-pro' });
+    // and generation is untouched by it
+    expect(parsed.providers.openai?.apiKey).toBe('generation-key');
+    expect(parsed.generationProvider).toBe('openai');
+  });
+
+  test('both keys survive redaction as separate secrets', () => {
+    const parsed = parseSettings({
+      model: { source: 'key', apiKey: 'generation-key', baseUrl: '', model: '' },
+      chatModel: { source: 'anthropic', apiKey: 'chat-key', model: '' },
+    });
+    expect(JSON.stringify(redactSettings(parsed))).not.toContain('-key');
+    expect(redactSettings(parsed).providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
+  });
+
+  test('a Companion vendor this build dropped does not become a provider', () => {
+    const parsed = parseSettings({ chatModel: { source: 'unknown', apiKey: 'x' } });
+    expect(parsed.chatProvider).toBe('inherit');
+    expect(parsed.providers).toEqual({});
+  });
+
+  // The new shape wins outright, or a stale `model` block would keep resurrecting
+  test('a file already in the new shape ignores any leftover old block', () => {
+    const parsed = parseSettings({
+      providers: { anthropic: { apiKey: 'new-key', baseUrl: '', model: '' } },
+      generationProvider: 'anthropic',
+      model: { source: 'key', apiKey: 'stale', baseUrl: '', model: '' },
+    });
+    expect(parsed.generationProvider).toBe('anthropic');
+    expect(parsed.providers.openai).toBeUndefined();
   });
 });
 

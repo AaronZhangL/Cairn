@@ -792,3 +792,45 @@ body {
 
 /* A plain text field in a row, beside the secret one that has an eye in it. */
 .set-input.plain { width: 230px; padding-right: 10px; }
+
+/* ---- models settings: providers on the left, one provider's fields on the right ---- */
+.set-split { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 18px; align-items: start; }
+.set-split-body { display: grid; gap: 20px; min-width: 0; }
+
+.set-providers {
+  display: flex; flex-direction: column; gap: 1px;
+  border-right: 1px solid var(--line); padding-right: 12px; margin-right: -2px;
+}
+.set-providers-title {
+  font-size: 10px; font-weight: 640; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim); padding: 0 6px 7px;
+}
+.set-provider {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 7px; border: 0; border-radius: 7px; background: none;
+  font: inherit; font-size: 12.5px; color: var(--dim); text-align: left; cursor: pointer;
+}
+.set-provider:hover { background: #8080801a; color: var(--ink); }
+.set-provider[aria-current="true"] { background: var(--soft); color: var(--accent); font-weight: 620; }
+.set-provider:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.set-provider-icon { flex: 0 0 auto; width: 15px; height: 15px; border-radius: 3px; }
+.set-provider-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-provider-tag {
+  flex: 0 0 auto; font-size: 9.5px; font-weight: 640; letter-spacing: .03em;
+  padding: 1px 5px; border-radius: 4px; background: var(--soft); color: var(--accent);
+}
+/* A provider whose models cannot be held to a schema: stated, not hidden */
+.set-provider-tag.warn { background: #8080801f; color: var(--dim); }
+/* Configured but not the default — a quiet mark, not a word */
+.set-provider-dot { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: var(--done); }
+
+@media (max-width: 720px) {
+  .set-split { grid-template-columns: minmax(0, 1fr); }
+  .set-providers {
+    flex-direction: row; flex-wrap: wrap; gap: 4px;
+    border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 12px; margin: 0;
+  }
+  .set-providers-title { width: 100%; padding-left: 2px; }
+  .set-provider { width: auto; }
+  .set-provider-name { flex: 0 0 auto; }
+}

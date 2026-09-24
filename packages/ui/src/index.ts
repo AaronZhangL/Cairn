@@ -13,10 +13,8 @@ export {
   SettingsPanel, SETTINGS_TABS, type SettingsTab,
 } from './settings/SettingsPanel';
 export {
-  BUDGET_IDS,
-  type ModelSettings, type ModelSource, type ModelStatus,
-  type NarrationLanguage, type SettingsBudgetId,
-  type ShellPrefs, type ShellSettings, type VoiceOption,
+  type ModelStatus, type NarrationLanguage, type ProviderInfo, type ProviderModelInfo,
+  type ProviderProfile, type ShellPrefs, type ShellSettings, type VoiceOption,
 } from './settings/shell';
 export { SlideView, type SlideChrome } from './slides/SlideView';
 export { Icon } from './slides/Icon';

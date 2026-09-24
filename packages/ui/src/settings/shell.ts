@@ -11,40 +11,57 @@ import type { Locale } from '../i18n/locale';
 /** Which language a book is read aloud in. `follow` uses the book's own. */
 export type NarrationLanguage = 'follow' | Locale;
 
-/** Mirrors `BudgetId` in `pipeline/budget.ts`. The ids are the contract. */
-export const BUDGET_IDS = ['quick', 'brief', 'solid', 'full'] as const;
-export type SettingsBudgetId = (typeof BUDGET_IDS)[number];
+/** Mirrors `ProviderId` in the desktop app's `shared/providers.ts`. */
+export type ProviderId = string;
 
-/** Where the model comes from. Mirrors `shared/settings.ts` in the desktop app. */
-export type ModelSource = 'codex' | 'key';
-
-export interface ModelSettings {
-  readonly source: ModelSource;
-  readonly apiKey: string;
-  /** Empty means the provider's own default. */
-  readonly baseUrl: string;
-  /** Empty means: whatever the detected login names. */
-  readonly model: string;
+export interface ProviderModelInfo {
+  readonly id: string;
+  /** A proper noun — never translated. */
+  readonly name: string;
+  /** Whether the provider holds this model's reply to the schema server-side. */
+  readonly strict: boolean;
 }
 
-export type ChatModelSource = 'inherit' | 'anthropic' | 'deepseek' | 'minimax' | 'minimax-cn';
+/**
+ * A provider as the panel draws it.
+ *
+ * Supplied by the shell rather than imported, for the same reason the rest of
+ * this file is an interface: the catalog it is built from is pi-ai's, and
+ * `packages/ui` must not know that a desktop app exists.
+ */
+export interface ProviderInfo {
+  readonly id: ProviderId;
+  /** A brand name — never translated. */
+  readonly label: string;
+  readonly getKeyUrl: string;
+  readonly faviconDomain: string;
+  readonly baseUrl: string;
+  /** Only a custom endpoint has none of its own. */
+  readonly needsBaseUrl: boolean;
+  readonly models: readonly ProviderModelInfo[];
+}
 
-export interface ChatModelSettings {
-  readonly source: ChatModelSource;
+export interface ProviderProfile {
   readonly apiKey: string;
+  /** Empty means the provider's own endpoint. */
+  readonly baseUrl: string;
+  /** Empty means the provider's default model. */
   readonly model: string;
 }
 
 export interface ModelStatus {
-  readonly provider: 'chatgpt-codex' | 'http' | 'codex-cli';
+  /** A provider id, or `codex-cli` when nothing is configured. Never translated. */
+  readonly provider: string;
   readonly ready: boolean;
   /** An endpoint, a model name, or a reason. Never translated. */
   readonly detail: string;
 }
 
 export interface ShellPrefs {
-  readonly model: ModelSettings;
-  readonly chatModel: ChatModelSettings;
+  readonly providers: Readonly<Record<string, ProviderProfile | undefined>>;
+  readonly generationProvider: ProviderId;
+  /** `inherit` puts the companion on whatever generation uses. */
+  readonly chatProvider: ProviderId | 'inherit';
   readonly narration: NarrationLanguage;
   /** Voice id per language, e.g. `en-US-AndrewNeural`. */
   readonly voices: Readonly<Record<Locale, string>>;
@@ -53,7 +70,6 @@ export interface ShellPrefs {
   readonly firecrawlKey: string;
   readonly tavilyKey: string;
   readonly trace: boolean;
-  readonly defaultBudget: SettingsBudgetId;
 }
 
 export interface VoiceOption {
@@ -65,6 +81,10 @@ export interface VoiceOption {
 export interface ShellSettings {
   readonly prefs: ShellPrefs;
   readonly setPref: <K extends keyof ShellPrefs>(key: K, value: ShellPrefs[K]) => void;
+  /** Patch one provider's profile, leaving every other provider's key untouched. */
+  readonly setProvider: (id: ProviderId, patch: Partial<ProviderProfile>) => void;
+  /** Every provider the panel can offer, in display order. */
+  readonly providers: readonly ProviderInfo[];
   /** Voices the narrator offers, per language. */
   readonly voicesFor: (locale: Locale) => readonly VoiceOption[];
   /** What the model settings currently resolve to. */

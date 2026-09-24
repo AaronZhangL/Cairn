@@ -104,3 +104,65 @@ describe('parseEpub', () => {
     expect(parseEpub(new Uint8Array(0), 'x.epub')).rejects.toThrow(ParseError);
   });
 });
+
+/**
+ * Calibre writes file names with spaces and percent-encodes them in the OPF, so
+ * the manifest href and the zip entry name are not the same string. Looking the
+ * href up verbatim finds nothing, every spine item is skipped, and the book
+ * surfaces as "no readable text" — which reads like a broken file rather than a
+ * parser that cannot spell.
+ */
+describe('percent-encoded hrefs', () => {
+  async function buildEncodedEpub(): Promise<Uint8Array> {
+    const zip = new JSZip();
+    zip.file('mimetype', 'application/epub+zip');
+    zip.file(
+      'META-INF/container.xml',
+      `<?xml version="1.0"?><container><rootfiles>
+       <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+       </rootfiles></container>`,
+    );
+    zip.file(
+      'OEBPS/content.opf',
+      `<?xml version="1.0"?>
+       <package><metadata><dc:title>这书能让你戒烟</dc:title></metadata>
+       <manifest>
+         <item id="c1" href="Text/Xu%20Yan%20_split_000.htm" media-type="application/xhtml+xml"/>
+         <item id="c2" href="Text/Di%20Yi%20Zhang.htm" media-type="application/xhtml+xml"/>
+       </manifest>
+       <spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>`,
+    );
+    // The archive holds the decoded names, spaces and all
+    zip.file('OEBPS/Text/Xu Yan _split_000.htm', `<html><body><h1>序言</h1>${body('吸烟是一种瘾')}</body></html>`);
+    zip.file('OEBPS/Text/Di Yi Zhang.htm', `<html><body><h1>第一章</h1>${body('恐惧让人留在原地')}</body></html>`);
+    return zip.generateAsync({ type: 'uint8array' });
+  }
+
+  test('a space encoded as %20 still finds its chapter', async () => {
+    const book = await parseEpub(await buildEncodedEpub(), '这书能让你戒烟.epub');
+    expect(book.chapters.length).toBeGreaterThan(0);
+    expect(book.totalWords).toBeGreaterThan(0);
+  });
+
+  test('a file name that really contains a percent sign is not mangled', async () => {
+    const zip = new JSZip();
+    zip.file('mimetype', 'application/epub+zip');
+    zip.file(
+      'META-INF/container.xml',
+      `<?xml version="1.0"?><container><rootfiles>
+       <rootfile full-path="content.opf" media-type="application/oebps-package+xml"/>
+       </rootfiles></container>`,
+    );
+    zip.file(
+      'content.opf',
+      `<?xml version="1.0"?>
+       <package><metadata><dc:title>百分之百</dc:title></metadata>
+       <manifest><item id="c1" href="100%.xhtml" media-type="application/xhtml+xml"/></manifest>
+       <spine><itemref idref="c1"/></spine></package>`,
+    );
+    zip.file('100%.xhtml', `<html><body><h1>全部</h1>${body('一个孤零零的百分号')}</body></html>`);
+
+    const book = await parseEpub(await zip.generateAsync({ type: 'uint8array' }), '百分之百.epub');
+    expect(book.chapters.length).toBeGreaterThan(0);
+  });
+});

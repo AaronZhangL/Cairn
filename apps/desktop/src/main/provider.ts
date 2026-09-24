@@ -1,17 +1,14 @@
 /**
  * The model, plus optional recording.
  *
- * Three ways to reach it, all behind `LlmProvider` so the choice is a setting
+ * Two ways to reach it, both behind `LlmProvider` so the choice is a setting
  * rather than a code change:
  *
- *  - **ChatGPT login** — whatever `codex` stored in `~/.codex`. Nothing to set
- *    up on a machine that already has it, and no per-token cost beyond the
- *    subscription. It talks to ChatGPT's own backend; read the note at the top
- *    of `runtime/chatgpt-codex.ts` before shipping a build that defaults to it.
- *  - **API key** — the licensed path, and any OpenAI-compatible endpoint.
- *  - **The codex CLI** — the original, kept as the fallback for when neither
- *    HTTP route is configured. It costs ~18k tokens of agent harness per call,
- *    which is why it is no longer what runs by default.
+ *  - **A configured provider** — whichever of `shared/providers.ts` the reader
+ *    holds a key for, called through pi-ai.
+ *  - **The codex CLI** — the original, kept for when nothing is configured. It
+ *    costs ~18k tokens of agent harness per call, which is why it is no longer
+ *    what runs by default and why it reports itself as not ready.
  *
  * Tracing is off unless turned on — by `CAIRN_TRACE=1` or in settings — and
  * deliberately so: a trace holds the prompts, which for the map stage is the
@@ -25,22 +22,15 @@
 import { join } from 'node:path';
 import { tracingProvider } from '@cairn/core/llm';
 import type { LlmProvider } from '@cairn/core/llm';
-import {
-  chatGptCodexProvider, codexCliProvider, httpLlmProvider, readCodexLogin, refreshCodexLogin,
-  traceDirSink,
-} from '@cairn/core/runtime';
-import {
-  DEFAULT_OPENAI_BASE_URL, type ModelStatus, type ShellSettingsValues,
-} from '../shared/settings';
+import { codexCliProvider, traceDirSink } from '@cairn/core/runtime';
+import { modelOf, type ModelStatus, type ShellSettingsValues } from '../shared/settings';
+import { piLlmProvider } from './pi-provider';
 import { readSettings } from './settings';
 import { DATA_DIR } from './store';
 
 /** Where a book's recorded calls land, for `bun run replay`. */
 export const traceDir = (bookId: string): string =>
   join(DATA_DIR, '.cache', bookId, 'trace');
-
-/** Used when an OpenAI-compatible endpoint is configured but no model named. */
-const FALLBACK_HTTP_MODEL = 'gpt-4o-mini';
 
 /**
  * Build the provider the current settings ask for.
@@ -52,61 +42,30 @@ const FALLBACK_HTTP_MODEL = 'gpt-4o-mini';
 export async function resolveProvider(
   settings?: ShellSettingsValues,
 ): Promise<{ readonly provider: LlmProvider; readonly status: ModelStatus }> {
-  const { model } = settings ?? await readSettings();
+  const stored = settings ?? await readSettings();
+  const id = stored.generationProvider;
+  const profile = stored.providers[id];
+  const model = modelOf(stored, id);
+  const apiKey = profile?.apiKey.trim() ?? '';
+  const baseUrl = profile?.baseUrl.trim() ?? '';
 
-  if (model.source === 'key') {
-    const apiKey = model.apiKey.trim();
-    const baseUrl = model.baseUrl.trim() || DEFAULT_OPENAI_BASE_URL;
-    if (apiKey.length === 0) {
-      // Not an error yet — the reader may be halfway through typing one in.
-      // Generation is what surfaces it, and the panel says so before then.
-      return {
-        provider: codexCliProvider(),
-        status: { provider: 'codex-cli', ready: false, detail: 'no-api-key' },
-      };
-    }
+  // No key is not an error yet — the reader may be halfway through typing one.
+  // Generation is what surfaces it, and the panel says so before then.
+  if (apiKey.length === 0 && !baseUrl) {
     return {
-      provider: httpLlmProvider({
-        apiKey,
-        baseUrl,
-        model: model.model.trim() || FALLBACK_HTTP_MODEL,
-      }),
-      status: { provider: 'http', ready: true, detail: baseUrl },
+      provider: codexCliProvider(),
+      status: { provider: 'codex-cli', ready: false, detail: 'no-api-key' },
     };
   }
 
-  const login = await readCodexLogin();
-
-  if (login.kind === 'oauth') {
-    return {
-      provider: chatGptCodexProvider({
-        accessToken: login.accessToken,
-        accountId: login.accountId,
-        model: model.model.trim() || login.model,
-        // Only when one was stored. A login old enough to lack a refresh token
-        // still works until it expires, and then says so.
-        ...(login.refreshToken ? { refresh: (signal) => refreshCodexLogin(undefined, signal) } : {}),
-      }),
-      status: { provider: 'chatgpt-codex', ready: true, detail: model.model.trim() || login.model },
-    };
-  }
-
-  if (login.kind === 'apiKey') {
-    return {
-      provider: httpLlmProvider({
-        apiKey: login.apiKey,
-        baseUrl: login.baseUrl || DEFAULT_OPENAI_BASE_URL,
-        model: model.model.trim() || login.model,
-      }),
-      status: { provider: 'http', ready: true, detail: login.baseUrl || DEFAULT_OPENAI_BASE_URL },
-    };
-  }
-
-  // Nothing stored in `~/.codex`. The CLI has its own ways of finding a login,
-  // so it is the fallback rather than an outright failure.
   return {
-    provider: codexCliProvider(),
-    status: { provider: 'codex-cli', ready: false, detail: 'no-codex-login' },
+    provider: piLlmProvider({
+      providerId: id,
+      apiKey,
+      model,
+      ...(baseUrl ? { baseUrl } : {}),
+    }),
+    status: { provider: id, ready: true, detail: model },
   };
 }
 

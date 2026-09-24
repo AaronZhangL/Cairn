@@ -1,6 +1,29 @@
 # Settings overhaul
 
-Status: planned, not started. Written 2026-09-24.
+Status: **done**, 2026-09-24. Kept as the record of why, not as a to-do list.
+
+Where the work diverged from this plan:
+
+- **Search settings were left alone.** They had just been reshaped
+  (`brave | firecrawl | tavily`, one key field each) and worked; folding them into a
+  `searchKeys` record would have been churn for no behavioural gain. Only the rename and the
+  trace move happened.
+- **`openai-codex` is not a provider.** Borrowing the `~/.codex` login stays a fallback inside
+  `companion/model.ts`, not an entry in a list the reader picks from.
+- **The engine row was removed in step 1, not step 5.** Leaving it would have left the panel
+  telling the reader to `pip install edge-tts`, which had stopped being true.
+- **Default models are hand-picked.** The catalog lists models but does not rank them, and its
+  first constrained entry alphabetically is `gpt-4`. `providers.test.ts` fails if an upgrade
+  retires one of the picks.
+- **`cuesFromBoundaries` merges to sentence level.** Slicing from the original text was not
+  enough on its own: `alignSentences` takes the cue holding a sentence's *midpoint*, so
+  word-level cues timed every sentence late. Both constraints are in the function's comment.
+- **A test preload was added.** `apps/desktop/tests/setup.ts` points the whole run at a
+  throwaway library. Two test files had been setting `CAIRN_DATA_DIR` themselves and only worked
+  while they happened to load `store.ts` first — otherwise the suite read and wrote the owner's
+  real books.
+- **Not done, deliberately:** `runtime/http-llm.ts` and `runtime/chatgpt-codex.ts` are no longer
+  constructed by anything. Deleting them is its own commit.
 
 ## Why
 

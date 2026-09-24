@@ -9,8 +9,10 @@
  * here: they never leave the webview, and `packages/ui/src/settings/prefs.ts`
  * holds them.
  */
-import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { DEFAULT_VOICES } from '@cairn/core/pipeline/voice';
+import { defaultModelOf, PROVIDER_IDS, type ProviderId } from './providers';
+
+export { PROVIDER_IDS, type ProviderId } from './providers';
 
 export const CONTENT_LOCALES = ['en', 'zh'] as const;
 export type ContentLocale = (typeof CONTENT_LOCALES)[number];
@@ -63,33 +65,30 @@ export const VOICES: Readonly<Record<ContentLocale, readonly VoiceSpec[]>> = {
   ],
 };
 
-/** Where the model comes from. */
-export type ModelSource =
-  /** Whatever `~/.codex` holds — an API key, or a ChatGPT login. */
-  | 'codex'
-  /** A key the reader typed in, against any OpenAI-compatible endpoint. */
-  | 'key';
-
-export interface ModelSettings {
-  readonly source: ModelSource;
+/**
+ * One provider's credentials, keyed by `ProviderId`.
+ *
+ * Each field's empty string is a deliberate deferral rather than a missing value:
+ * no key means read the environment, no base URL means the catalog's, no model
+ * means this provider's default. That keeps a half-filled panel working and
+ * keeps the stored file free of values nobody chose.
+ */
+export interface ProviderProfile {
   readonly apiKey: string;
-  /** Empty means the provider's own default. */
   readonly baseUrl: string;
-  /** Empty means: whatever the detected login names. */
   readonly model: string;
 }
 
-export type ChatModelSource = 'inherit' | 'anthropic' | 'deepseek' | 'minimax' | 'minimax-cn';
+export type ProviderProfiles = Readonly<Partial<Record<ProviderId, ProviderProfile>>>;
 
-export interface ChatModelSettings {
-  readonly source: ChatModelSource;
-  readonly apiKey: string;
-  readonly model: string;
-}
+export const EMPTY_PROFILE: ProviderProfile = { apiKey: '', baseUrl: '', model: '' };
+
+/** `inherit` puts the companion on whatever generation uses. */
+export type ChatProvider = ProviderId | 'inherit';
 
 export interface ModelStatus {
   /** Which route is in force. */
-  readonly provider: 'chatgpt-codex' | 'http' | 'codex-cli';
+  readonly provider: ProviderId | 'codex-cli';
   /** False means generation will fail until the reader fixes something. */
   readonly ready: boolean;
   /** The endpoint, the model, or why it is not ready. Shown verbatim. */
@@ -97,8 +96,9 @@ export interface ModelStatus {
 }
 
 export interface ShellSettingsValues {
-  readonly model: ModelSettings;
-  readonly chatModel: ChatModelSettings;
+  readonly providers: ProviderProfiles;
+  readonly generationProvider: ProviderId;
+  readonly chatProvider: ChatProvider;
   readonly narration: NarrationLanguage;
   readonly voices: Readonly<Record<ContentLocale, string>>;
   readonly searchProvider: 'brave' | 'firecrawl' | 'tavily';
@@ -107,10 +107,7 @@ export interface ShellSettingsValues {
   /** Empty means "read `TAVILY_API_KEY` from the environment instead". */
   readonly tavilyKey: string;
   readonly trace: boolean;
-  readonly defaultBudget: BudgetId;
 }
-
-const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];
 
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
@@ -118,11 +115,11 @@ export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 export const REDACTED_SECRET = '••••••••';
 
 export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
-  // Borrowing the CLI's login is what makes this work with no setup at all on
-  // the machine it was developed on. A distributed build is expected to change
-  // this to `key`; see the note at the top of `runtime/chatgpt-codex.ts`.
-  model: { source: 'codex', apiKey: '', baseUrl: '', model: '' },
-  chatModel: { source: 'inherit', apiKey: '', model: '' },
+  // Nothing configured. `resolveProvider` falls back to the codex CLI and reports
+  // itself as not ready, which is what the panel shows until a key is entered.
+  providers: {},
+  generationProvider: 'openai',
+  chatProvider: 'inherit',
   narration: 'follow',
   // From `pipeline/voice.ts`, not a second copy: the terminal path has no
   // settings file and falls back to those, and two lists would drift.
@@ -132,11 +129,89 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
   firecrawlKey: '',
   tavilyKey: '',
   trace: false,
-  defaultBudget: 'brief',
 };
 
 function known(locale: ContentLocale, id: unknown): string | undefined {
   return typeof id === 'string' && VOICES[locale].some((v) => v.id === id) ? id : undefined;
+}
+
+function str(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function isProviderId(value: unknown): value is ProviderId {
+  return typeof value === 'string' && (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+function profileOf(value: unknown): ProviderProfile | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const raw = value as Partial<Record<keyof ProviderProfile, unknown>>;
+  return { apiKey: str(raw.apiKey), baseUrl: str(raw.baseUrl), model: str(raw.model) };
+}
+
+function parseProfiles(value: unknown): ProviderProfiles {
+  if (typeof value !== 'object' || value === null) return {};
+  const raw = value as Record<string, unknown>;
+  const out: Partial<Record<ProviderId, ProviderProfile>> = {};
+  for (const [id, profile] of Object.entries(raw)) {
+    if (!isProviderId(id)) continue;
+    const parsed = profileOf(profile);
+    if (parsed) out[id] = parsed;
+  }
+  return out;
+}
+
+/**
+ * Fold a pre-registry settings file into the provider shape.
+ *
+ * The old file had one generation route (`model.source`, `'codex' | 'key'`) and a
+ * separate chat one naming a vendor. Both carried a key that must survive: losing
+ * it would look like the panel silently forgetting what the reader typed.
+ */
+function migrate(raw: Record<string, unknown>): Partial<ShellSettingsValues> {
+  const model = (typeof raw.model === 'object' && raw.model !== null ? raw.model : undefined) as
+    Record<string, unknown> | undefined;
+  const chat = (typeof raw.chatModel === 'object' && raw.chatModel !== null ? raw.chatModel : undefined) as
+    Record<string, unknown> | undefined;
+  if (!model && !chat) return {};
+
+  const providers: Partial<Record<ProviderId, ProviderProfile>> = {};
+  let generationProvider: ProviderId | undefined;
+
+  if (model) {
+    const baseUrl = str(model.baseUrl).trim();
+    // A base URL that is not OpenAI's was, by definition, a custom endpoint —
+    // there was no other way to name one.
+    const id: ProviderId = baseUrl && baseUrl !== DEFAULT_OPENAI_BASE_URL ? 'custom' : 'openai';
+    const profile = { apiKey: str(model.apiKey), baseUrl, model: str(model.model) };
+    // An all-empty profile is a value nobody chose; leaving it out keeps the
+    // stored file to what the reader actually set.
+    if (model.source === 'key' && Object.values(profile).some(Boolean)) {
+      providers[id] = profile;
+      generationProvider = id;
+    }
+  }
+
+  let chatProvider: ChatProvider | undefined;
+  if (chat && isProviderId(chat.source)) {
+    const id = chat.source;
+    providers[id] = {
+      apiKey: str(chat.apiKey),
+      baseUrl: '',
+      model: str(chat.model),
+      // A profile written by the generation branch above wins on base URL only
+      ...(providers[id]?.baseUrl ? { baseUrl: providers[id]!.baseUrl } : {}),
+    };
+    chatProvider = id;
+  } else if (chat?.source === 'inherit') {
+    chatProvider = 'inherit';
+  }
+
+  return {
+    ...(Object.keys(providers).length > 0 ? { providers } : {}),
+    ...(generationProvider ? { generationProvider } : {}),
+    ...(chatProvider ? { chatProvider } : {}),
+  };
 }
 
 /**
@@ -144,37 +219,28 @@ function known(locale: ContentLocale, id: unknown): string | undefined {
  *
  * Untrusted for the same reason the renderer's is: an older build wrote it, and
  * a voice id that no longer exists would fail at synthesis — after a model call
- * has already been paid for.
+ * has already been paid for. `defaultBudget` is read and dropped: the budget is
+ * chosen when a book is added, and a second copy here only went stale.
  */
 export function parseSettings(
   value: unknown,
   fallback: ShellSettingsValues = DEFAULT_SHELL_SETTINGS,
 ): ShellSettingsValues {
   if (typeof value !== 'object' || value === null) return fallback;
-  const raw = value as Partial<Record<keyof ShellSettingsValues, unknown>>;
+  const raw = value as Record<string, unknown>;
   const voices = (typeof raw.voices === 'object' && raw.voices !== null ? raw.voices : {}) as
     Partial<Record<ContentLocale, unknown>>;
-
   const narration = raw.narration;
-  const model = (typeof raw.model === 'object' && raw.model !== null ? raw.model : {}) as
-    Partial<Record<keyof ModelSettings, unknown>>;
-  const chatModel = (typeof raw.chatModel === 'object' && raw.chatModel !== null ? raw.chatModel : {}) as
-    Partial<Record<keyof ChatModelSettings, unknown>>;
-  const chatSource = chatModel.source;
+  const old = migrate(raw);
 
   return {
-    model: {
-      source: model.source === 'key' ? 'key' : fallback.model.source,
-      apiKey: typeof model.apiKey === 'string' ? model.apiKey : fallback.model.apiKey,
-      baseUrl: typeof model.baseUrl === 'string' ? model.baseUrl : fallback.model.baseUrl,
-      model: typeof model.model === 'string' ? model.model : fallback.model.model,
-    },
-    chatModel: {
-      source: chatSource === 'inherit' || chatSource === 'anthropic' || chatSource === 'deepseek' || chatSource === 'minimax' || chatSource === 'minimax-cn'
-        ? chatSource : fallback.chatModel.source,
-      apiKey: typeof chatModel.apiKey === 'string' ? chatModel.apiKey : fallback.chatModel.apiKey,
-      model: typeof chatModel.model === 'string' ? chatModel.model : fallback.chatModel.model,
-    },
+    providers: raw.providers === undefined ? old.providers ?? fallback.providers : parseProfiles(raw.providers),
+    generationProvider: isProviderId(raw.generationProvider)
+      ? raw.generationProvider
+      : old.generationProvider ?? fallback.generationProvider,
+    chatProvider: raw.chatProvider === 'inherit' || isProviderId(raw.chatProvider)
+      ? raw.chatProvider
+      : old.chatProvider ?? fallback.chatProvider,
     narration: narration === 'follow' || narration === 'en' || narration === 'zh'
       ? narration
       : fallback.narration,
@@ -185,31 +251,31 @@ export function parseSettings(
     searchProvider: raw.searchProvider === 'brave' || raw.searchProvider === 'firecrawl' || raw.searchProvider === 'tavily'
       ? raw.searchProvider : raw.searchProvider === 'keenable' ? 'firecrawl'
         : typeof raw.tavilyKey === 'string' && raw.tavilyKey.trim() ? 'tavily' : fallback.searchProvider,
-    braveKey: typeof raw.braveKey === 'string' ? raw.braveKey : fallback.braveKey,
-    firecrawlKey: typeof raw.firecrawlKey === 'string' ? raw.firecrawlKey : fallback.firecrawlKey,
-    tavilyKey: typeof raw.tavilyKey === 'string' ? raw.tavilyKey : fallback.tavilyKey,
+    braveKey: str(raw.braveKey, fallback.braveKey),
+    firecrawlKey: str(raw.firecrawlKey, fallback.firecrawlKey),
+    tavilyKey: str(raw.tavilyKey, fallback.tavilyKey),
     trace: typeof raw.trace === 'boolean' ? raw.trace : fallback.trace,
-    defaultBudget: BUDGET_IDS.includes(raw.defaultBudget as BudgetId)
-      ? (raw.defaultBudget as BudgetId)
-      : fallback.defaultBudget,
   };
 }
 
+/** Every stored key becomes a stand-in; the real ones never cross the bridge. */
 export function redactSettings(settings: ShellSettingsValues): ShellSettingsValues {
+  const providers: Partial<Record<ProviderId, ProviderProfile>> = {};
+  for (const [id, profile] of Object.entries(settings.providers) as [ProviderId, ProviderProfile][]) {
+    providers[id] = { ...profile, apiKey: profile.apiKey ? REDACTED_SECRET : '' };
+  }
   return {
     ...settings,
-    model: {
-      ...settings.model,
-      apiKey: settings.model.apiKey ? REDACTED_SECRET : '',
-    },
-    chatModel: {
-      ...settings.chatModel,
-      apiKey: settings.chatModel.apiKey ? REDACTED_SECRET : '',
-    },
+    providers,
     tavilyKey: settings.tavilyKey ? REDACTED_SECRET : '',
     braveKey: settings.braveKey ? REDACTED_SECRET : '',
     firecrawlKey: settings.firecrawlKey ? REDACTED_SECRET : '',
   };
+}
+
+/** The model a provider will actually be called with. */
+export function modelOf(settings: ShellSettingsValues, id: ProviderId): string {
+  return settings.providers[id]?.model.trim() || defaultModelOf(id);
 }
 
 /**

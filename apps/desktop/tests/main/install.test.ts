@@ -1,19 +1,15 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Chapter, ChapterNote, NodeDeck, Path } from '@cairn/core/types';
 import type { LibraryEntry } from '@cairn/core/store/library';
 
-// DATA_DIR is read at import time, so the override has to be in place first
-const DIR = await mkdtemp(join(tmpdir(), 'cairn-install-'));
-process.env.CAIRN_DATA_DIR = DIR;
+// The throwaway library `tests/setup.ts` created before any module loaded
+const DIR = process.env.CAIRN_DATA_DIR!;
 
 const {
   deleteBook, installDeck, installPath, listBooks, patchEntry, readDeckIndex, rewritePath,
 } = await import('../../src/main/install');
-
-afterAll(async () => { await rm(DIR, { recursive: true, force: true }); });
 
 const path = (nodeCount: number): Path => ({
   bookId: 'b1', title: '测试书', type: 'knowledge',

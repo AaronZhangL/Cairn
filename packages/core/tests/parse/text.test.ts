@@ -33,6 +33,33 @@ describe('decodeEntities', () => {
 });
 
 describe('htmlToText', () => {
+
+  /**
+   * Word-exported EPUBs carry their document properties in a conditional comment
+   * in `<head>`. Left in, a chapter opens with "pp pp 2 64 2015-03-20T10:01:00Z"
+   * — and that is what the map stage reads as the book's first words.
+   */
+  test('a conditional comment is not text', () => {
+    const html = `<head><!--[if gte mso 9]><xml>
+      <o:DocumentProperties><o:Author>pp</o:Author><o:Words>13864</o:Words></o:DocumentProperties>
+      </xml><![endif]--></head><body><p>吸烟是一种瘾</p></body>`;
+    expect(htmlToText(html)).toBe('吸烟是一种瘾');
+  });
+
+  test('an ordinary comment is not text either', () => {
+    expect(htmlToText('<p>正文<!-- 译注：此处有删节 --></p>')).toBe('正文');
+  });
+
+  test('the head is dropped whole, comment or not', () => {
+    const html = '<head><title>书名</title><meta content="Word.Document" name="ProgId" /></head>'
+      + '<body><p>正文</p></body>';
+    expect(htmlToText(html)).toBe('正文');
+  });
+
+  test('a document with no head is unaffected', () => {
+    expect(htmlToText('<p>只有正文</p>')).toBe('只有正文');
+  });
+
   test('块级标签转换为换行，段落不粘连', () => {
     expect(htmlToText('<p>第一段</p><p>第二段</p>')).toBe('第一段\n第二段');
   });

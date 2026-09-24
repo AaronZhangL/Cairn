@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useT, type ShellSettings, type VoiceOption } from '@cairn/ui';
+import { useT, type ShellPrefs, type ShellSettings, type VoiceOption } from '@cairn/ui';
 import {
   clearCache, dataDir, getSettings, inShell, modelStatus, previewVoice,
   revealDataDir, setSettings,
 } from './bridge';
 import {
-  DEFAULT_SHELL_SETTINGS, VOICES,
-  type ContentLocale, type ModelStatus, type ShellSettingsValues,
+  DEFAULT_SHELL_SETTINGS, EMPTY_PROFILE, VOICES,
+  type ContentLocale, type ModelStatus, type ProviderId, type ProviderProfile,
+  type ShellSettingsValues,
 } from './shared/settings';
+import { PROVIDERS } from './shared/providers';
 
 /**
  * The half of the settings panel that only the main process can answer.
@@ -48,21 +50,50 @@ export function useShellSettings(): ShellSettings | undefined {
   // Stopping playback when the panel closes is the element's own cleanup
   useEffect(() => () => audio.current?.pause(), []);
 
-  const setPref = useCallback(<K extends keyof ShellSettingsValues>(
+  /**
+   * `ShellSettings` states provider ids as plain strings, because `packages/ui`
+   * cannot see the union they are drawn from. Widening here is safe: the main
+   * process re-validates through `parseSettings`, and an id it does not know
+   * falls back rather than being stored.
+   */
+  const setPref = useCallback(<K extends keyof ShellPrefs>(
     key: K,
-    value: ShellSettingsValues[K],
+    value: ShellPrefs[K],
   ) => {
-    setValues((current) => (current ? { ...current, [key]: value } : current));
+    setValues((current) => (current ? { ...current, [key]: value } as ShellSettingsValues : current));
     void setSettings({ [key]: value } as Partial<ShellSettingsValues>)
       .then((stored) => {
         setValues(stored);
         // The model route is derived from these, so the panel's "in force" line
         // is stale the moment one of them changes.
-        if (key === 'model') void modelStatus().then(setModel);
+        if (key === 'generationProvider' || key === 'providers') void modelStatus().then(setModel);
       })
       // A write that failed leaves the optimistic value on screen and the real
       // one on disk. Re-reading is the only way to stop lying about it.
       .catch(() => void getSettings().then((stored) => stored && setValues(stored)));
+  }, []);
+
+  /**
+   * Patch one provider, merging over what is stored.
+   *
+   * A whole-field write would send the other providers back too — and the
+   * renderer holds stand-ins, not keys, so that round trip is where a key gets
+   * lost. `settings-store.ts` merges the other direction for the same reason.
+   */
+  const setProvider = useCallback((rawId: string, patch: Partial<ProviderProfile>) => {
+    const id = rawId as ProviderId;
+    setValues((current) => {
+      if (!current) return current;
+      const merged = { ...EMPTY_PROFILE, ...current.providers[id], ...patch };
+      const providers = { ...current.providers, [id]: merged };
+      void setSettings({ providers: { [id]: merged } })
+        .then((stored) => {
+          setValues(stored);
+          void modelStatus().then(setModel);
+        })
+        .catch(() => void getSettings().then((s) => s && setValues(s)));
+      return { ...current, providers };
+    });
   }, []);
 
   const voicesFor = useCallback((locale: ContentLocale): readonly VoiceOption[] => (
@@ -105,6 +136,8 @@ export function useShellSettings(): ShellSettings | undefined {
     return {
       prefs: values,
       setPref,
+      setProvider,
+      providers: PROVIDERS,
       voicesFor,
       recheckModel,
       ...(model ? { modelStatus: model } : {}),
@@ -114,5 +147,5 @@ export function useShellSettings(): ShellSettings | undefined {
       revealDataDir: () => void revealDataDir(),
       clearCache,
     } satisfies ShellSettings;
-  }, [values, setPref, voicesFor, recheckModel, model, audition, previewing, dir]);
+  }, [values, setPref, setProvider, voicesFor, recheckModel, model, audition, previewing, dir]);
 }

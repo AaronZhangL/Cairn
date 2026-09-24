@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
+import { useUi } from './SettingsProvider';
 
 /**
  * The parts every settings page is built from.
@@ -206,5 +207,17 @@ function EyeMark({ off }: { off: boolean }): ReactElement {
       <circle cx="12" cy="12" r="3" />
       {off && <path d="M3 3l18 18" />}
     </svg>
+  );
+}
+
+/** Every page that needs the main process says the same thing without it. */
+export function Offline({ title }: { title: string }): ReactElement {
+  const { t } = useUi();
+  return (
+    <Section title={title}>
+      <div className="set-row">
+        <span className="set-hint">{t.settings.offline}</span>
+      </div>
+    </Section>
   );
 }

@@ -216,14 +216,15 @@ halves of `compare` (so it is obvious which side is which). **Never on every bul
 slides   PathNode + the ChapterNotes of its sourceChapters
            → Slide[] + a narration script split into sentences    1 call per station
              ↓
-tts      narration script → mp3 + per-sentence timing             edge-tts, local, free
+tts      narration script → mp3 + per-sentence timing             Edge read-aloud, free
              ↓
          timings become NarrationCue[]; each slide's atMs aligns
          to the start of the sentence it belongs to
 ```
 
-`edge-tts` emits sentence-level subtitles alongside the audio, and **both the caption and the
-slide changes are driven from them** — nothing is timed by hand.
+The service emits word-boundary events alongside the audio; `cuesFromBoundaries` folds them into
+sentence-level cues, and **both the caption and the slide changes are driven from those** —
+nothing is timed by hand.
 
 Captions are cut finer than narration sentences: `caption.ts` splits at clause punctuation, drops
 the trailing mark, and enforces a minimum line length and on-screen time. A 40-character sentence

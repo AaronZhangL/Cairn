@@ -28,12 +28,12 @@ The webview renders and sends RPC calls. That split is not ceremony: it is what 
 `TAVILY_API_KEY` out of the webview, and it is why the bridge exists at all.
 
 **Mac first, Windows intended.** Nothing in `core/` is platform-specific; the platform-bound
-parts are `runtime/` (spawning `codex` and `edge-tts`) and the Electrobun packaging. The
+parts are `runtime/` (spawning `codex`) and the Electrobun packaging. The
 [llm-space](https://github.com/deer-flow/llm-space) monorepo is the reference for both the
 `packages/` + `apps/` boundaries and for shipping the same codebase on macOS and Windows.
 
-**No web build.** `codex exec` and `edge-tts` both need a local process, and nothing is shared,
-so there is nothing to deploy.
+**No web build.** Generation writes to disk and the fallback `codex exec` needs a local
+process; nothing is shared, so there is nothing to deploy.
 
 ---
 
@@ -48,7 +48,7 @@ packages/core/     Domain types, parsing, pipeline, storage — no framework imp
                    job.ts (batch state machine) · scheduler.ts (interactive one)
   companion/       citation and chat contracts, web search interface
   store/           library.ts, file-store.ts, reading.ts
-  runtime/         codex-cli.ts, edge-tts.ts, trace-dir.ts
+  runtime/         codex-cli.ts, edge-tts-ws.ts, http-llm.ts, trace-dir.ts
 packages/ui/       React components, design tokens, slide layout renderers
 apps/desktop/      Electrobun shell: main process + webview
 scripts/           add-book.ts, replay.ts, typecheck.ts
@@ -230,12 +230,36 @@ The original design chose focus mode with no sidebar, because a sidebar invites 
 skipping would have polluted a completion-rate experiment. There is no experiment. A sidebar
 costs nothing now, and jumping around is a feature.
 
-### edge-tts is an unofficial endpoint
+### edge-tts is an unofficial endpoint, now spoken to directly
 
 It rides Microsoft Edge's read-aloud service: free, no key, Chinese voices close to human. The
 risk is that it gets rate-limited or shut off; switching to a paid cloud TTS at that point costs
 roughly ¥7.5 per book (≈25k characters). Not the browser's own `SpeechSynthesis`: its voice
 varies with the operating system.
+
+It used to run through the `edge-tts` Python CLI, which put an install step in front of the
+reader and could never work inside a sandboxed player. `runtime/edge-tts-ws.ts` talks to the same
+service over its WebSocket instead. Word-boundary events replace the CLI's SRT, and
+`cuesFromBoundaries` in `pipeline/tts.ts` folds them into cues — slicing the *original* text
+rather than joining the event texts, because `alignSentences` locates a sentence by cumulative
+character offset and joined words drop every space. Measured, that error was two seconds by the
+second sentence of an English paragraph.
+
+### One provider registry for generation and the companion
+
+Both halves used to reach a model their own way: generation through a `codex | key` toggle,
+the companion through a hand-written list of vendors. Adding a vendor meant editing both.
+
+They now share `shared/providers.ts`, built from pi-ai's generated catalog. The catalog is what
+makes the choice honest rather than cosmetic — it records, per model, whether the provider will
+hold a reply to a JSON Schema, under two different field names (`supportsStrictMode` for
+OpenAI-shaped APIs, `supportsStrictTools` for Anthropic). Reading one and not the other marks
+every Claude model as unconstrained.
+
+The settings panel offers constrained models first and states the consequence when one is not.
+In pi-ai 0.87.1 that distinction is real: openai 41/41, anthropic 15/15, deepseek 2/2 and groq
+7/7 are fully constrained, while moonshotai 0/4, minimax 0/3, xai 0/4 and google 0/22 are not.
+That was already true before this change — the difference is that it is now visible.
 
 ### Superseded, and why it is worth knowing
 

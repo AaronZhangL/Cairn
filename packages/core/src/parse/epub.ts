@@ -95,7 +95,7 @@ async function readChapters(
     const href = manifest.get(idref);
     if (!href) continue;
 
-    const file = zip.file(resolvePath(baseDir, href));
+    const file = locate(zip, baseDir, href);
     if (!file) continue;
 
     blocks.push(...splitByHeading(await file.async('string'), blocks.length));
@@ -158,6 +158,29 @@ function nameUntitled(
     seq += 1;
     return { ...c, title: parse.section(seq) };
   });
+}
+
+/**
+ * Find the spine item, whether or not the manifest percent-encoded its name.
+ *
+ * Calibre writes names containing spaces and escapes them in the OPF, so the
+ * href and the zip entry are different strings. Decoding blindly is not the fix
+ * either: a name that really contains `%` makes `decodeURIComponent` throw, and
+ * `100%.xhtml` decodes to nothing valid. So both spellings are tried, and the
+ * raw one wins — it is what the archive actually holds.
+ */
+function locate(zip: JSZip, baseDir: string, href: string): JSZip.JSZipObject | null {
+  const raw = resolvePath(baseDir, href);
+  const direct = zip.file(raw);
+  if (direct) return direct;
+
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  return decoded === raw ? null : zip.file(decoded);
 }
 
 /** Resolve ../ and ./ in a relative href, which EPUBs use freely. */

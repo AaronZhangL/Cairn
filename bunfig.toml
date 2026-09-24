@@ -1,0 +1,3 @@
+[test]
+# Must run before any test module: see the note in apps/desktop/tests/setup.ts
+preload = ["./apps/desktop/tests/setup.ts"]

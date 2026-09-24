@@ -11,53 +11,84 @@ const { read: readSettings, readForRenderer: readSettingsForRenderer, write: wri
 
 afterAll(async () => { await rm(dir, { recursive: true, force: true }); });
 
-test('persists source selection and secrets, but never returns secrets to the renderer', async () => {
+test('persists provider profiles and secrets, but never returns secrets to the renderer', async () => {
   await writeSettings({
-    model: { source: 'key', apiKey: 'secret-model', baseUrl: 'https://example.test/v1', model: 'm' },
+    generationProvider: 'openai',
+    providers: { openai: { apiKey: 'secret-model', baseUrl: 'https://example.test/v1', model: 'gpt-5.4-mini' } },
     tavilyKey: 'secret-search',
     braveKey: 'secret-brave',
     firecrawlKey: 'secret-firecrawl',
   });
   const visible = await readSettingsForRenderer();
-  expect(visible.model.source).toBe('key');
-  expect(visible.model.apiKey).toBe(REDACTED_SECRET);
+  expect(visible.providers.openai?.apiKey).toBe(REDACTED_SECRET);
+  expect(visible.providers.openai?.model).toBe('gpt-5.4-mini');
   expect(visible.tavilyKey).toBe(REDACTED_SECRET);
   expect(visible.braveKey).toBe(REDACTED_SECRET);
   expect(visible.firecrawlKey).toBe(REDACTED_SECRET);
   expect(JSON.stringify(visible)).not.toContain('secret-');
-  expect((await readSettings()).model.apiKey).toBe('secret-model');
-  expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).model.source).toBe('key');
+  expect((await readSettings()).providers.openai?.apiKey).toBe('secret-model');
+  expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).generationProvider).toBe('openai');
 });
 
 test('a redacted marker preserves a secret across unrelated edits; empty clears it', async () => {
   const visible = await readSettingsForRenderer();
-  await writeSettings({ model: { ...visible.model, source: 'codex' }, tavilyKey: REDACTED_SECRET,
-    braveKey: REDACTED_SECRET, firecrawlKey: REDACTED_SECRET });
-  expect((await readSettings()).model.apiKey).toBe('secret-model');
+  await writeSettings({
+    providers: { openai: { ...visible.providers.openai!, model: 'gpt-5.4-nano' } },
+    tavilyKey: REDACTED_SECRET, braveKey: REDACTED_SECRET, firecrawlKey: REDACTED_SECRET,
+  });
+  expect((await readSettings()).providers.openai?.apiKey).toBe('secret-model');
+  expect((await readSettings()).providers.openai?.model).toBe('gpt-5.4-nano');
   expect((await readSettings()).tavilyKey).toBe('secret-search');
   expect((await readSettings()).braveKey).toBe('secret-brave');
   expect((await readSettings()).firecrawlKey).toBe('secret-firecrawl');
 
-  await writeSettings({ model: { ...visible.model, apiKey: '' }, tavilyKey: '', braveKey: '', firecrawlKey: '' });
-  expect((await readSettings()).model.apiKey).toBe('');
+  await writeSettings({
+    providers: { openai: { ...visible.providers.openai!, apiKey: '' } },
+    tavilyKey: '', braveKey: '', firecrawlKey: '',
+  });
+  expect((await readSettings()).providers.openai?.apiKey).toBe('');
   expect((await readSettings()).tavilyKey).toBe('');
   expect((await readSettings()).braveKey).toBe('');
   expect((await readSettings()).firecrawlKey).toBe('');
 });
 
-test('the Companion key stays in the main process and survives unrelated edits', async () => {
-  await writeSettings({ chatModel: { source: 'anthropic', apiKey: 'secret-companion', model: 'claude-sonnet-4-6' } });
+/**
+ * The reason profiles are keyed by provider rather than by role. The old shape
+ * had one key per role, so switching vendors had to drop it; here editing one
+ * provider must leave every other provider's key exactly where it was.
+ */
+test('editing one provider leaves the others’ keys untouched', async () => {
+  await writeSettings({
+    providers: {
+      openai: { apiKey: 'secret-openai', baseUrl: '', model: '' },
+      anthropic: { apiKey: 'secret-anthropic', baseUrl: '', model: '' },
+    },
+  });
+
   const visible = await readSettingsForRenderer();
-  expect(visible.chatModel.apiKey).toBe(REDACTED_SECRET);
-  expect(JSON.stringify(visible)).not.toContain('secret-companion');
-  await writeSettings({ trace: true, chatModel: visible.chatModel });
-  expect((await readSettings()).chatModel).toEqual({ source: 'anthropic', apiKey: 'secret-companion', model: 'claude-sonnet-4-6' });
+  expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
+
+  // A patch naming only OpenAI, as the panel sends when that field is edited
+  await writeSettings({ providers: { openai: { apiKey: 'replaced', baseUrl: '', model: '' } } });
+
+  const stored = await readSettings();
+  expect(stored.providers.openai?.apiKey).toBe('replaced');
+  expect(stored.providers.anthropic?.apiKey).toBe('secret-anthropic');
 });
 
-test('changing Companion provider cannot reuse the prior provider key', async () => {
+test('the Companion provider keeps its own key when generation changes', async () => {
+  await writeSettings({
+    chatProvider: 'anthropic',
+    providers: { anthropic: { apiKey: 'secret-companion', baseUrl: '', model: 'claude-haiku-4-5' } },
+  });
   const visible = await readSettingsForRenderer();
-  await writeSettings({ chatModel: { ...visible.chatModel, source: 'deepseek' } });
-  expect((await readSettings()).chatModel).toEqual({ source: 'deepseek', apiKey: '', model: 'claude-sonnet-4-6' });
+  expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
+  expect(JSON.stringify(visible)).not.toContain('secret-companion');
+
+  await writeSettings({ trace: true, generationProvider: 'openai' });
+  expect((await readSettings()).providers.anthropic)
+    .toEqual({ apiKey: 'secret-companion', baseUrl: '', model: 'claude-haiku-4-5' });
+  expect((await readSettings()).chatProvider).toBe('anthropic');
 });
 
 test('an existing environment Tavily key keeps Tavily as the search provider', async () => {

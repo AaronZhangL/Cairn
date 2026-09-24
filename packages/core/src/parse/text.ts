@@ -36,9 +36,20 @@ export function decodeBytes(bytes: Uint8Array): string {
   return new TextDecoder('utf-8').decode(bytes);
 }
 
-/** Extract plain text from an XHTML fragment. Block tags become newlines so paragraphs don't run together. */
+/**
+ * Extract plain text from an XHTML fragment. Block tags become newlines so
+ * paragraphs don't run together.
+ *
+ * Comments go first, and not because they are noise. A Word-exported EPUB keeps
+ * its document properties in a conditional comment — `<!--[if gte mso 9]><xml>
+ * <o:Author>…` — whose contents hold `>`, so the catch-all tag pattern below
+ * cannot swallow it and the chapter opens with the author's initials and a save
+ * timestamp. The head is dropped for the same reason: nothing in it is prose.
+ */
 export function htmlToText(html: string): string {
   const withBreaks = html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\s*head[^>]*>[\s\S]*?<\/\s*head\s*>/gi, '')
     .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, '')
     .replace(/<\s*br\s*\/?\s*>/gi, '\n')
     .replace(/<\/\s*(p|div|h[1-6]|li|tr|section|article|blockquote)\s*>/gi, '\n')

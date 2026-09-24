@@ -63,11 +63,11 @@ export function ModelMark(): ReactElement {
   );
 }
 
-export function KeyMark(): ReactElement {
+export function SearchMark(): ReactElement {
   return (
     <svg {...BOX} {...STROKE} aria-hidden="true">
-      <circle cx="8" cy="15" r="4" />
-      <path d="M10.8 12.2L20 3M18 5l2 2M15 8l2 2" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5L21 21" />
     </svg>
   );
 }

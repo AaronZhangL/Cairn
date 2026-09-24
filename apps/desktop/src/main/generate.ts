@@ -62,14 +62,11 @@ async function voiceOf(entry: LibraryEntry): Promise<string> {
 /** Parse only. No model calls, so picking a file stays instant. */
 export async function inspect(filePath: string): Promise<BookPreview> {
   const book = await read(filePath);
+  // Derived from this book's own shape. There is no stored default to override
+  // it with: the budget is a decision about one book, and a remembered rung was
+  // a second answer that went stale the moment a shorter book came along.
   const { choices, recommended } = suggestBudgets(shapeOf(book));
   const settings = await readSettings();
-
-  // The reader's stored rung wins over the suggestion, but only if this book
-  // actually offers it — a short book does not offer every rung.
-  const preselect = choices.some((c) => c.budget.id === settings.defaultBudget)
-    ? settings.defaultBudget
-    : recommended;
 
   return {
     id: idFor(book, filePath),
@@ -84,7 +81,7 @@ export async function inspect(filePath: string): Promise<BookPreview> {
       minutes: c.budget.targetMinutes,
       honest: c.honest,
       ...(c.honest ? {} : { wordsPerNode: Math.round(c.wordsPerNode) }),
-      recommended: c.budget.id === preselect,
+      recommended: c.budget.id === recommended,
     })),
   };
 }

@@ -122,6 +122,15 @@ export function cuesFromBoundaries(
     if (at >= 0) cursor = at + b.text.length;
   }
 
+  // Where the next *located* word begins, so a cue ends exactly where the following
+  // one starts and no character is dropped or counted twice.
+  const nextStarts: number[] = new Array<number>(boundaries.length);
+  let ahead = text.length;
+  for (let i = boundaries.length - 1; i >= 0; i -= 1) {
+    nextStarts[i] = ahead;
+    if (starts[i]! >= 0) ahead = starts[i]!;
+  }
+
   const cues: SrtCue[] = [];
   let from = 0;
   let startMs: number | undefined;
@@ -130,9 +139,8 @@ export function cuesFromBoundaries(
     const b = boundaries[i]!;
     startMs ??= Math.round(b.offset / 10_000);
 
-    const nextStart = starts.slice(i + 1).find((s) => s >= 0);
     const last = i === boundaries.length - 1;
-    const to = last || nextStart === undefined ? text.length : nextStart;
+    const to = last ? text.length : nextStarts[i]!;
     const slice = text.slice(from, Math.max(from, to));
 
     if (last || SENTENCE_END.test(slice)) {

@@ -18,46 +18,76 @@ describe('resolveChatModel', () => {
     expect(await resolved.getApiKey('openai-codex')).toBe('test-token');
   });
 
-  test('uses the configured OpenAI-compatible endpoint and model', async () => {
+  test('`inherit` follows the generation provider', async () => {
     const resolved = await resolveChatModel({
       ...DEFAULT_SHELL_SETTINGS,
-      model: { source: 'key', apiKey: 'secret', baseUrl: 'https://example.com/v1', model: 'custom-chat' },
+      generationProvider: 'anthropic',
+      chatProvider: 'inherit',
+      providers: { anthropic: { apiKey: 'secret', baseUrl: '', model: 'claude-haiku-4-5' } },
+    });
+
+    expect(resolved.model.provider).toBe('anthropic');
+    expect(resolved.model.id).toBe('claude-haiku-4-5');
+    expect(await resolved.getApiKey('anthropic')).toBe('secret');
+  });
+
+  test('a custom endpoint carries its own base URL', async () => {
+    const resolved = await resolveChatModel({
+      ...DEFAULT_SHELL_SETTINGS,
+      generationProvider: 'custom',
+      providers: { custom: { apiKey: 'secret', baseUrl: 'https://example.com/v1', model: 'custom-chat' } },
     });
 
     expect(resolved.model.id).toBe('custom-chat');
     expect(resolved.model.baseUrl).toBe('https://example.com/v1');
-    expect(await resolved.getApiKey(resolved.model.provider)).toBe('secret');
+    expect(await resolved.getApiKey('custom')).toBe('secret');
   });
 
   test.each([
-    { source: 'anthropic' as const, model: 'claude-sonnet-4-6', api: 'anthropic-messages' },
-    { source: 'deepseek' as const, model: 'deepseek-v4-pro', api: 'openai-completions' },
-    { source: 'minimax' as const, model: 'MiniMax-M2.7', api: 'anthropic-messages' },
-    { source: 'minimax-cn' as const, model: 'MiniMax-M2.7', api: 'anthropic-messages' },
-  ])('resolves $source Companion models without changing generation', async ({ source, model, api }) => {
+    { id: 'anthropic' as const, model: 'claude-haiku-4-5', api: 'anthropic-messages' },
+    { id: 'deepseek' as const, model: 'deepseek-v4-pro', api: 'openai-completions' },
+    { id: 'minimax' as const, model: 'MiniMax-M2.7', api: 'anthropic-messages' },
+    { id: 'minimax-cn' as const, model: 'MiniMax-M2.7', api: 'anthropic-messages' },
+  ])('resolves a $id Companion without changing generation', async ({ id, model, api }) => {
     const resolved = await resolveChatModel({
       ...DEFAULT_SHELL_SETTINGS,
-      model: { source: 'key', apiKey: 'generation-only', baseUrl: 'https://generation.test/v1', model: 'generation' },
-      chatModel: { source, apiKey: 'chat-only', model },
+      generationProvider: 'openai',
+      chatProvider: id,
+      providers: {
+        openai: { apiKey: 'generation-only', baseUrl: '', model: '' },
+        [id]: { apiKey: 'chat-only', baseUrl: '', model },
+      },
     });
-    expect(resolved.model.provider).toBe(source);
+    expect(resolved.model.provider).toBe(id);
     expect(resolved.model.api).toBe(api);
     expect(resolved.model.id).toBe(model);
-    expect(await resolved.getApiKey(source)).toBe('chat-only');
-    expect(await resolved.getApiKey('other')).toBeUndefined();
+    expect(await resolved.getApiKey(id)).toBe('chat-only');
+    // The generation key must not be reachable through the Companion's resolver
+    expect(await resolved.getApiKey('openai')).toBeUndefined();
+  });
+
+  test('an empty model falls back to the provider default, not to nothing', async () => {
+    const resolved = await resolveChatModel({
+      ...DEFAULT_SHELL_SETTINGS,
+      chatProvider: 'deepseek',
+      providers: { deepseek: { apiKey: 'secret', baseUrl: '', model: '' } },
+    });
+    expect(resolved.model.id).toBe('deepseek-flash');
   });
 
   test('a missing Companion key fails before any model request', async () => {
     await expect(resolveChatModel({
       ...DEFAULT_SHELL_SETTINGS,
-      chatModel: { source: 'anthropic', apiKey: '', model: 'claude-sonnet-4-6' },
+      chatProvider: 'anthropic',
+      providers: { anthropic: { apiKey: '', baseUrl: '', model: 'claude-haiku-4-5' } },
     })).rejects.toMatchObject({ code: 'no_credential' });
   });
 
   test('an unavailable provider model fails explicitly', async () => {
     await expect(resolveChatModel({
       ...DEFAULT_SHELL_SETTINGS,
-      chatModel: { source: 'deepseek', apiKey: 'secret', model: 'not-in-catalog' },
+      chatProvider: 'deepseek',
+      providers: { deepseek: { apiKey: 'secret', baseUrl: '', model: 'not-in-catalog' } },
     })).rejects.toMatchObject({ code: 'model_unavailable' });
   });
 

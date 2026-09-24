@@ -341,9 +341,27 @@ Two projects worth borrowing from:
 
 ## A note on the LLM provider
 
-Generation runs through the locally installed `codex exec` CLI as a subprocess, so there is no
-API spend. One cost to keep in mind: each call carries roughly 18k tokens of agent harness
-overhead, several times the chapter text itself — which is why the map stage batches chapters
-(`DEFAULT_BATCH_SIZE`) instead of one call per chapter. A plain HTTP provider would have a few
-hundred tokens of overhead and could drop the batch size to 1 for cleaner per-chapter notes.
-Keep everything behind `LlmProvider` so that swap stays a one-file change.
+Generation goes through **pi-ai**, which already knows each vendor's wire format and — the part
+that decides quality here — which of their models will hold a reply to a JSON Schema. The
+pipeline asks for structured output on roughly a hundred calls per book, so guessing that per
+vendor is how a schema quietly becomes a suggestion. `shared/providers.ts` reads pi-ai's
+generated catalog as plain data; the settings panel offers constrained models first and says so
+when one cannot be constrained.
+
+Two details that are load-bearing and not obvious:
+
+- **The forcing value for a tool call is spelled differently per adapter.** `ToolChoice` is
+  typed `'auto' | 'none'`, but OpenAI-shaped APIs take `'required'` and the rest take `'any'`.
+  `forcedToolChoice` in `main/pi-provider.ts` is the only place that knowledge lives.
+- **`completeSimple` resolves an error rather than rejecting.** Its `stopReason` carries the
+  outcome, including `'length'` for a truncated reply. Not reading it turns a failed call into
+  an empty one.
+
+The `codex exec` CLI remains as the fallback for an app with nothing configured, and reports
+itself as not ready. Each of its calls carries roughly 18k tokens of agent harness overhead,
+several times the chapter text itself — which is why the map stage batches chapters
+(`DEFAULT_BATCH_SIZE`). An HTTP provider costs a few hundred tokens of envelope instead and
+could drop the batch size to 1 for cleaner per-chapter notes.
+
+Everything stays behind `LlmProvider`, so swapping any of this remains a one-file change.
+`packages/core` never imports pi-ai; `main/pi-provider.ts` does.

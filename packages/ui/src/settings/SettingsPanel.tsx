@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useUi } from './SettingsProvider';
+import { ModelsPage } from './ModelsPage';
 import {
-  AppearancePage, DataPage, GeneralPage, KeysPage, ModelsPage, NarrationPage, PlaybackPage,
+  AppearancePage, DataPage, GeneralPage, NarrationPage, PlaybackPage, SearchPage,
 } from './pages';
 import type { ShellSettings } from './shell';
 import {
-  CacheMark, GearMark, KeyMark, ModelMark, PaletteMark, PlaybackMark, WaveMark,
+  CacheMark, GearMark, ModelMark, PaletteMark, PlaybackMark, SearchMark, WaveMark,
 } from './icons';
 
 export const SETTINGS_TABS = [
-  'general', 'appearance', 'playback', 'models', 'narration', 'keys', 'data',
+  'general', 'appearance', 'playback', 'models', 'narration', 'search', 'data',
 ] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -27,7 +28,7 @@ const PAGES: readonly {
   { tab: 'playback', group: 'reading', Icon: PlaybackMark },
   { tab: 'models', group: 'generation', Icon: ModelMark },
   { tab: 'narration', group: 'reading', Icon: WaveMark },
-  { tab: 'keys', group: 'generation', Icon: KeyMark },
+  { tab: 'search', group: 'generation', Icon: SearchMark },
   { tab: 'data', group: 'generation', Icon: CacheMark },
 ];
 
@@ -143,7 +144,7 @@ export function SettingsPanel({
             {tab === 'playback' && <PlaybackPage />}
             {tab === 'models' && <ModelsPage shell={shell} />}
             {tab === 'narration' && <NarrationPage shell={shell} />}
-            {tab === 'keys' && <KeysPage shell={shell} />}
+            {tab === 'search' && <SearchPage shell={shell} />}
             {tab === 'data' && <DataPage shell={shell} />}
           </div>
         </div>
@@ -159,7 +160,7 @@ function description(tab: SettingsTab, t: ReturnType<typeof useUi>['t']): string
     playback: t.settings.playback.desc,
     models: t.settings.models.desc,
     narration: t.settings.narration.desc,
-    keys: t.settings.keys.desc,
+    search: t.settings.search.desc,
     data: t.settings.data.desc,
   };
   return byTab[tab];
