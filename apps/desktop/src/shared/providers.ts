@@ -70,7 +70,7 @@ interface Chrome {
 const CHROME: Readonly<Record<ProviderId, Chrome>> = {
   openai: { label: 'OpenAI', getKeyUrl: 'https://platform.openai.com/api-keys', faviconDomain: 'openai.com', defaultModel: 'gpt-5.4-mini' },
   anthropic: { label: 'Anthropic', getKeyUrl: 'https://console.anthropic.com/settings/keys', faviconDomain: 'anthropic.com', defaultModel: 'claude-haiku-4-5' },
-  google: { label: 'Google', getKeyUrl: 'https://aistudio.google.com/apikey', faviconDomain: 'ai.google.dev', defaultModel: 'gemini-2.5-flash' },
+  google: { label: 'Google', getKeyUrl: 'https://aistudio.google.com/apikey', faviconDomain: 'ai.google.dev', defaultModel: 'gemini-3.5-flash' },
   deepseek: { label: 'DeepSeek', getKeyUrl: 'https://platform.deepseek.com/api_keys', faviconDomain: 'deepseek.com', defaultModel: 'deepseek-flash' },
   openrouter: { label: 'OpenRouter', getKeyUrl: 'https://openrouter.ai/keys', faviconDomain: 'openrouter.ai', defaultModel: 'google/gemini-2.5-flash' },
   groq: { label: 'Groq', getKeyUrl: 'https://console.groq.com/keys', faviconDomain: 'groq.com', defaultModel: 'llama-3.3-70b-versatile' },
@@ -105,15 +105,21 @@ const CATALOGS: Readonly<Partial<Record<ProviderId, Readonly<Record<string, Cata
   'minimax-cn': MINIMAX_CN_MODELS,
 };
 
+/** pi-ai decides Gemini by model id, not by a catalog flag (`supportsGoogleStrictToolSampling`). */
+const GEMINI_STRICT = /^gemini(?:-live)?-([3-9]|\d{2,})/i;
+
 function toModel(id: string, entry: CatalogEntry): ProviderModel {
   const compat = entry.compat ?? {};
+  const api = typeof entry.api === 'string' ? entry.api : 'openai-completions';
   return {
     id,
     name: typeof entry.name === 'string' ? entry.name : id,
-    api: typeof entry.api === 'string' ? entry.api : 'openai-completions',
+    api,
     maxTokens: typeof entry.maxTokens === 'number' ? entry.maxTokens : 4096,
     contextWindow: typeof entry.contextWindow === 'number' ? entry.contextWindow : 8192,
-    strict: compat.supportsStrictMode === true || compat.supportsStrictTools === true,
+    strict: api === 'google-generative-ai'
+      ? GEMINI_STRICT.test(id)
+      : compat.supportsStrictMode === true || compat.supportsStrictTools === true,
   };
 }
 
@@ -131,13 +137,21 @@ export const PROVIDERS: readonly Provider[] = PROVIDER_IDS.map((id) => {
     ...CHROME[id],
     baseUrl: baseUrlOf(catalog),
     needsBaseUrl: id === 'custom',
-    // Constrained models first: the picker offers those by default, and a
-    // provider with none of them is a warning rather than a choice.
+    // Every model, so a stored pick still resolves; the panel reads `OFFERED_PROVIDERS`.
     models: Object.entries(catalog ?? {})
       .map(([modelId, entry]) => toModel(modelId, entry))
       .sort((a, b) => Number(b.strict) - Number(a.strict) || a.id.localeCompare(b.id)),
   };
 });
+
+/**
+ * What the settings panel offers: constrained models only, and a vendor only if
+ * it has one. Read from the catalog on every build, so a pi-ai upgrade that adds
+ * strict support brings a vendor back with no change here.
+ */
+export const OFFERED_PROVIDERS: readonly Provider[] = PROVIDERS
+  .map((provider) => ({ ...provider, models: provider.models.filter((m) => m.strict) }))
+  .filter((provider) => provider.needsBaseUrl || provider.models.length > 0);
 
 export function providerById(id: ProviderId): Provider | undefined {
   return PROVIDERS.find((p) => p.id === id);

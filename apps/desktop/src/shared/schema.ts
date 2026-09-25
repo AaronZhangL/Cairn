@@ -50,6 +50,8 @@ export type BunSchema = RPCSchema<{
     setMenuLocale: { params: { locale: UiLocale }; response: null };
     /** Which model route the current settings resolve to, and whether it can run. */
     modelStatus: { params: void; response: ModelStatus };
+    /** The webview cannot open a new window, so links leave through the system browser. */
+    openExternal: { params: { url: string }; response: boolean };
   };
 }>;
 
@@ -59,7 +61,13 @@ export type BunSchema = RPCSchema<{
  */
 export type WebviewSchema = RPCSchema<{
   requests: Record<never, never>;
-  messages: { progress: Progress; deckStatus: DeckStatus; companion: CompanionEvent };
+  messages: {
+    progress: Progress;
+    deckStatus: DeckStatus;
+    companion: CompanionEvent;
+    /** The native menu's Settings item, which the webview owns the panel for. */
+    openSettings: null;
+  };
 }>;
 
 export type CairnRPC = { bun: BunSchema; webview: WebviewSchema };

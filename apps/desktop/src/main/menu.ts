@@ -35,6 +35,7 @@ interface MenuWords {
   readonly fullScreen: string;
   readonly close: string;
   readonly settings: string;
+  readonly inspector: string;
 }
 
 const WORDS: Readonly<Record<UiLocale, MenuWords>> = {
@@ -58,6 +59,7 @@ const WORDS: Readonly<Record<UiLocale, MenuWords>> = {
     fullScreen: 'Toggle Full Screen',
     close: 'Close Window',
     settings: 'Settings…',
+    inspector: 'Open Web Inspector',
   },
   zh: {
     about: (app) => `关于 ${app}`,
@@ -79,18 +81,27 @@ const WORDS: Readonly<Record<UiLocale, MenuWords>> = {
     fullScreen: '全屏',
     close: '关闭窗口',
     settings: '设置…',
+    inspector: '打开网页检查器',
   },
 };
+
+/** The Settings item's action. The webview owns the panel, so `index.ts` forwards it there. */
+export const OPEN_SETTINGS = 'open-settings';
+export const OPEN_INSPECTOR = 'open-inspector';
+
+export interface MenuOptions {
+  /** Dev builds only: the Web Inspector shows the page's console, DOM and network. */
+  readonly inspector?: boolean;
+}
 
 /**
  * Re-callable: switching the interface language rebuilds the menu in place,
  * rather than waiting for the next launch.
  *
- * ⌘, is handled by the webview, which owns the panel. The item is here so the
- * shortcut is discoverable where macOS users look for it; it carries no action
- * of its own and the accelerator reaches the page.
+ * The native menu takes ⌘, before the page sees the key, so the item needs an
+ * action of its own — without one, neither the click nor the shortcut does anything.
  */
-export function installMenu(locale: UiLocale = 'en'): void {
+export function installMenu(locale: UiLocale = 'en', options: MenuOptions = {}): void {
   const w = WORDS[locale];
 
   ApplicationMenu.setApplicationMenu([
@@ -99,7 +110,7 @@ export function installMenu(locale: UiLocale = 'en'): void {
       submenu: [
         { label: w.about(APP_NAME), role: 'about' },
         { type: 'divider' },
-        { label: w.settings, accelerator: 'Cmd+,' },
+        { label: w.settings, action: OPEN_SETTINGS, accelerator: 'Cmd+,' },
         { type: 'divider' },
         { label: w.hide(APP_NAME), role: 'hide', accelerator: 'Cmd+H' },
         { label: w.hideOthers, role: 'hideOthers', accelerator: 'Cmd+Alt+H' },
@@ -129,6 +140,9 @@ export function installMenu(locale: UiLocale = 'en'): void {
         { label: w.fullScreen, role: 'toggleFullScreen', accelerator: 'Cmd+Ctrl+F' },
         { type: 'divider' },
         { label: w.close, role: 'close', accelerator: 'Cmd+W' },
+        ...(options.inspector
+          ? [{ type: 'divider' as const }, { label: w.inspector, action: OPEN_INSPECTOR, accelerator: 'Cmd+Alt+I' }]
+          : []),
       ],
     },
   ]);

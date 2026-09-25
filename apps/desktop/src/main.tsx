@@ -1,7 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Gauntlet, SettingsProvider } from '@cairn/ui';
+import { Gauntlet, LinkProvider, SettingsProvider } from '@cairn/ui';
 import { App } from './App';
+import { inShell, openExternal } from './bridge';
 
 /**
  * `?gauntlet` renders every slide layout at its worst instead of the app.
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Wraps the gauntlet too: it draws slides, and slides read the text scale. */}
     <SettingsProvider>
-      {gauntlet ? <Gauntlet /> : <App />}
+      <LinkProvider open={inShell ? openExternal : undefined}>
+        {gauntlet ? <Gauntlet /> : <App />}
+      </LinkProvider>
     </SettingsProvider>
   </StrictMode>,
 );

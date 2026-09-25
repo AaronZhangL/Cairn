@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import type { ChatMessage, Citation } from '@cairn/core/companion/types';
+import { Link } from '../Link';
 import { useT } from '../settings/SettingsProvider';
 
 export interface CitationPart {
@@ -51,7 +52,7 @@ export function CompanionPane({
   const sourceLink = (citation: Citation, index: number): ReactElement => {
     const ref = citation.ref;
     if (citation.source === 'web' && 'url' in ref) {
-      return <a className="chip" key={index} href={ref.url} target="_blank" rel="noreferrer" title={ref.title}>{ref.title.slice(0, 32) || t.companion.webSource}</a>;
+      return <Link className="chip" key={index} href={ref.url} title={ref.title}>{ref.title.slice(0, 32) || t.companion.webSource}</Link>;
     }
     if (citation.source === 'book' && 'chapter' in ref) {
       return <button className="chip" type="button" key={index} onClick={() => {

@@ -12,7 +12,7 @@ import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
   chatCancel, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
-  listBooks, onCompanionEvent, onDeckStatus, markBookFinished, resumeBook, setMenuLocale,
+  listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, setMenuLocale,
 } from './bridge';
 import { useBundle } from './useBundle';
 import { useShellSettings } from './useShellSettings';
@@ -129,6 +129,8 @@ export function App(): ReactElement {
   useEffect(() => {
     if (bookId && node && building) focusStation(bookId, node.id);
   }, [bookId, node, building]);
+
+  useEffect(() => onOpenSettings(() => setSettingsOpen(true)), []);
 
   // Stations only. Transport keys (← → space) belong to the deck.
   useEffect(() => {

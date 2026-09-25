@@ -9,7 +9,10 @@ import {
   type ContentLocale, type ModelStatus, type ProviderId, type ProviderProfile,
   type ShellSettingsValues,
 } from './shared/settings';
-import { PROVIDERS } from './shared/providers';
+import { OFFERED_PROVIDERS } from './shared/providers';
+import { silentWav } from './silence';
+
+const SILENCE = silentWav();
 
 /**
  * The half of the settings panel that only the main process can answer.
@@ -31,6 +34,7 @@ export function useShellSettings(): ShellSettings | undefined {
 
   /** One element reused for every audition, so two cannot overlap. */
   const audio = useRef<HTMLAudioElement | undefined>(undefined);
+  const auditionId = useRef(0);
 
   useEffect(() => {
     if (!inShell) return;
@@ -50,6 +54,13 @@ export function useShellSettings(): ShellSettings | undefined {
   // Stopping playback when the panel closes is the element's own cleanup
   useEffect(() => () => audio.current?.pause(), []);
 
+  /** Also drops a sample still being synthesised, so the old voice cannot start after a switch. */
+  const stopPreview = useCallback(() => {
+    auditionId.current++;
+    audio.current?.pause();
+    setPreviewing(undefined);
+  }, []);
+
   /**
    * `ShellSettings` states provider ids as plain strings, because `packages/ui`
    * cannot see the union they are drawn from. Widening here is safe: the main
@@ -60,6 +71,7 @@ export function useShellSettings(): ShellSettings | undefined {
     key: K,
     value: ShellPrefs[K],
   ) => {
+    if (key === 'voices') stopPreview();
     setValues((current) => (current ? { ...current, [key]: value } as ShellSettingsValues : current));
     void setSettings({ [key]: value } as Partial<ShellSettingsValues>)
       .then((stored) => {
@@ -71,7 +83,7 @@ export function useShellSettings(): ShellSettings | undefined {
       // A write that failed leaves the optimistic value on screen and the real
       // one on disk. Re-reading is the only way to stop lying about it.
       .catch(() => void getSettings().then((stored) => stored && setValues(stored)));
-  }, []);
+  }, [stopPreview]);
 
   /**
    * Patch one provider, merging over what is stored.
@@ -111,21 +123,32 @@ export function useShellSettings(): ShellSettings | undefined {
   const audition = useCallback((locale: ContentLocale) => {
     const element = (audio.current ??= new Audio());
     if (previewing === locale) {
-      element.pause();
-      setPreviewing(undefined);
+      stopPreview();
       return;
     }
+    const request = ++auditionId.current;
     setPreviewing(locale);
+    // Synthesis takes one to three seconds, sometimes longer than WebKit keeps the
+    // click's permission to play; a silent clip played now carries it over.
+    // Cleared first: the clip ends in 10 ms, and the last audition's handler would reset the button mid-synthesis
+    element.onended = null;
+    element.src = SILENCE;
+    element.play().catch((cause: unknown) => console.error('preview unlock', cause));
     void previewVoice(locale)
       .then((src) => {
+        // A click or a voice switch while this was synthesising has made it stale
+        if (request !== auditionId.current) return;
         element.src = src;
         element.onended = () => setPreviewing(undefined);
         return element.play();
       })
       // Synthesis can fail for the same reasons a book's can — no network, a
-      // voice id this account cannot use. Silence is the signal.
-      .catch(() => setPreviewing(undefined));
-  }, [previewing]);
+      // voice id this account cannot use.
+      .catch((cause: unknown) => {
+        console.error('preview', locale, cause);
+        if (request === auditionId.current) setPreviewing(undefined);
+      });
+  }, [previewing, stopPreview]);
 
   const recheckModel = useCallback(() => {
     void modelStatus().then(setModel);
@@ -138,7 +161,7 @@ export function useShellSettings(): ShellSettings | undefined {
       keptSecret: REDACTED_SECRET,
       setPref,
       setProvider,
-      providers: PROVIDERS,
+      providers: OFFERED_PROVIDERS,
       voicesFor,
       recheckModel,
       ...(model ? { modelStatus: model } : {}),

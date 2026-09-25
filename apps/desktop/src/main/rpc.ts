@@ -1,4 +1,4 @@
-import { openFileDialog } from 'electrobun/main/utils';
+import { openExternal, openFileDialog } from 'electrobun/main/utils';
 import type { BookBuilder } from '@cairn/core/books/builder';
 import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse/format';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
@@ -11,7 +11,7 @@ import { redactSettings } from '../shared/settings';
 import type {
   ContentLocale, ModelStatus, ShellSettingsValues, UiLocale,
 } from '../shared/settings';
-import { installMenu } from './menu';
+import { webUrl } from './external-url';
 import { libraryServer, previewFile } from './library-server';
 import { DATA_DIR, library } from './store';
 import { markBookFinished } from './reading';
@@ -32,6 +32,8 @@ const message = (cause: unknown): string =>
 /** What the handlers need from the rest of the process, assembled once in `index.ts`. */
 export interface HandlerDeps {
   readonly books: BookBuilder;
+  /** Rebuilds the native menu in the reader's language. */
+  readonly menu: (locale: UiLocale) => void;
   /** Pushed to the window; fire-and-forget, so each has a pull-side twin. */
   readonly emit: {
     readonly progress: (p: Progress) => void;
@@ -39,7 +41,7 @@ export interface HandlerDeps {
   };
 }
 
-export function createHandlers({ books, emit }: HandlerDeps) {
+export function createHandlers({ books, menu, emit }: HandlerDeps) {
   /** One reader, one conversation: a second send while a turn runs is refused. */
   let activeChat: { readonly turnId: string; readonly controller: AbortController } | undefined;
 
@@ -195,8 +197,13 @@ export function createHandlers({ books, emit }: HandlerDeps) {
       return modelStatus();
     },
 
+    async openExternal(params: { url: string }): Promise<boolean> {
+      const url = webUrl(params.url);
+      return url !== undefined && openExternal(url);
+    },
+
     async setMenuLocale(params: { locale: UiLocale }): Promise<null> {
-      installMenu(params.locale);
+      menu(params.locale);
       return null;
     },
 

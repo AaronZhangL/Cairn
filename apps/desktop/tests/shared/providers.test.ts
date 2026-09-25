@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  defaultModelOf, hasConstrainedModel, modelIn, PROVIDER_IDS, PROVIDERS, providerById,
+  defaultModelOf, hasConstrainedModel, modelIn, OFFERED_PROVIDERS, PROVIDER_IDS, PROVIDERS, providerById,
 } from '../../src/shared/providers';
 
 describe('provider registry', () => {
@@ -48,4 +48,32 @@ describe('provider registry', () => {
       expect(flags.indexOf(false) === -1 || flags.lastIndexOf(true) < flags.indexOf(false), provider.id).toBe(true);
     }
   });
+
+  // Gemini carries no catalog flag; pi-ai goes by major version. Reading the flag
+  // alone marked all of Google unconstrained, which would now hide it.
+  test('Gemini 3 and later read as constrained, Gemini 2 does not', () => {
+    expect(modelIn('google', 'gemini-3.5-flash')?.strict).toBe(true);
+    expect(modelIn('google', 'gemini-2.5-flash')?.strict).toBe(false);
+  });
+
+  test('the panel is offered constrained models only', () => {
+    for (const provider of OFFERED_PROVIDERS) {
+      expect(provider.models.every((m) => m.strict), provider.id).toBe(true);
+    }
+  });
+
+  // Derived from the flag, not listed: a pi-ai upgrade that adds strict support
+  // to one of these makes it appear with no code change.
+  test('a vendor with no constrained model is not offered, custom always is', () => {
+    const offered = OFFERED_PROVIDERS.map((p) => p.id);
+    for (const id of PROVIDER_IDS) {
+      expect(offered.includes(id), id).toBe(id === 'custom' || hasConstrainedModel(id));
+    }
+    expect(offered).not.toContain('xai');
+  });
+
+  test('stored picks outside the offer still resolve in the full registry', () => {
+    expect(modelIn('xai', defaultModelOf('xai'))).toBeDefined();
+  });
 });
+

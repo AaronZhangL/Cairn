@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { Messages } from '../i18n/messages/en';
 import { LOCALES, type Locale } from '../i18n/locale';
+import { Link } from '../Link';
 import { useUi } from './SettingsProvider';
 import { TEXT_SIZES, THEMES, type TextSize, type ThemeChoice } from './prefs';
 import type { NarrationLanguage, ShellSettings } from './shell';
@@ -243,9 +244,9 @@ function SearchKeyRow({ shell, which, label, hint }: {
       hint={<>{hint} {t.settings.models.secretHint}</>}
       htmlFor={id}
       aside={(
-        <a className="set-link" href={SEARCH_KEY_URL[which]} target="_blank" rel="noreferrer">
+        <Link className="set-link" href={SEARCH_KEY_URL[which]}>
           {t.settings.search.getKey}
-        </a>
+        </Link>
       )}
     >
       <SecretField

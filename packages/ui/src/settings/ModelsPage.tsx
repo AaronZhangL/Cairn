@@ -8,6 +8,7 @@
  */
 import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
+import { Link } from '../Link';
 import { useUi } from './SettingsProvider';
 import { Offline, Row, SecretField, Section, Select, StackedRow } from './rows';
 import type { ProviderInfo, ShellSettings } from './shell';
@@ -90,9 +91,9 @@ function ProviderDetail({ shell, provider }: {
         hint={t.settings.models.secretHint}
         htmlFor={keyId}
         aside={provider.getKeyUrl ? (
-          <a className="set-link" href={provider.getKeyUrl} target="_blank" rel="noreferrer">
+          <Link className="set-link" href={provider.getKeyUrl}>
             {t.settings.models.getKey}
-          </a>
+          </Link>
         ) : undefined}
       >
         <SecretField

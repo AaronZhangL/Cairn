@@ -44,6 +44,7 @@ export const inShell =
 const progressListeners = new Set<(p: Progress) => void>();
 const deckStatusListeners = new Set<(s: DeckStatus) => void>();
 const companionListeners = new Set<(event: CompanionEvent) => void>();
+const openSettingsListeners = new Set<() => void>();
 
 export function onProgress(fn: (p: Progress) => void): () => void {
   progressListeners.add(fn);
@@ -61,6 +62,12 @@ export function onCompanionEvent(fn: (event: CompanionEvent) => void): () => voi
   return () => companionListeners.delete(fn);
 }
 
+/** The native menu's Settings item. */
+export function onOpenSettings(fn: () => void): () => void {
+  openSettingsListeners.add(fn);
+  return () => openSettingsListeners.delete(fn);
+}
+
 async function makeRpc() {
   const { Electroview } = await import('electrobun/view');
   // Same helper as the bun side, so both derive local/remote from one schema
@@ -76,6 +83,9 @@ async function makeRpc() {
         },
         companion: (event: CompanionEvent) => {
           for (const fn of companionListeners) fn(event);
+        },
+        openSettings: () => {
+          for (const fn of openSettingsListeners) fn();
         },
       },
     },
@@ -233,6 +243,13 @@ export function setMenuLocale(locale: UiLocale): void {
   if (!inShell) return;
   void connect()
     .then((rpc) => rpc.request.setMenuLocale({ locale }, POLL_LIMIT))
+    .catch(() => undefined);
+}
+
+/** Open a web page in the system browser. Fire-and-forget: the main process refuses anything but http(s). */
+export function openExternal(url: string): void {
+  void connect()
+    .then((rpc) => rpc.request.openExternal({ url }, POLL_LIMIT))
     .catch(() => undefined);
 }
 

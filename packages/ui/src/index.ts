@@ -16,6 +16,7 @@ export {
   type ModelStatus, type NarrationLanguage, type ProviderInfo, type ProviderModelInfo,
   type ProviderProfile, type ShellPrefs, type ShellSettings, type VoiceOption,
 } from './settings/shell';
+export { Link, LinkProvider, type OpenLink } from './Link';
 export { SlideView, type SlideChrome } from './slides/SlideView';
 export { Icon } from './slides/Icon';
 /** Dev-only: every layout at its worst, for looking at. See Gauntlet.tsx. */

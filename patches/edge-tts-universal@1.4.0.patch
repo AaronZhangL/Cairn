@@ -1,0 +1,29 @@
+diff --git a/dist/index.js b/dist/index.js
+index 57650af17b7c3a513c2e770dde9ede5168a9fce6..e130fb2ffce7a6fe87c98c9c43daf4705f8bc571 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -405,6 +405,7 @@ var Communicate = class {
+     });
+     const messageQueue = [];
+     let resolveMessage = null;
++    let turnEnded = false;
+     websocket.on("message", (message, isBinary) => {
+       if (!isBinary) {
+         const [headers, data] = getHeadersAndDataFromText(message);
+@@ -418,6 +419,7 @@ var Communicate = class {
+             messageQueue.push(e);
+           }
+         } else if (path === "turn.end") {
++          turnEnded = true;
+           this.state.offsetCompensation = this.state.lastDurationOffset;
+           this.state.offsetCompensation += 875e4;
+           websocket.close();
+@@ -453,6 +455,8 @@ var Communicate = class {
+       if (resolveMessage) resolveMessage();
+     });
+     websocket.on("error", (error) => {
++      // cairn: the service resets the socket after turn.end; `ws` reports that as a close, Electrobun's runtime as an error
++      if (turnEnded) return;
+       messageQueue.push(new WebSocketError(error.message));
+       if (resolveMessage) resolveMessage();
+     });

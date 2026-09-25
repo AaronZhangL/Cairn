@@ -281,10 +281,13 @@ hold a reply to a JSON Schema, under two different field names (`supportsStrictM
 OpenAI-shaped APIs, `supportsStrictTools` for Anthropic). Reading one and not the other marks
 every Claude model as unconstrained.
 
-The settings panel lists constrained models first and the unconstrained ones after them.
-In pi-ai 0.87.1 that distinction is real: openai 41/41, anthropic 15/15, deepseek 2/2 and groq
-7/7 are fully constrained, while moonshotai 0/4, minimax 0/3, xai 0/4 and google 0/22 are not.
-That was already true before this change — the difference is that it is now visible.
+The settings panel offers constrained models only, and a vendor with none is not offered —
+decided from the catalog at build time (`OFFERED_PROVIDERS`), so a pi-ai upgrade that adds
+strict support brings a vendor back unaided. The registry itself keeps every vendor and model,
+so a stored pick still resolves. In pi-ai 0.87.1 openai 41/41, anthropic 15/15, deepseek 2/2
+and groq 7/7 are fully constrained; moonshotai 0/4, minimax 0/3 and xai 0/4 are not. Gemini
+carries no catalog flag — pi-ai decides it by model id (Gemini 3 and later) — so it is read
+that way rather than as 0/22.
 
 ### One book builder, one library, one composition root
 

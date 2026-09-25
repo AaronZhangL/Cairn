@@ -14,5 +14,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.0"
+  },
+  "patchedDependencies": {
+    "edge-tts-universal@1.4.0": "patches/edge-tts-universal@1.4.0.patch"
   }
 }
