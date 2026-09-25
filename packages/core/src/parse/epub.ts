@@ -1,14 +1,11 @@
 import JSZip from 'jszip';
 import { type Chapter, type ParsedBook, ParseError } from '../types';
 import { type Block, chunkBlocks } from './chunk';
-import { decodeEntities, htmlToText } from './text';
-import { type ContentLocale, detectContentLocale } from './language';
-import { promptsFor } from '../pipeline/prompts';
+import { nameUntitled, splitByHeading } from './html-blocks';
+import { decodeEntities } from './text';
+import { detectContentLocale } from './language';
 
 const CONTAINER_PATH = 'META-INF/container.xml';
-
-/** Heading tags supply the chapter name and mark where to sub-split a spine item. */
-const HEADING_TAG = /<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi;
 
 export async function parseEpub(bytes: Uint8Array, fileName: string): Promise<ParsedBook> {
   if (bytes.byteLength === 0) throw new ParseError('文件为空', 'empty_file');
@@ -98,66 +95,10 @@ async function readChapters(
     const file = locate(zip, baseDir, href);
     if (!file) continue;
 
-    blocks.push(...splitByHeading(await file.async('string'), blocks.length));
+    blocks.push(...splitByHeading(await file.async('string')));
   }
 
   return chunkBlocks(blocks);
-}
-
-/**
- * A real EPUB spine item is often a whole chapter running to tens of thousands
- * of words. Split it at h1-h3 into sections; each takes its nearest heading as a
- * title, and the heading itself no longer appears in the body.
- */
-function splitByHeading(html: string, seq: number): readonly Block[] {
-  const marks = [...html.matchAll(HEADING_TAG)];
-  if (marks.length === 0) {
-    const text = htmlToText(html);
-    // Left blank on purpose: the language is not known until the whole book
-    // has been read, and `nameUntitled` fills these in once it is.
-    return text.length > 0 ? [{ title: '', text }] : [];
-  }
-
-  // The first heading is this spine item's chapter name, used as the merge group
-  const group = cleanTitle(marks[0]![2]!);
-  const blocks: Block[] = [];
-
-  const lead = htmlToText(html.slice(0, marks[0]!.index!));
-  if (lead.length > 0) blocks.push({ title: group, text: lead, group });
-
-  marks.forEach((mark, i) => {
-    const start = mark.index! + mark[0].length;
-    const end = i + 1 < marks.length ? marks[i + 1]!.index! : html.length;
-    const text = htmlToText(html.slice(start, end));
-    if (text.length > 0) blocks.push({ title: cleanTitle(mark[2]!), text, group });
-  });
-
-  return blocks;
-}
-
-function cleanTitle(rawHeading: string): string {
-  const title = htmlToText(rawHeading).replace(/\s+/g, ' ').trim();
-  return title.length > 0 && title.length <= 60 ? title : '';
-}
-
-/**
- * Fill in the titles that parsing could not read.
- *
- * Done here rather than where the blanks are made, because a title has to be in
- * the book's language and the language is only known once the text has been
- * read — which is after every section already has, or lacks, a heading.
- */
-function nameUntitled(
-  chapters: readonly Chapter[],
-  locale: ContentLocale,
-): readonly Chapter[] {
-  const { parse } = promptsFor(locale);
-  let seq = 0;
-  return chapters.map((c) => {
-    if (c.title.length > 0) return c;
-    seq += 1;
-    return { ...c, title: parse.section(seq) };
-  });
 }
 
 /**

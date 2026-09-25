@@ -16,11 +16,14 @@ export const en = {
    */
   errors: {
     unsupported_format: (p: { ext?: string; accepted?: string }) =>
-      `.${p.ext || '?'} files are not supported. Try ${p.accepted ?? 'EPUB, TXT or Markdown'}.`,
+      `.${p.ext || '?'} files are not supported. Try ${p.accepted ?? 'EPUB, PDF, MOBI, AZW3 or TXT'}.`,
     empty_file: 'That file is empty.',
-    corrupt_archive: 'That EPUB is damaged, or is not an EPUB at all.',
+    corrupt_archive: 'That file is damaged, or is not the format its name says.',
     no_content: 'No readable text was found in that file.',
     decode_failed: 'That file’s text encoding could not be read.',
+    scanned_pdf: 'That PDF is a scan with no text layer. Run it through OCR first, then add it.',
+    unreadable_pdf: 'That PDF could not be opened: it is damaged or password-protected.',
+    drm_protected: 'That Kindle book is DRM-protected, so its text cannot be read. Only DRM-free MOBI and AZW3 files work.',
 
     llm_timeout: 'The model took too long to answer.',
     llm_aborted: 'That call was cancelled.',
@@ -162,7 +165,7 @@ export const en = {
   add: {
     title: 'Add a book',
     parsing: 'Reading this book…',
-    supported: 'EPUB, TXT or Markdown. The book never leaves this machine.',
+    supported: 'EPUB, PDF, MOBI, AZW3 or TXT. The book never leaves this machine.',
     pick: 'Choose a file…',
     picking: 'Reading…',
     howLong: 'How long do you want to spend?',

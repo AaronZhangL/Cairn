@@ -19,6 +19,7 @@ import { ParseError } from './types';
 export type ErrorCode =
   // Parsing a file the reader chose
   | 'unsupported_format' | 'empty_file' | 'corrupt_archive' | 'no_content' | 'decode_failed'
+  | 'scanned_pdf' | 'unreadable_pdf' | 'drm_protected'
   // The model
   | 'llm_timeout' | 'llm_aborted' | 'llm_bad_output' | 'llm_failed'
   // Synthesis

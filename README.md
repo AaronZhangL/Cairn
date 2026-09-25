@@ -12,7 +12,8 @@ leave it.
 
 ## What it does
 
-- **Reads EPUB, TXT and Markdown.** Previewing a book (title, author, chapters, word count) needs
+- **Reads EPUB, PDF, MOBI/AZW3, DOCX, TXT and Markdown.** A PDF needs a text layer (scans are
+  refused, not OCR'd), and a Kindle file must be DRM-free. Previewing a book (title, author, chapters, word count) needs
   no model call.
 - **Four reading budgets:** skim, gist, read, or walk it all. Their lengths come from the book's
   own size and structure. A tighter budget drops whole stations instead of thinning every one.
@@ -116,5 +117,5 @@ docs/            PRD, architecture, design
 
 ## Not in scope
 
-PDF parsing, video rendering, image generation, spaced repetition, user accounts, and any
+OCR of scanned PDFs, video rendering, image generation, spaced repetition, user accounts, and any
 networked server component.

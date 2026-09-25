@@ -5,7 +5,7 @@ import type { ContentLocale } from './parse/language';
 export type { ContentLocale, IconName };
 
 export type BookType = 'knowledge' | 'narrative';
-export type BookFormat = 'epub' | 'txt' | 'markdown';
+export type BookFormat = 'epub' | 'txt' | 'markdown' | 'pdf' | 'mobi' | 'docx';
 
 /** One chapter from parsing. `text` lives only in IndexedDB and never enters an exported bundle. */
 export interface Chapter {
@@ -324,7 +324,10 @@ export class ParseError extends Error {
       | 'empty_file'
       | 'corrupt_archive'
       | 'no_content'
-      | 'decode_failed',
+      | 'decode_failed'
+      | 'scanned_pdf'
+      | 'unreadable_pdf'
+      | 'drm_protected',
     /** Values the reader's own wording needs — the extension, the missing part. */
     readonly params: Readonly<Record<string, string | number>> = {},
   ) {

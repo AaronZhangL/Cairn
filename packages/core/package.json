@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "edge-tts-universal": "^1.4.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "mammoth": "1.12.3",
+    "unpdf": "1.8.1"
   }
 }

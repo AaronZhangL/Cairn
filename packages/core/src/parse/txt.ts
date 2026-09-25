@@ -34,7 +34,7 @@ export function parseTxt(bytes: Uint8Array, fileName: string): ParsedBook {
   // to be written in the book's own language.
   const language = localeFromText(text.slice(0, 4000));
   const { parse } = promptsFor(language);
-  const chapters = splitByHeading(text, parse) ?? splitBySize(text, parse);
+  const chapters = splitPlainText(text, parse);
   if (chapters.length === 0) throw new ParseError('未能切分出任何章节', 'no_content');
 
   return {
@@ -45,6 +45,11 @@ export function parseTxt(bytes: Uint8Array, fileName: string): ParsedBook {
     // A plain text file declares nothing, so the text is all there is to go on
     language,
   };
+}
+
+/** Chapters from headings in the text, or by size when it has none. PDF falls back to this too. */
+export function splitPlainText(text: string, parse: ParseWords): readonly Chapter[] {
+  return splitByHeading(text, parse) ?? splitBySize(text, parse);
 }
 
 /** Returns null when no headings are found, deferring to the size-based fallback. */

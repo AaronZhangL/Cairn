@@ -45,7 +45,7 @@ export function chunkBlocks(blocks: readonly Block[]): readonly Chapter[] {
       flush();
       const pieces = splitByParagraph(block.text);
       pieces.forEach((piece, i) => {
-        const title = pieces.length > 1 ? `${block.title}（${i + 1}/${pieces.length}）` : block.title;
+        const title = pieces.length > 1 && block.title ? `${block.title}（${i + 1}/${pieces.length}）` : block.title;
         out.push(makeChapter(out.length, title, piece));
       });
       continue;
@@ -72,6 +72,7 @@ export function chunkBlocks(blocks: readonly Block[]): readonly Chapter[] {
 
 /** Prefix section titles with the chapter name: "Getting a Repo" -> "Git Basics · Getting a Repo". */
 function qualify(title: string, group?: string): string {
+  if (title === '') return group ?? '';
   return group && group !== title ? `${group} · ${title}` : title;
 }
 
@@ -86,7 +87,8 @@ function disambiguate(chapters: readonly Chapter[]): readonly Chapter[] {
   const seen = new Map<string, number>();
   return chapters.map((c, idx) => {
     const count = total.get(c.title) ?? 1;
-    if (count === 1) return { ...c, idx };
+    // An untitled chapter is named later, in the book's language; numbering it here would hide that it has no name.
+    if (count === 1 || c.title === '') return { ...c, idx };
     const n = (seen.get(c.title) ?? 0) + 1;
     seen.set(c.title, n);
     return { ...c, idx, title: `${c.title}（${n}/${count}）` };

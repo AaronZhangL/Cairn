@@ -51,7 +51,8 @@ reader sees 章, because that is the word they reached for. The two are not the 
 chapters — those appear only in a quote's provenance, which says 原书第 N 章 to keep them apart.
 The reader-facing noun lives in `packages/ui/src/copy.ts` so changing it stays one edit.
 
-1. **Pick a book** — a local EPUB, TXT or Markdown file.
+1. **Pick a book** — a local EPUB, PDF, MOBI/AZW3, DOCX, TXT or Markdown file. A PDF must have a
+   text layer; a Kindle file must be DRM-free.
 2. **Preview** — parse only, no model call, so picking a file stays instant: title, author,
    chapter count, word count.
 3. **Pick a budget** — four rungs, described below.
@@ -602,7 +603,8 @@ tell whether a prompt change made things better or worse.
 | Not doing | Why |
 | --- | --- |
 | Sharing / publishing / accounts / telemetry / a networked server | Personal tool |
-| PDF parsing | Scanned pages, OCR, two-column layouts, no chapter structure: too expensive |
+| DRM removal, KFX | Not ours to break; KFX is undocumented. A DRM'd Kindle file is refused by name |
+| OCR of scanned PDFs | A scan has no text layer; OCR brings a model runtime and its own errors. A text PDF is read, with bookmarks as chapters and headings as the fallback. Multi-column layouts are read in content-stream order and may interleave |
 | mp4 rendering | The slide player replaces it |
 | Image generation | Abstract ideas do not yield informative illustrations |
 | MCP | One search is not worth a protocol |

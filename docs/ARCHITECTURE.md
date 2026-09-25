@@ -41,7 +41,8 @@ process; nothing is shared, so there is nothing to deploy.
 
 ```
 packages/core/     Domain types, parsing, pipeline, storage — no framework imports
-  parse/           epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+  parse/           epub.ts  pdf.ts  pdf-layout.ts  mobi.ts  mobi-decode.ts  docx.ts
+                   html-blocks.ts  txt.ts  markdown.ts  chunk.ts  text.ts
                    format.ts (accepted types; webview-safe, unlike the parsers)
   llm/             LlmProvider interface + tracing wrapper. No implementations.
   pipeline/        map · classify · reduce · recap · slides · tts · build ·
@@ -184,6 +185,9 @@ It is the only process that listens, and it is not reachable from outside the ma
 | Narration | `edge-tts`, voice `zh-CN-YunjianNeural` | Free, no key, sentence-level subtitles alongside the audio; Microsoft tunes this voice for audiobooks and commentary |
 | Web search | Tavily | The companion may search when it helps answer accurately |
 | EPUB parsing | JSZip, then our own extraction | We only need the text; epub.js brings a whole rendering engine |
+| PDF parsing | `unpdf` (pdf.js, serverless build), then `pdf-layout.ts` | Pure JS with no worker, so it runs on cottontail; MinerU, Docling and PyMuPDF would each bring a Python runtime. Bookmarks give chapters, headings are the fallback |
+| MOBI / AZW3 parsing | PalmDB reader ported from foliate-js's byte layer (`mobi-decode.ts`) | No JS library reads Kindle text without a DOM: foliate-js needs `DOMParser` throughout, and `@lingo-reader/mobi-parser` writes every image to disk and crashed on a real Gutenberg AZW3. KF8 half preferred; a MOBI6-only body has no heading tags, so its chapters are named "Section n" (its NCX index is not read) |
+| DOCX parsing | mammoth, then the EPUB heading split | Handles tables, lists and tracked changes. Headings come from mammoth's style map, by style name: a custom style merely based on Heading 1 is body text |
 | Chat surface | `CompanionPane.tsx` | App-owned messages, tool trail, and source citations |
 
 The companion's model loop runs in the main process. Pi supplies the streaming agent and model

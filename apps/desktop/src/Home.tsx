@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { payloadOf } from '@cairn/core/errors';
-import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse/format';
+import { FEATURED_FORMATS } from '@cairn/core/parse/format';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { errorText, GearMark, TrashMark, useT } from '@cairn/ui';
 import { inShell } from './bridge';
@@ -61,7 +61,7 @@ export function Home({
 
       <button type="button" className="drop-zone" onClick={onAdd} disabled={!inShell}>
         <span className="drop-title">{t.home.dropTitle}</span>
-        <span className="drop-sub">{t.home.dropSub(ACCEPTED_EXTENSIONS.join(' / '))}</span>
+        <span className="drop-sub">{t.home.dropSub(FEATURED_FORMATS)}</span>
         <span className="drop-cta">{inShell ? t.home.dropCta : t.home.devCta}</span>
       </button>
 

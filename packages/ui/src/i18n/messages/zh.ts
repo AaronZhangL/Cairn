@@ -7,11 +7,14 @@ import type { Messages } from './en';
 export const zh: Messages = {
   errors: {
     unsupported_format: (p: { ext?: string; accepted?: string }) =>
-      `暂不支持 .${p.ext || '未知'} 格式，可上传 ${p.accepted ?? 'EPUB / TXT / Markdown'}。`,
+      `暂不支持 .${p.ext || '未知'} 格式，可上传 ${p.accepted ?? 'EPUB / PDF / MOBI / AZW3 / TXT'}。`,
     empty_file: '这个文件是空的。',
-    corrupt_archive: 'EPUB 压缩包损坏，或者根本不是 EPUB。',
+    corrupt_archive: '文件损坏，或者不是扩展名所说的格式。',
     no_content: '这个文件里没有找到可读的正文。',
     decode_failed: '读不出这个文件的文字编码。',
+    scanned_pdf: '这个 PDF 是扫描件，里面没有文字层。先用 OCR 工具转出文字再添加。',
+    unreadable_pdf: 'PDF 打不开：文件损坏，或者设了密码。',
+    drm_protected: '这本 Kindle 书带有 DRM 保护，读不出正文。只能添加无 DRM 的 MOBI / AZW3。',
 
     llm_timeout: '模型太久没有回应。',
     llm_aborted: '这次调用已取消。',
@@ -151,7 +154,7 @@ export const zh: Messages = {
   add: {
     title: '添加一本书',
     parsing: '正在读这本书…',
-    supported: '支持 EPUB / TXT / Markdown。书不会离开这台机器。',
+    supported: '支持 EPUB / PDF / MOBI / AZW3 / TXT。书不会离开这台机器。',
     pick: '选择文件…',
     picking: '读取中…',
     howLong: '想花多久走完？',

@@ -82,6 +82,18 @@ describe('chunkBlocks 标题', () => {
     expect(chunkBlocks(blocks).map((c) => c.title))
       .toEqual(['同名（1/3）', '同名（2/3）', '同名（3/3）']);
   });
+
+  test('无标题的块保持空标题，留给调用方按书的语言命名', () => {
+    const untitled: Block[] = [
+      { title: '', text: words(2500) },
+      { title: '', text: para(MAX_WORDS + 2000, 8) },
+    ];
+    expect(chunkBlocks(untitled).every((c) => c.title === '')).toBe(true);
+  });
+
+  test('无标题但有分组的块取分组名', () => {
+    expect(chunkBlocks([{ title: '', text: words(2500), group: '第一章' }])[0]!.title).toBe('第一章');
+  });
 });
 
 describe('chunkBlocks 索引', () => {

@@ -15,13 +15,13 @@ describe('detectFormat', () => {
     expect(detectFormat(name)).toBe(expected as never);
   });
 
-  test('PDF 明确不支持，错误信息列出可用格式', () => {
+  test('不支持的格式，错误信息列出可用格式', () => {
     try {
-      detectFormat('book.pdf');
+      detectFormat('book.kfx');
       throw new Error('should have thrown');
     } catch (e) {
       expect((e as ParseError).code).toBe('unsupported_format');
-      expect((e as ParseError).message).toContain('.epub');
+      expect((e as ParseError).message).toContain('EPUB');
     }
   });
 
@@ -29,8 +29,8 @@ describe('detectFormat', () => {
     expect(() => detectFormat('book')).toThrow(ParseError);
   });
 
-  test('ACCEPTED_EXTENSIONS 不含 pdf', () => {
-    expect(ACCEPTED_EXTENSIONS).not.toContain('.pdf');
+  test('ACCEPTED_EXTENSIONS 含 pdf', () => {
+    expect(ACCEPTED_EXTENSIONS).toContain('.pdf');
   });
 });
 

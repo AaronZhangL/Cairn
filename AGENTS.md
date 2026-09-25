@@ -62,7 +62,9 @@ and an unreachable one would otherwise surface only after paying for every stati
 ```
 packages/
   core/          Domain types, parsing, pipeline, storage — no framework imports
-    parse/       epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts  language.ts
+    parse/       epub.ts  pdf.ts  mobi.ts  docx.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+                 pdf-layout.ts: lines back into prose · mobi-decode.ts: PalmDB and its
+                 compressions · html-blocks.ts: heading split shared by EPUB and MOBI
     pipeline/prompts/  Every prompt, one file per language. `en` is the type's
                  source, so a prompt added there fails the build until `zh` has it
     errors.ts    Named failures (`CairnError`). The reader's language is the
@@ -294,7 +296,7 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 
 ## Boundaries
 
-**Out of scope:** PDF parsing · MP4 rendering · image generation · spaced repetition · user
+**Out of scope:** OCR (a scanned PDF is refused as `scanned_pdf`) · DRM removal (`drm_protected`) · KFX · MP4 rendering · image generation · spaced repetition · user
 accounts · telemetry · any networked server component.
 
 **Planned, and the reason several decisions look the way they do:** books generated on the Mac
