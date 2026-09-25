@@ -7,8 +7,8 @@ stages and closed by a recap. Each station is a small deck of slides with narrat
 from the book's real text and traceable to the chapters it came from. You pick how long the whole
 walk should take; the number of stations follows from that.
 
-It is a local macOS desktop app for one reader on one machine. Books, audio and caches never
-leave it.
+It is a local desktop app for one reader on one machine. Books, audio and caches never leave
+it. It runs on macOS today; see [Requirements](#requirements) for other platforms.
 
 ## What it does
 
@@ -35,7 +35,9 @@ leave it.
 
 ## Requirements
 
-- macOS (only Apple Silicon has been tested)
+- macOS. Only Apple Silicon has been tested. Electrobun, the shell, also targets Windows and
+  Linux, but Cairn has not been adapted or tested there: the default data directory, revealing
+  the library folder and the packaging config are macOS-only today.
 - [Bun](https://bun.sh) 1.3 or later
 - A language model. Configure a provider and API key in **Settings**. Cairn uses
   [pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai) and lists models that support structured

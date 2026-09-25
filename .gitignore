@@ -35,6 +35,13 @@ docs/plans/
 docs/research/
 .claude/settings.local.json
 
+# Third-party agent skills (Matt Pocock's), installed per machine; skills-lock.json records them.
+# Only skills written for this project are tracked.
+.agents/skills/*
+!.agents/skills/cairn-desktop-verify/
+.claude/skills/*
+!.claude/skills/cairn-desktop-verify
+
 # macOS
 .DS_Store
 

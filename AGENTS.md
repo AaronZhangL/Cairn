@@ -326,7 +326,9 @@ sends data off the machine.
 ## Agent skills
 
 Matt Pocock's skills live in `.agents/skills/`; `.claude/skills/` links to them. Codex and
-Claude Code use the same project-level copies.
+Claude Code use the same project-level copies. They are installed per machine and git-ignored;
+`skills-lock.json` records which ones. Only `cairn-desktop-verify`, written for this project, is
+tracked.
 
 ### Issue tracker
 
