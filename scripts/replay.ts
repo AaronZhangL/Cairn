@@ -18,10 +18,10 @@
 import { join } from 'node:path';
 import { codexCliProvider } from '../packages/core/src/runtime/codex-cli';
 import { listTraces, readTrace } from '../packages/core/src/runtime/trace-dir';
-import { libraryDir } from '../apps/desktop/src/main/library';
+import { defaultLibraryDir } from '../packages/core/src/store/library-disk';
 
 const traceDir = (bookId: string): string =>
-  join(libraryDir(), '.cache', bookId, 'trace');
+  join(defaultLibraryDir(), '.cache', bookId, 'trace');
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

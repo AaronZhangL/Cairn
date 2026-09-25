@@ -8,11 +8,9 @@ import type { ChatMessage, ChatSession, Citation, EvidenceRecord } from '@cairn/
 import { escapeXml } from '@cairn/core/companion/xml';
 import { isBookId } from '@cairn/core/store/library';
 import { isFinished } from '@cairn/core/store/reading';
-import { pauseBackgroundBuilds } from '../generate';
-import { listBooks } from '../install';
 import { effectiveSearchKey, readSettings } from '../settings';
 import { readReadingRecord } from '../reading';
-import { DATA_DIR, loadNotes, loadPath } from '../store';
+import { DATA_DIR, library } from '../store';
 import { webSearch } from './search-provider';
 import { readChapters, readNotes } from './book-tools';
 import { resolveChatModel, type ChatModelResolution } from './model';
@@ -22,7 +20,7 @@ import { fetchWeb, searchWeb } from './web-tools';
 import { loadWorking, saveWorking } from './working';
 import { compactToolContext, visibleToolResultIds } from './tool-context';
 import type { UiLocale } from '../../shared/settings';
-import type { AssistantChatMessage, CompanionEventPayload, EmitCompanionEvent, RunTurnInput } from './events';
+import type { AssistantChatMessage, CompanionEventPayload, EmitCompanionEvent, RunTurnInput } from '../../shared/companion-events';
 
 const MAX_TOOLS = 12;
 const MAX_QUESTION = 4_000;
@@ -289,11 +287,16 @@ function makeTools(
   ];
 }
 
-export async function runTurn(input: RunTurnInput, emit: EmitCompanionEvent): Promise<AssistantChatMessage> {
+/** `holdBuilds` pauses background deck builds for the turn: the reader's question is the foreground. */
+export async function runTurn(
+  input: RunTurnInput,
+  emit: EmitCompanionEvent,
+  holdBuilds: () => () => void,
+): Promise<AssistantChatMessage> {
   if (!isBookId(input.bookId) || !input.turnId || !input.question.trim() || input.question.length > MAX_QUESTION) {
     throw new CompanionRunError('invalid_input');
   }
-  const release = pauseBackgroundBuilds();
+  const release = holdBuilds();
   const event = (body: CompanionEventPayload): Promise<void> =>
     Promise.resolve(emit({ ...body, turnId: input.turnId, bookId: input.bookId }));
   let session: ChatSession | undefined;
@@ -306,8 +309,8 @@ export async function runTurn(input: RunTurnInput, emit: EmitCompanionEvent): Pr
   try {
     if (input.signal?.aborted) throw new CompanionRunError('aborted');
     const [path, notes, settings, entries] = await Promise.all([
-      loadPath(input.bookId), loadNotes(input.bookId), readSettings(),
-      listBooks(),
+      library.loadPath(input.bookId), library.loadNotes(input.bookId), readSettings(),
+      library.list(),
     ]);
     if (input.nodeId && !path.nodes.some((node) => node.id === input.nodeId)) throw new CompanionRunError('unknown_node');
     session = await loadSession(DATA_DIR, input.bookId, path.generatedAt);
@@ -320,7 +323,7 @@ export async function runTurn(input: RunTurnInput, emit: EmitCompanionEvent): Pr
       .map(async (entry) => {
         const record = await readReadingRecord(entry.id);
         if (!record) return undefined;
-        const otherPath = await loadPath(entry.id);
+        const otherPath = await library.loadPath(entry.id);
         if (!isFinished(entry, otherPath, record)) return undefined;
         const recap = otherPath.nodes.find((node) => node.kind === 'recap');
         return recap ? { bookId: entry.id, title: entry.title, claim: recap.brief.slice(0, 400) } : undefined;

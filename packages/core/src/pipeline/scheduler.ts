@@ -157,30 +157,37 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
 
     // Store-first, exactly like runJob: a deck the CLI already built is free
     const key = keyOf(node);
-    const existing = await store.get(key);
-    if (existing !== undefined) {
-      decks.set(nodeId, existing);
-      settle(nodeId, existing);
-      await onReady?.(existing, progress());
-      return;
+    let deck = await store.get(key);
+
+    if (deck === undefined) {
+      running += 1;
+      try {
+        deck = await attempt(node);
+        await store.put(key, deck);
+      } catch (error) {
+        if (error instanceof JobAbortedError) throw error;
+        return fail(nodeId, error);
+      } finally {
+        running -= 1;
+      }
     }
 
-    running += 1;
+    decks.set(nodeId, deck);
     try {
-      const deck = await attempt(node);
-      await store.put(key, deck);
-      decks.set(nodeId, deck);
-      running -= 1;
-      settle(nodeId, deck);
+      // Waiters hear after onReady, which installs the deck: "ready" must mean playable
       await onReady?.(deck, progress());
     } catch (error) {
-      running -= 1;
-      if (error instanceof JobAbortedError) throw error;
-      const e = error instanceof Error ? error : new Error(String(error));
-      failed.set(nodeId, e);
-      settle(nodeId, undefined, e);
-      onFailed?.(nodeId, e, progress());
+      decks.delete(nodeId);
+      return fail(nodeId, error);
     }
+    settle(nodeId, deck);
+  };
+
+  const fail = (nodeId: string, error: unknown): void => {
+    const e = error instanceof Error ? error : new Error(String(error));
+    failed.set(nodeId, e);
+    settle(nodeId, undefined, e);
+    onFailed?.(nodeId, e, progress());
   };
 
   /** Wait here while paused, so a hold never interrupts a station mid-build. */

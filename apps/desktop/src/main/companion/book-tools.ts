@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Chapter, ChapterNote } from '@cairn/core/types';
 import type { EvidenceRecord } from '@cairn/core/companion/types';
 import { escapeXml } from '@cairn/core/companion/xml';
-import { loadChapter, loadNotes } from '../store';
+import { library } from '../store';
 
 const MAX_NOTES = 4;
 const MAX_CHAPTERS = 2;
@@ -27,7 +27,10 @@ interface BookToolDeps {
   readonly loadChapter: (bookId: string, idx: number) => Promise<Chapter | undefined>;
 }
 
-const live: BookToolDeps = { loadNotes, loadChapter };
+const live: BookToolDeps = {
+  loadNotes: (bookId) => library.loadNotes(bookId),
+  loadChapter: (bookId, idx) => library.loadChapter(bookId, idx),
+};
 
 function checkIndices(indices: readonly number[], max: number): void {
   if (indices.length === 0 || indices.length > max || indices.some((idx) => !Number.isInteger(idx) || idx < 0)) {

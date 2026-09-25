@@ -1,36 +1,25 @@
 #!/usr/bin/env bun
 /**
- * Turn a book into a walkable path and install it as the app's current bundle.
+ * Add a book to the app's library from the terminal.
  *
  *   bun run add-book <file> [--budget quick|brief|solid|full]
  *
- * Every expensive stage is cached under .cache/<bookId>/, so a re-run after an
- * interruption picks up where it stopped instead of paying for it twice.
+ * The same book builder the app runs, with the app's settings and library, so
+ * a book added here is the book the app would have made — and a run cut short
+ * here resumes when the book is opened there.
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
-import { parseBook } from '../packages/core/src/parse/index';
-import { mapChapters } from '../packages/core/src/pipeline/map';
-import { classifyBook } from '../packages/core/src/pipeline/classify';
-import { reduceToPath } from '../packages/core/src/pipeline/reduce';
-import { buildDecks, withRealDuration } from '../packages/core/src/pipeline/build';
-import { defaultVoiceFor } from '../packages/core/src/pipeline/tts';
-import type { ContentLocale } from '../packages/core/src/parse/language';
-import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts-ws';
+import { resolve } from 'node:path';
+import { bookIdFor, createBookBuilder } from '../packages/core/src/books/builder';
+import type { DeckStatus, Progress } from '../packages/core/src/books/progress';
 import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
+import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts-ws';
+import { providerFor } from '../apps/desktop/src/main/provider';
+import { readBook } from '../apps/desktop/src/main/inspect';
+import { readSettings } from '../apps/desktop/src/main/settings';
+import { library } from '../apps/desktop/src/main/store';
+import { voiceFor } from '../apps/desktop/src/shared/settings';
 
 const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];
-import { fileStore } from '../packages/core/src/store/file-store';
-import { codexCliProvider } from '../packages/core/src/runtime/codex-cli';
-import {
-  bookSlug, LIBRARY_INDEX, type LibraryEntry, type PathQuality,
-} from '../packages/core/src/store/library';
-import { libraryDir } from '../apps/desktop/src/main/library';
-import type { ChapterNote, NodeDeck, Path } from '../packages/core/src/types';
-
-const ROOT = resolve(import.meta.dirname, '..');
-/** The same library the app reads, so a book added here shows up there. */
-const LIBRARY = libraryDir();
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -40,11 +29,8 @@ async function main(): Promise<void> {
   const wanted = flag(args, '--budget') as BudgetId | undefined;
   if (wanted && !BUDGET_IDS.includes(wanted)) return usage(`未知预算：${wanted}`);
 
-  const bytes = new Uint8Array(await Bun.file(file).arrayBuffer());
-  const book = await parseBook(bytes, basename(file));
-  const bookId = bookSlug(book.title, (s) => Bun.hash(s).toString(16), resolve(file));
-  const cache = join(ROOT, '.cache', bookId);
-
+  const source = resolve(file);
+  const book = await readBook(source);
   console.log(`《${book.title}》${book.author ? ` · ${book.author}` : ''}`);
   console.log(`${book.chapters.length} 章 · ${book.totalWords.toLocaleString()} 字\n`);
 
@@ -57,144 +43,36 @@ async function main(): Promise<void> {
   }
   console.log(`\n使用：${budget.label}\n`);
 
-  // Fail before spending anything if the narration cannot be synthesized
-  const narrator = edgeTtsNarrator();
-  await narrator.ensureReady();
-
-  const provider = codexCliProvider();
-
-  // --- map: the only stage that reads the book, and the expensive one ---
-  const mapStore = await fileStore<readonly ChapterNote[]>(join(cache, 'map.json'));
-  if (mapStore.size > 0) console.log(`map 缓存命中 ${mapStore.size} 批`);
-  const { notes, job } = await mapChapters(book.chapters, provider, mapStore, {
-    locale: book.language,
-    onProgress: (p) => bar('map   ', p.done + p.failed, p.total, p.running, p.failed),
+  const books = createBookBuilder({
+    library,
+    narrator: edgeTtsNarrator(),
+    providerFor,
+    voiceFor: async (language) => voiceFor(await readSettings(), language).voice,
+    onDeckStatus: (s: DeckStatus) => bar('decks ', s.ready + s.failed, s.total, s.failed),
   });
+
+  const { entry, settled } = await books.generate(book, source, budget.id, (p: Progress) => {
+    if (p.stage === 'map') bar('map   ', p.done, p.total, 0);
+    else if (p.stage !== 'done') process.stdout.write(`\n${p.stage}${p.note ? ` · ${p.note}` : ''}`);
+  });
+  console.log(`\n${entry.stations} 站 · 预估 ${entry.minutes} 分钟 · ${entry.voice}`);
+
+  const done = await settled;
+  const quality = done?.quality;
   console.log();
-  for (const f of job.failures) console.log(`  ✗ ${f.taskId}: ${f.error.message.slice(0, 120)}`);
-  if (notes.length === 0) throw new Error('map 没有产出任何摘要');
-
-  // --- classify + reduce: cheap, always fresh so a budget change takes effect ---
-  process.stdout.write('classify… ');
-  const cls = await classifyBook(book.title, notes, provider, undefined, book.language);
-  console.log(cls.type);
-
-  process.stdout.write('reduce…   ');
-  const path = await reduceToPath(notes, cls.type, book.totalWords, provider, {
-    budget, locale: book.language,
-  });
-  console.log(`${path.nodes.length} 站 / ${path.stages.length} 阶段 / 预估 ${path.totalMinutes} 分钟`);
-
-  const full: Path = {
-    bookId, title: book.title, type: cls.type,
-    nodes: path.nodes, stages: path.stages,
-    totalMinutes: path.totalMinutes, generatedAt: new Date().toISOString(),
-  };
-
-  // --- slides + tts per station ---
-  const audioDir = join(cache, 'audio');
-  const deckStore = await fileStore<NodeDeck>(join(cache, `decks-${budget.id}.json`));
-  // Matched to the book's language: the terminal path has no settings file, so
-  // it takes the per-language default rather than the Chinese one.
-  const voice = defaultVoiceFor(book.language);
-  const built = await buildDecks(full, notes, audioDir, provider, narrator, deckStore, {
-    locale: book.language,
-    voice,
-    onProgress: (p) => bar('decks ', p.done + p.failed, p.total, p.running, p.failed),
-  });
-  console.log();
-  for (const f of built.job.failures) console.log(`  ✗ ${f.taskId}: ${f.error.message.slice(0, 120)}`);
-
-  const quality: PathQuality = {
-    dropped: path.dropped,
-    retries: path.retries,
-    failed: built.job.failures.length,
-    unsourcedQuotes: built.unsourcedQuotes,
-    estMinutes: path.totalMinutes,
-    budgetMaxMinutes: budget.maxMinutes,
-  };
-
-  await install(
-    withRealDuration(full, built.totalMinutes), built.decks, notes, book.chapters, audioDir,
-    budget.id, quality, { language: book.language, voice }, book.author,
-  );
-
-  // The two numbers worth watching after a prompt change; both should be 0
-  console.log(`\n虚构章号被丢弃 ${quality.dropped} 站 · 引文对不上原文 ${quality.unsourcedQuotes} 张`);
-
-  console.log(`\n真实总时长 ${built.totalMinutes} 分钟（预估 ${path.totalMinutes}）`);
-  console.log(`已装载到 ${LIBRARY}。运行 \`cd apps/desktop && bun run start\` 查看。`);
+  if (quality) {
+    // The two numbers worth watching after a prompt change; both should be 0
+    console.log(`\n虚构章号被丢弃 ${quality.dropped} 站 · 引文对不上原文 ${quality.unsourcedQuotes} 张 · 失败 ${quality.failed} 站`);
+  }
+  console.log(`真实总时长 ${done?.minutes ?? '?'} 分钟（预估 ${entry.minutes}）`);
+  console.log(`已装载到 ${library.root}（${bookIdFor(book, source)}）。运行 \`cd apps/desktop && bun run start\` 查看。`);
 }
 
-/** One directory per book, plus an index the app reads at startup. */
-async function install(
-  path: Path,
-  decks: readonly NodeDeck[],
-  notes: readonly ChapterNote[],
-  chapters: readonly unknown[],
-  audioDir: string,
-  budgetId: string,
-  quality: PathQuality,
-  /** Recorded so the app resumes this book in the voice it was built with. */
-  narration: { readonly language: ContentLocale; readonly voice: string },
-  author?: string,
-): Promise<void> {
-  const dir = join(LIBRARY, 'books', path.bookId);
-  await rm(dir, { recursive: true, force: true });
-  await mkdir(join(dir, 'audio'), { recursive: true });
-
-  await writeFile(join(dir, 'path.json'), JSON.stringify(path));
-  await writeFile(join(dir, 'notes.json'), JSON.stringify(notes));
-
-  // One file per station, same layout the app builds into, so a book made here
-  // and a book made there are indistinguishable to the player.
-  await mkdir(join(dir, 'decks'), { recursive: true });
-  for (const deck of decks) {
-    // Same rewrite the app does, so the claim above is actually true: an
-    // absolute build-cache path would not survive the book being moved.
-    await writeFile(
-      join(dir, 'decks', `${deck.nodeId}.json`),
-      JSON.stringify({ ...deck, audioPath: `audio/${deck.nodeId}.mp3` }),
-    );
-  }
-  await writeFile(join(dir, 'decks', 'index.json'), JSON.stringify({
-    total: path.nodes.length,
-    ready: decks.map((d) => d.nodeId),
-    failed: path.nodes.filter((n) => !decks.some((d) => d.nodeId === n.id)).map((n) => n.id),
-    complete: true,
-  }));
-  // Anchored questions read the original text; without this the feature is mute
-  await writeFile(join(dir, 'chapters.json'), JSON.stringify(chapters));
-
-  for (const deck of decks) {
-    // Source name is content-keyed (see `deckKey`), destination is the station id
-    // the player builds its URL from. Reconstructing the source from the id is
-    // what shipped one budget's audio with another budget's subtitles.
-    await Bun.write(
-      join(dir, 'audio', `${deck.nodeId}.mp3`),
-      Bun.file(join(audioDir, basename(deck.audioPath))),
-    );
-  }
-
-  const entry: LibraryEntry = {
-    id: path.bookId, title: path.title, ...(author ? { author } : {}),
-    stations: path.nodes.length, minutes: path.totalMinutes,
-    budgetId, generatedAt: path.generatedAt,
-    complete: true, built: decks.length, quality,
-    language: narration.language, voice: narration.voice,
-  };
-  const indexPath = join(LIBRARY, LIBRARY_INDEX);
-  const existing = await Bun.file(indexPath).json().catch(() => []) as LibraryEntry[];
-  await writeFile(indexPath, JSON.stringify([entry, ...existing.filter((b) => b.id !== entry.id)]));
-}
-
-function bar(label: string, done: number, total: number, running: number, failed: number): void {
+function bar(label: string, done: number, total: number, failed: number): void {
   const width = 24;
   const filled = total === 0 ? 0 : Math.round((done / total) * width);
   const suffix = failed > 0 ? ` 失败 ${failed}` : '';
-  process.stdout.write(
-    `\r${label} [${'█'.repeat(filled)}${'·'.repeat(width - filled)}] ${done}/${total} 跑 ${running}${suffix}   `,
-  );
+  process.stdout.write(`\r${label} [${'█'.repeat(filled)}${'·'.repeat(width - filled)}] ${done}/${total}${suffix}   `);
 }
 
 const flag = (args: string[], name: string): string | undefined => {
@@ -210,7 +88,7 @@ function usage(message?: string): void {
 预算档位：${BUDGET_IDS.map((id) => `\n  ${id}`).join('')}
 
 四个档位的实际时长按书的体量和章节结构推导，选书之后才知道。
-不指定预算时按书的体量推荐。`);
+不指定预算时按书的体量推荐。模型与声音取自应用的设置。`);
   process.exit(message ? 1 : 0);
 }
 

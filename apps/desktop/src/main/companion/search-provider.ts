@@ -1,11 +1,27 @@
 import type { SearchResult, WebSearch } from '@cairn/core/companion/web-search';
 import { CairnError } from '@cairn/core/errors';
-import { tavily } from '../tavily';
 
+/** `key` is already resolved against the environment by `effectiveSearchKey`; nothing here reads it again. */
 export function webSearch(
   provider: 'brave' | 'firecrawl' | 'tavily', key?: string, fetcher: typeof fetch = fetch,
 ): WebSearch {
-  if (provider === 'tavily') return tavily(key, fetcher);
+  if (provider === 'tavily') return {
+    async search(query, signal): Promise<readonly SearchResult[]> {
+      if (!key) throw new CairnError('tavily_key_missing');
+      const response = await fetcher('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({ query, max_results: 5, search_depth: 'basic' }),
+        signal,
+      });
+      if (!response.ok) throw new CairnError('tavily_failed', { status: response.status });
+      const body = (await response.json()) as { results?: { title?: string; url?: string; content?: string }[] };
+      return (body.results ?? [])
+        .filter((item): item is { title: string; url: string; content?: string } =>
+          typeof item.title === 'string' && typeof item.url === 'string')
+        .map((item) => ({ title: item.title, url: item.url, snippet: (item.content ?? '').slice(0, 500) }));
+    },
+  };
   if (provider === 'brave') return {
     async search(query, signal): Promise<readonly SearchResult[]> {
       if (!key) throw new CairnError('brave_key_missing');

@@ -46,8 +46,9 @@ export const zh: Messages = {
 
     offline_pick: '选择文件需要桌面应用，用 `bun run start` 启动。',
     offline_generate: '生成路径需要桌面应用，用 `bun run start` 启动。',
-    offline_search: '联网搜索需要桌面应用，用 `bun run start` 启动。',
     offline_delete: '删除书需要桌面应用，用 `bun run start` 启动。',
+    offline_chat: '向这本书提问需要桌面应用，用 `bun run start` 启动。',
+    offline_settings: '修改这项设置需要桌面应用，用 `bun run start` 启动。',
 
     unknown: '出了点问题。',
   },

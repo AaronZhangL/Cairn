@@ -29,24 +29,4 @@ export interface BookPreview {
   }[];
 }
 
-export interface Progress {
-  readonly stage: 'map' | 'classify' | 'reduce' | 'decks' | 'done';
-  readonly done: number;
-  readonly total: number;
-  readonly note?: string;
-}
-
-/**
- * How far a book's decks have got.
- *
- * Separate from `Progress`, which describes the run the reader is watching in a
- * modal. This one keeps arriving after that modal has closed, because the
- * reader is already walking the path while the rest of it is being built.
- */
-export interface DeckStatus {
-  readonly bookId: string;
-  readonly total: number;
-  readonly ready: number;
-  readonly failed: number;
-  readonly complete: boolean;
-}
+export type { DeckStatus, Progress } from '@cairn/core/books/progress';

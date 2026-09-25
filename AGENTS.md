@@ -20,7 +20,7 @@ cd apps/desktop && bunx electrobun prepare   # once per checkout; projects the S
 bun test                                     # every package
 bun test packages/core/tests/fit.test.ts     # one file
 bun run typecheck                            # all four projects, strict
-bun run add-book <file>                      # run the pipeline from the terminal
+bun run add-book <file>                      # the app's book builder, from the terminal
 bun run replay <bookId> [file]               # list recorded model calls, or re-send one
 
 cd apps/desktop
@@ -70,15 +70,22 @@ packages/
     llm/         Provider *interface* + tracing wrapper. No implementations.
     pipeline/    job.ts (batch state machine), scheduler.ts (interactive one),
                  map/classify/reduce/slides/tts stages — all pure or interface-driven
-    store/       Path helpers, file-backed JobStore, ask log
-    runtime/     Everything that spawns a process or writes a file:
+    books/       builder.ts: adding, resuming and removing a book — the one
+                 composition of pipeline + library the app and `add-book` share
+    store/       library.ts (layout, webview-safe), library-disk.ts (the library
+                 on disk: one instance per root), file-backed JobStore
+    runtime/     Everything that spawns a process or talks to a service:
                  codex-cli.ts, edge-tts-ws.ts, trace-dir.ts
   ui/            Shared React components and design tokens; slide layout renderers
     i18n/        Two dictionaries and the type that keeps them in step
     settings/    The settings panel, and the preferences the webview owns
 apps/
   desktop/       Electrobun shell — the only app. Authoring and playback in one window.
-scripts/         add-book.ts, replay.ts, typecheck.ts
+    src/main/    Main process. `index.ts` is the composition root: it builds the
+                 narrator, the book builder and the RPC handlers and passes them
+                 in. `store.ts` holds the process's one `Library`.
+    src/shared/  Types both sides import; `schema.ts` is the one RPC contract
+scripts/         add-book.ts, replay.ts, typecheck.ts — thin drivers, no logic of their own
 ```
 
 **The dependency arrow points one way.** `pipeline/` and `llm/` depend on interfaces
@@ -88,10 +95,17 @@ path arithmetic?
 
 **A second, sharper rule for anything the webview also imports.** Path arithmetic is allowed in
 `core`, but a module the *renderer* pulls in may not import `node:*` at all — Vite externalises
-it and the build fails at bundle time, after every typecheck has passed. `pipeline/voice.ts`
-exists for exactly this: the player needs the voice defaults and the speech rates, and
-`pipeline/tts.ts` imports `node:path`. `bun test` and four clean typechecks will not catch this;
-`cd apps/desktop && bun run build` will.
+it and the build fails at bundle time, after every typecheck has passed — nor a main-process
+dependency, which passes the bundle and simply ships. `pipeline/voice.ts` and `parse/format.ts`
+exist for exactly this: the player needs the voice defaults and the accepted file types, and
+their neighbours import `node:path` and JSZip. `apps/desktop/tests/webview/imports.test.ts`
+walks the renderer's real import graph from `main.tsx` and fails on either, so `bun test`
+catches it now; the bundle stays a separate check.
+
+**Process-scoped objects are built in one place.** `main/index.ts` constructs them and passes
+them to what needs them — the pattern llm-space's `start-desktop-app.ts` uses. A new manager is
+a parameter, not a module-level `let` with a setter. The companion's tools still bind `store.ts`
+at import; that is the next thing to move, not a pattern to copy.
 
 ## Code style
 
@@ -201,8 +215,10 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 6. **Long-running work goes through `runJob` or `scheduler.ts`.** Near a hundred model calls per
    book. Results persist per task, concurrency is capped, failures are isolated and retried with
    backoff, and an interrupted run resumes where it stopped. `runJob` is the batch path (fixed
-   order, `add-book`); `startDeckScheduler` is the interactive one (re-orderable, pausable, the
-   app). They share the `JobStore`, so a book half-built by one resumes under the other.
+   order: the map stage); `startDeckScheduler` is the interactive one (re-orderable, pausable:
+   every deck). Both are driven by `books/builder.ts`, for the app and `add-book` alike, and the
+   cache lives under the library's `.cache/`, so a book half-built by either resumes in the
+   other. A station counts as ready only once `onReady` has installed it.
 
 7. **The full list of stations exists before the first one plays; only their decks arrive
    progressively.** `reduce` needs every chapter note before it can choose and order stations,
@@ -256,7 +272,7 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
   the main process only; the webview never holds a key. The selected search service receives
   model-written queries, which may contain brief book context, not whole chapters. That boundary
   is why the RPC bridge exists.
-- **The loopback server is scoped, not open.** `main/library.ts` binds `127.0.0.1` on a random
+- **The loopback server is scoped, not open.** `main/library-server.ts` binds `127.0.0.1` on a random
   port (because `<audio>` needs a range-requestable URL), answers GET and HEAD only, serves one
   directory, and requires a per-launch token as the first path segment. Traversal is rejected
   before the join and re-checked against the root after, because a decoded segment can contain a
@@ -272,8 +288,8 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 - One reason per commit. A formatting sweep and a behaviour change do not belong together.
 - Before committing: `bun test`, all four typechecks, and `cd apps/desktop && bun run build`
   pass, and no generated book, audio file or cache entry is staged. The bundle is a separate
-  check on purpose: a `node:*` import that reaches the webview passes every typecheck and fails
-  only at bundle time.
+  check on purpose: the import-graph test covers the webview's imports, the bundle covers
+  everything Vite does with them.
 - A commit that fixes a silent bug names the invariant it restores.
 
 ## Boundaries

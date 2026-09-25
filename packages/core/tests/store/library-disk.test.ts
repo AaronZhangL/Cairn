@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Chapter, ChapterNote, NodeDeck, Path } from '@cairn/core/types';
-import type { LibraryEntry } from '@cairn/core/store/library';
+import type { Chapter, ChapterNote, NodeDeck, Path } from '../../src/types';
+import type { LibraryEntry } from '../../src/store/library';
+import { type Library, openLibrary } from '../../src/store/library-disk';
 
-// The throwaway library `tests/setup.ts` created before any module loaded
-const DIR = process.env.CAIRN_DATA_DIR!;
-
-const {
-  deleteBook, installDeck, installPath, listBooks, patchEntry, readDeckIndex, rewritePath,
-} = await import('../../src/main/install');
+let DIR = '';
+let lib: Library;
 
 const path = (nodeCount: number): Path => ({
   bookId: 'b1', title: '测试书', type: 'knowledge',
@@ -43,47 +41,47 @@ async function audioCache(nodeIds: readonly string[]): Promise<string> {
 }
 
 beforeEach(async () => {
-  await rm(join(DIR, 'books'), { recursive: true, force: true });
-  await rm(join(DIR, 'books.json'), { force: true });
+  DIR = await mkdtemp(join(tmpdir(), 'cairn-library-'));
+  lib = openLibrary(DIR);
 });
 
 describe('installPath', () => {
   test('路径先落地——书在一站都没建好时就能打开', async () => {
-    await installPath(path(3), notes, chapters, entry());
+    await lib.installPath(path(3), notes, chapters, entry());
 
     const saved = JSON.parse(await readFile(join(DIR, 'books/b1/path.json'), 'utf8')) as Path;
     expect(saved.nodes).toHaveLength(3);
-    expect(await readDeckIndex('b1')).toMatchObject({ total: 3, ready: [], complete: false });
+    expect(await lib.readDeckIndex('b1')).toMatchObject({ total: 3, ready: [], complete: false });
   });
 
   test('问答要用的原文和摘要一并落地', async () => {
-    await installPath(path(1), notes, chapters, entry());
+    await lib.installPath(path(1), notes, chapters, entry());
     expect(JSON.parse(await readFile(join(DIR, 'books/b1/notes.json'), 'utf8'))).toHaveLength(1);
     expect(JSON.parse(await readFile(join(DIR, 'books/b1/chapters.json'), 'utf8'))).toHaveLength(1);
   });
 
   test('索引里记成未完成，而不是假装建好了', async () => {
-    await installPath(path(3), notes, chapters, entry());
-    const [book] = await listBooks();
+    await lib.installPath(path(3), notes, chapters, entry());
+    const [book] = await lib.list();
     expect(book).toMatchObject({ complete: false, built: 0 });
   });
 
   test('重新生成时清掉旧的 deck，避免站数变少时留下孤儿', async () => {
     const audio = await audioCache(['n0', 'n1', 'n2']);
-    await installPath(path(3), notes, chapters, entry());
-    for (const id of ['n0', 'n1', 'n2']) await installDeck('b1', deck(id), audio);
+    await lib.installPath(path(3), notes, chapters, entry());
+    for (const id of ['n0', 'n1', 'n2']) await lib.installDeck('b1', deck(id), audio);
 
-    await installPath(path(1), notes, chapters, entry({ stations: 1 }));
+    await lib.installPath(path(1), notes, chapters, entry({ stations: 1 }));
     expect(await Bun.file(join(DIR, 'books/b1/decks/n2.json')).exists()).toBe(false);
-    expect(await readDeckIndex('b1')).toMatchObject({ total: 1, ready: [] });
+    expect(await lib.readDeckIndex('b1')).toMatchObject({ total: 1, ready: [] });
   });
 });
 
 describe('installDeck', () => {
   test('deck 与音频一起落地——列为就绪的站必须能播', async () => {
     const audio = await audioCache(['n0']);
-    await installPath(path(2), notes, chapters, entry());
-    await installDeck('b1', deck('n0'), audio);
+    await lib.installPath(path(2), notes, chapters, entry());
+    await lib.installDeck('b1', deck('n0'), audio);
 
     expect(await Bun.file(join(DIR, 'books/b1/decks/n0.json')).exists()).toBe(true);
     expect(await Bun.file(join(DIR, 'books/b1/audio/n0.mp3')).exists()).toBe(true);
@@ -97,8 +95,8 @@ describe('installDeck', () => {
    */
   test('落盘的 deck 存的是相对路径，既不是构建缓存也不是绝对路径', async () => {
     const audio = await audioCache(['n0']);
-    await installPath(path(1), notes, chapters, entry());
-    await installDeck('b1', deck('n0'), audio);
+    await lib.installPath(path(1), notes, chapters, entry());
+    await lib.installDeck('b1', deck('n0'), audio);
 
     const saved = JSON.parse(
       await readFile(join(DIR, 'books/b1/decks/n0.json'), 'utf8'),
@@ -117,8 +115,8 @@ describe('installDeck', () => {
    */
   test('音频仍按内容键的文件名从缓存拷贝', async () => {
     const audio = await audioCache(['n0']);
-    await installPath(path(1), notes, chapters, entry());
-    await installDeck('b1', deck('n0'), audio);
+    await lib.installPath(path(1), notes, chapters, entry());
+    await lib.installDeck('b1', deck('n0'), audio);
 
     expect(await Bun.file(join(DIR, 'books/b1/audio/n0.mp3')).text())
       .toBe(await Bun.file(join(audio, 'n0.mp3')).text());
@@ -127,20 +125,20 @@ describe('installDeck', () => {
 
 describe('索引写入', () => {
   test('并发打补丁不会丢更新', async () => {
-    await installPath(path(6), notes, chapters, entry());
+    await lib.installPath(path(6), notes, chapters, entry());
     await Promise.all([
-      patchEntry('b1', { built: 1 }),
-      patchEntry('b1', { minutes: 42 }),
-      patchEntry('b1', { complete: true }),
+      lib.patchEntry('b1', { built: 1 }),
+      lib.patchEntry('b1', { minutes: 42 }),
+      lib.patchEntry('b1', { complete: true }),
     ]);
 
-    const [book] = await listBooks();
+    const [book] = await lib.list();
     expect(book).toMatchObject({ minutes: 42, complete: true });
   });
 
   test('给不存在的书打补丁返回 undefined，而不是凭空造一条', async () => {
-    expect(await patchEntry('nope', { built: 1 })).toBeUndefined();
-    expect(await listBooks()).toHaveLength(0);
+    expect(await lib.patchEntry('nope', { built: 1 })).toBeUndefined();
+    expect(await lib.list()).toHaveLength(0);
   });
 
   test('老库里缺字段的条目被当作已完成', async () => {
@@ -148,19 +146,19 @@ describe('索引写入', () => {
       id: 'old', title: '旧书', stations: 5, minutes: 20,
       budgetId: 'brief', generatedAt: '2025-01-01T00:00:00.000Z',
     }]));
-    expect((await listBooks())[0]).toMatchObject({ complete: true, built: 5 });
+    expect((await lib.list())[0]).toMatchObject({ complete: true, built: 5 });
   });
 
   test('索引坏掉时返回空，而不是让整个书架崩掉', async () => {
     await writeFile(join(DIR, 'books.json'), '{ 不是 JSON');
-    expect(await listBooks()).toEqual([]);
+    expect(await lib.list()).toEqual([]);
   });
 });
 
 describe('rewritePath', () => {
   test('实测时长覆盖模型的估计', async () => {
-    await installPath(path(2), notes, chapters, entry());
-    await rewritePath({ ...path(2), totalMinutes: 7 });
+    await lib.installPath(path(2), notes, chapters, entry());
+    await lib.rewritePath({ ...path(2), totalMinutes: 7 });
     const saved = JSON.parse(await readFile(join(DIR, 'books/b1/path.json'), 'utf8')) as Path;
     expect(saved.totalMinutes).toBe(7);
   });
@@ -168,39 +166,64 @@ describe('rewritePath', () => {
 
 describe('readDeckIndex', () => {
   test('没有清单时返回 undefined —— 老书没有这个文件', async () => {
-    expect(await readDeckIndex('missing')).toBeUndefined();
+    expect(await lib.readDeckIndex('missing')).toBeUndefined();
   });
 });
 
-describe('deleteBook', () => {
+describe('remove', () => {
   test('removes the entry and the whole book directory', async () => {
-    await installPath(path(2), notes, chapters, entry());
-    await installDeck('b1', deck('n0'), await audioCache(['n0']));
-    expect(await listBooks()).toHaveLength(1);
+    await lib.installPath(path(2), notes, chapters, entry());
+    await lib.installDeck('b1', deck('n0'), await audioCache(['n0']));
+    expect(await lib.list()).toHaveLength(1);
 
-    expect(await deleteBook('b1')).toBe(true);
-    expect(await listBooks()).toHaveLength(0);
+    expect(await lib.remove('b1')).toBe(true);
+    expect(await lib.list()).toHaveLength(0);
     expect(await readFile(join(DIR, 'books', 'b1', 'path.json'), 'utf8').catch(() => null))
       .toBeNull();
   });
 
   test('leaves the other books alone', async () => {
-    await installPath(path(1), notes, chapters, entry());
-    await installPath({ ...path(1), bookId: 'b2' }, notes, chapters, entry({ id: 'b2' }));
+    await lib.installPath(path(1), notes, chapters, entry());
+    await lib.installPath({ ...path(1), bookId: 'b2' }, notes, chapters, entry({ id: 'b2' }));
 
-    await deleteBook('b1');
-    expect((await listBooks()).map((b) => b.id)).toEqual(['b2']);
+    await lib.remove('b1');
+    expect((await lib.list()).map((b) => b.id)).toEqual(['b2']);
     expect(await readFile(join(DIR, 'books', 'b2', 'path.json'), 'utf8')).toContain('b2');
   });
 
   test('refuses a book that is not listed', async () => {
-    expect(await deleteBook('never-added')).toBe(false);
+    expect(await lib.remove('never-added')).toBe(false);
   });
 
   /** The id crosses the RPC bridge and is joined onto the library root. */
   test('refuses an id that could leave the library directory', async () => {
-    await installPath(path(1), notes, chapters, entry());
-    expect(await deleteBook('../..')).toBe(false);
-    expect(await listBooks()).toHaveLength(1);
+    await lib.installPath(path(1), notes, chapters, entry());
+    expect(await lib.remove('../..')).toBe(false);
+    expect(await lib.list()).toHaveLength(1);
+  });
+});
+
+describe('the pieces the app and add-book both rely on', () => {
+  test('removing a book also removes its generation cache', async () => {
+    await lib.installPath(path(1), notes, chapters, entry());
+    await mkdir(lib.cacheDir('b1'), { recursive: true });
+    await writeFile(join(lib.cacheDir('b1'), 'map.json'), '{}');
+
+    await lib.remove('b1');
+    expect(await Bun.file(join(lib.cacheDir('b1'), 'map.json')).exists()).toBe(false);
+  });
+
+  test('a rewritten path is what the next read returns, not the cached one', async () => {
+    await lib.installPath(path(2), notes, chapters, entry());
+    expect((await lib.loadPath('b1')).totalMinutes).toBe(6);
+    await lib.rewritePath({ ...path(2), totalMinutes: 7 });
+    expect((await lib.loadPath('b1')).totalMinutes).toBe(7);
+  });
+
+  test('chapter text is read back by index, and a missing file reads as absent', async () => {
+    await lib.installPath(path(1), notes, chapters, entry());
+    expect((await lib.loadChapter('b1', 0))?.text).toBe('正文');
+    expect(await lib.loadChapter('b1', 9)).toBeUndefined();
+    expect(await lib.loadChapter('missing', 0)).toBeUndefined();
   });
 });

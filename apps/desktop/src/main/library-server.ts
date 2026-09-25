@@ -11,23 +11,9 @@
  * directory, holds no state and answers only GET. It exists because <audio>
  * needs a URL it can range-request, which an RPC reply cannot provide.
  */
-import { homedir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { isBookId } from '@cairn/core/store/library';
-
-const APP_DIR = 'Cairn';
-
-/** `~/Library/Application Support/Cairn` on macOS, XDG elsewhere. */
-export function libraryDir(): string {
-  const override = process.env.CAIRN_DATA_DIR;
-  if (override) return override;
-
-  if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', APP_DIR);
-  }
-  const xdg = process.env.XDG_DATA_HOME;
-  return xdg ? join(xdg, APP_DIR) : join(homedir(), '.local', 'share', 'cairn');
-}
+import { DATA_DIR } from './store';
 
 /**
  * Map a request path to a file inside the library, or nothing.
@@ -53,11 +39,17 @@ export function resolveInLibrary(
   return target.startsWith(resolve(root) + sep) ? target : undefined;
 }
 
+/** An edge-tts voice id, such as `en-US-AndrewNeural`, and nothing that could name a path. */
+const VOICE_FILE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z]+\.mp3$/;
+
+/** Where a voice's audition is written, relative to the library root. */
+export const previewFile = (voice: string): string => `.preview/${voice}.mp3`;
+
 function publicPlayerFile(parts: readonly string[]): boolean {
   if (parts.length === 1) return parts[0] === 'books.json';
-  if (parts.length === 2 && parts[0] === '.preview') return /^(en|zh)\.mp3$/.test(parts[1] ?? '');
+  if (parts.length === 2 && parts[0] === '.preview') return VOICE_FILE.test(parts[1] ?? '');
   if (parts[0] !== 'books' || !isBookId(parts[1] ?? '')) return false;
-  if (parts.length === 3) return ['path.json', 'asks.json', 'decks-ordered.json'].includes(parts[2] ?? '');
+  if (parts.length === 3) return ['path.json', 'decks-ordered.json'].includes(parts[2] ?? '');
   if (parts.length !== 4 || !/^[A-Za-z0-9_-]+\.(json|mp3)$/.test(parts[3] ?? '')) return false;
   return (parts[2] === 'decks' && (parts[3] ?? '').endsWith('.json'))
     || (parts[2] === 'audio' && (parts[3] ?? '').endsWith('.mp3'));
@@ -72,22 +64,22 @@ function decodeSafely(part: string): string {
   }
 }
 
-interface Library {
+interface LibraryServer {
   readonly dir: string;
   /** Base URL the webview prefixes to every book file, token included. */
   readonly base: string;
 }
 
-let running: Library | undefined;
+let running: LibraryServer | undefined;
 
 /** Started once, on the first request for it, and left running with the app. */
-export function library(): Library {
+export function libraryServer(): LibraryServer {
   running ??= start();
   return running;
 }
 
-function start(): Library {
-  const dir = libraryDir();
+function start(): LibraryServer {
+  const dir = DATA_DIR;
   const token = crypto.randomUUID();
 
   const server = Bun.serve({

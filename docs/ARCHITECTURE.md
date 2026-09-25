@@ -12,15 +12,15 @@ holds the reasoning behind choices that are easy to undo by accident.
 
 ```
 Electrobun window
-├── main process (Bun)                    webview (React)
-│   ├── rpc.ts      typed bridge  ◄──────► bridge.ts
-│   ├── generate.ts pipeline driver        App / AddBook / Home
-│   ├── library.ts  loopback file server   packages/ui panes + slide layouts
-│   ├── provider.ts generation model route
-│   ├── companion/  chat agent, tools, session
-│   ├── tavily.ts   web search
-│   └── store.ts    data dir resolution
-└── packages/core   pure domain + pipeline, used by the main process only
+├── main process (Bun)                         webview (React)
+│   ├── index.ts           composition root
+│   ├── rpc.ts             handlers  ◄───────► bridge.ts
+│   ├── inspect.ts         parse-only preview  App / AddBook / Home
+│   ├── library-server.ts  loopback files      packages/ui panes + slide layouts
+│   ├── provider.ts        generation model route
+│   ├── companion/         chat agent, tools, session, web search
+│   └── store.ts           the process's one Library
+└── packages/core   domain + pipeline; the webview imports only its node-free modules
 ```
 
 Everything that touches a process, the filesystem or the network lives in the **main process**.
@@ -42,13 +42,15 @@ process; nothing is shared, so there is nothing to deploy.
 ```
 packages/core/     Domain types, parsing, pipeline, storage — no framework imports
   parse/           epub.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+                   format.ts (accepted types; webview-safe, unlike the parsers)
   llm/             LlmProvider interface + tracing wrapper. No implementations.
   pipeline/        map · classify · reduce · recap · slides · tts · build ·
                    budget · caption · fingerprint
                    job.ts (batch state machine) · scheduler.ts (interactive one)
+  books/           builder.ts — adding, resuming, removing a book; progress.ts
   companion/       citation and chat contracts, web search interface
-  store/           library.ts, file-store.ts, reading.ts
-  runtime/         codex-cli.ts, edge-tts-ws.ts, http-llm.ts, trace-dir.ts
+  store/           library.ts (layout) · library-disk.ts (Library) · file-store.ts
+  runtime/         codex-cli.ts, codex-credentials.ts, edge-tts-ws.ts, trace-dir.ts
 packages/ui/       React components, design tokens, slide layout renderers
 apps/desktop/      Electrobun shell: main process + webview
 scripts/           add-book.ts, replay.ts, typecheck.ts
@@ -102,18 +104,23 @@ the station briefs `reduce` already wrote, so closing a book costs no pass over 
 
 ```
 $CAIRN_DATA_DIR/            default ~/Library/Application Support/Cairn/
-  books/<id>/
+  books/<id>/               everything the player needs; no absolute paths inside
     path.json               the station list; installed the moment reduce finishes
     notes.json              ChapterNote[]
-    chat.json               complete companion conversation archive
+    chapters.json           full text, read by the companion only — never served
+    chat.json · working.json  companion conversation and its working memory
     reading.json            completed-reading marker
-    decks/<key>.json        one file per station, content-keyed
+    decks/<nodeId>.json     one file per station, audioPath relative to the book
     decks/index.json        readiness list the player polls
-  library.json              LibraryEntry[] incl. PathQuality and last position
-  .cache/<id>/
+    audio/<nodeId>.mp3      copied from the cache by deck key
+  books.json                LibraryEntry[] incl. PathQuality; replaced atomically
+  settings.json             what the settings panel stores
+  .cache/<id>/              generation-side, never travels
     map.json                resumable per-chapter results
+    decks-<budget>.json     built decks by deck key, for resume
     audio/                  mp3 per deck key
     trace/                  only when CAIRN_TRACE=1
+  .preview/<voice>.mp3      voice auditions
 ```
 
 Never beside the app: its cwd is inside its own bundle and is rebuilt on every `electrobun dev`.
@@ -135,20 +142,24 @@ as a **resumable task state machine**, never one `await Promise.all`:
 - progress is per unit ("chapter 37 of 82"), not a spinner
 - an interrupted run resumes where it stopped
 
-Two drivers share one `JobStore`, so a book half-built by one resumes under the other:
+Two state machines, one per shape of work, both driven by `books/builder.ts`:
 
 | | `runJob` (`job.ts`) | `startDeckScheduler` (`scheduler.ts`) |
 | --- | --- | --- |
 | Order | Fixed | Re-orderable — follows the reader |
 | Pausable | No | Yes; reader questions hold it |
-| Used by | `add-book` | the app |
+| Runs | the map stage | every station's deck |
+
+The app and `add-book` are both thin drivers of the same builder, and its cache lives under the
+library's `.cache/<id>/`, so a book half-built by either resumes in the other. A station is
+reported ready only after `onReady` has installed its deck and audio into the book.
 
 ---
 
 ## 6. Process boundary and the loopback server
 
 The main process serves the library over `127.0.0.1` on a random port, because `<audio>` needs a
-URL it can range-request. `main/library.ts`:
+URL it can range-request. `main/library-server.ts`:
 
 - binds loopback only, and answers `GET` and `HEAD` only
 - serves exactly one directory
@@ -274,6 +285,31 @@ The settings panel lists constrained models first and the unconstrained ones aft
 In pi-ai 0.87.1 that distinction is real: openai 41/41, anthropic 15/15, deepseek 2/2 and groq
 7/7 are fully constrained, while moonshotai 0/4, minimax 0/3, xai 0/4 and google 0/22 are not.
 That was already true before this change — the difference is that it is now visible.
+
+### One book builder, one library, one composition root
+
+Adding a book used to be written twice: `main/generate.ts` for the app and `scripts/add-book.ts`
+for the terminal, each with its own copy of the install code. They drifted in the ways copies do.
+The terminal never appended the recap station, and it cached under the repository while the app
+cached under the library — so the comment promising that one resumed the other's half-built book
+was false.
+
+Three modules replaced them, following [llm-space](https://github.com/deer-flow/llm-space):
+
+- **`store/library-disk.ts`** — the `Library`: the only module that writes a book to disk, with
+  the write chain and read cache inside it and the root passed in rather than read at import.
+- **`books/builder.ts`** — map, classify, reduce, recap, install, then decks through the
+  scheduler; resume, remove and the pause for a reader's question. It takes the library,
+  narrator, provider and voice as arguments, which is what lets `tests/books/builder.test.ts`
+  run a whole book on stubs.
+- **`main/index.ts` as the composition root** — the narrator, the builder and the RPC handlers
+  are constructed there and passed in. The late-bound setters (`onProgress`, `onDeckStatus`)
+  and the handler module's `let` globals are gone.
+
+The companion's tools still reach `store.ts` at import. That is the next step, not the pattern.
+
+The bridge's request types now come from the schema through Electrobun's own proxy type; the
+hand-written copy and its `as unknown as` cast were the one place the contract could drift.
 
 ### Superseded, and why it is worth knowing
 

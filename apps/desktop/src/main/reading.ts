@@ -3,8 +3,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { bookFile, isBookId } from '@cairn/core/store/library';
 import { finishReading, type ReadingRecord } from '@cairn/core/store/reading';
-import { listBooks } from './install';
-import { DATA_DIR, loadPath } from './store';
+import { DATA_DIR, library } from './store';
 
 const readingPath = (bookId: string): string => join(DATA_DIR, bookFile(bookId, 'reading.json'));
 
@@ -27,9 +26,9 @@ export async function readReadingRecord(bookId: string): Promise<ReadingRecord |
 
 export async function markBookFinished(bookId: string, nodeId: string): Promise<boolean> {
   if (!isBookId(bookId)) return false;
-  const entry = (await listBooks()).find((book) => book.id === bookId);
+  const entry = (await library.list()).find((book) => book.id === bookId);
   if (!entry) return false;
-  const path = await loadPath(bookId);
+  const path = await library.loadPath(bookId);
   const record = finishReading(entry, path, nodeId, new Date().toISOString());
   if (!record) return false;
   if ((await readReadingRecord(bookId))?.pathGeneratedAt === path.generatedAt) return true;

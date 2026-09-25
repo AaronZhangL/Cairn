@@ -30,7 +30,7 @@ import { modelIn, type ProviderId } from '../shared/providers';
 const DEFAULT_TIMEOUT_MS = 180_000;
 
 /**
- * Measured on the OpenAI chat-completions shape in `runtime/http-llm.ts`: a few
+ * Measured on the OpenAI chat-completions shape (the since-removed `http-llm.ts`): a few
  * hundred tokens of envelope rather than the codex CLI's ~18k of agent harness.
  * These drive the map stage's batch size and the scheduler's concurrency, so they
  * are a real number and not decoration — `AssistantMessage.usage` reports the

@@ -93,9 +93,6 @@ export interface DeckIndex {
   readonly complete: boolean;
 }
 
-/** What the reader is looking at, per station, for spotting stations that confuse. */
-export const askLogFile = (id: string): string => `${bookFile(id, 'asks.json')}`;
-
 /**
  * Fill in what an older library did not record.
  * A book written before progressive building was finished by definition.

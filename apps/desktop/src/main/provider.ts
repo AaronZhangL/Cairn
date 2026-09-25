@@ -25,7 +25,7 @@ import type { LlmProvider } from '@cairn/core/llm';
 import { codexCliProvider, traceDirSink } from '@cairn/core/runtime';
 import { modelOf, type ModelStatus, type ShellSettingsValues } from '../shared/settings';
 import { piLlmProvider } from './pi-provider';
-import { readSettings } from './settings';
+import { readSettings, tracingOn } from './settings';
 import { DATA_DIR } from './store';
 
 /** Where a book's recorded calls land, for `bun run replay`. */
@@ -73,16 +73,8 @@ export async function modelStatus(): Promise<ModelStatus> {
   return (await resolveProvider()).status;
 }
 
-/**
- * The provider for work done on one book's behalf.
- * Calls that belong to no book (a question about a finished one) pass `false`.
- */
-export async function traced(bookId: string, enabled: boolean): Promise<LlmProvider> {
+/** The provider for work done on one book's behalf, recorded under its cache when tracing is on. */
+export async function providerFor(bookId: string): Promise<LlmProvider> {
   const { provider } = await resolveProvider();
-  return enabled ? tracingProvider(provider, traceDirSink(traceDir(bookId))) : provider;
-}
-
-/** For calls that belong to no particular book. */
-export async function plainProvider(): Promise<LlmProvider> {
-  return (await resolveProvider()).provider;
+  return (await tracingOn()) ? tracingProvider(provider, traceDirSink(traceDir(bookId))) : provider;
 }

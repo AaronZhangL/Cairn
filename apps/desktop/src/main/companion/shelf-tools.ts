@@ -4,9 +4,8 @@ import type { LibraryEntry } from '@cairn/core/store/library';
 import { isFinished, type ReadingRecord } from '@cairn/core/store/reading';
 import type { EvidenceRecord, ShelfRef } from '@cairn/core/companion/types';
 import { escapeXml } from '@cairn/core/companion/xml';
-import { listBooks } from '../install';
 import { readReadingRecord } from '../reading';
-import { loadPath } from '../store';
+import { library } from '../store';
 
 const MAX_STATIONS = 8;
 const MAX_QUERY = 200;
@@ -30,7 +29,11 @@ interface ShelfToolDeps {
   readonly readReadingRecord: (bookId: string) => Promise<ReadingRecord | undefined>;
 }
 
-const live: ShelfToolDeps = { listBooks, loadPath, readReadingRecord };
+const live: ShelfToolDeps = {
+  listBooks: () => library.list(),
+  loadPath: (bookId) => library.loadPath(bookId),
+  readReadingRecord,
+};
 
 function boundedXml(value: string, limit: number): string {
   let text = '';

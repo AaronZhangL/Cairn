@@ -1,13 +1,13 @@
 import { CairnError } from '@cairn/core/errors';
 import type { ChatSession } from '@cairn/core/companion/types';
-import type { CompanionEvent } from './main/companion/events';
+import type { CompanionEvent } from './shared/companion-events';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { LIBRARY_INDEX, type LibraryEntry } from '@cairn/core/store/library';
 import { decodeError } from './shared/errors';
 import type {
   ContentLocale, ModelStatus, ShellSettingsValues, UiLocale,
 } from './shared/settings';
-import type { CairnRPC } from './shared/schema';
+import type { CairnRPC, RequestParams } from './shared/schema';
 import type { BookPreview, DeckStatus, Progress } from './shared/types';
 
 /**
@@ -18,34 +18,6 @@ import type { BookPreview, DeckStatus, Progress } from './shared/types';
  * what `bun run dev` is.
  */
 type RequestOptions = { maxRequestTime: number };
-
-type Rpc = {
-  request: {
-    libraryBase(): Promise<string>;
-    progressNow(p: undefined, o?: RequestOptions): Promise<Progress | null>;
-    pickBook(p: undefined, o?: RequestOptions): Promise<BookPreview | null>;
-    generateBook(
-      p: { filePath: string; budgetId: BudgetId }, o?: RequestOptions,
-    ): Promise<LibraryEntry>;
-    chatHistory(p: { bookId: string }, o?: RequestOptions): Promise<ChatSession>;
-    chatSend(p: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }, o?: RequestOptions): Promise<boolean>;
-    chatCancel(p: { turnId: string }, o?: RequestOptions): Promise<boolean>;
-    markBookFinished(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<boolean>;
-    focusStation(p: { bookId: string; nodeId: string }, o?: RequestOptions): Promise<null>;
-    resumeBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
-    deleteBook(p: { bookId: string }, o?: RequestOptions): Promise<boolean>;
-    getSettings(p: undefined, o?: RequestOptions): Promise<ShellSettingsValues>;
-    setSettings(
-      p: Partial<ShellSettingsValues>, o?: RequestOptions,
-    ): Promise<ShellSettingsValues>;
-    dataDir(p: undefined, o?: RequestOptions): Promise<string>;
-    previewVoice(p: { locale: ContentLocale }, o?: RequestOptions): Promise<string>;
-    revealDataDir(p: undefined, o?: RequestOptions): Promise<null>;
-    clearCache(p: undefined, o?: RequestOptions): Promise<null>;
-    setMenuLocale(p: { locale: UiLocale }, o?: RequestOptions): Promise<null>;
-    modelStatus(p: undefined, o?: RequestOptions): Promise<ModelStatus>;
-  };
-};
 
 /**
  * The RPC layer times requests out after one second by default, which is shorter
@@ -89,31 +61,36 @@ export function onCompanionEvent(fn: (event: CompanionEvent) => void): () => voi
   return () => companionListeners.delete(fn);
 }
 
+async function makeRpc() {
+  const { Electroview } = await import('electrobun/view');
+  // Same helper as the bun side, so both derive local/remote from one schema
+  const rpc = Electroview.defineRPC<CairnRPC>({
+    handlers: {
+      requests: {},
+      messages: {
+        progress: (p: Progress) => {
+          for (const fn of progressListeners) fn(p);
+        },
+        deckStatus: (s: DeckStatus) => {
+          for (const fn of deckStatusListeners) fn(s);
+        },
+        companion: (event: CompanionEvent) => {
+          for (const fn of companionListeners) fn(event);
+        },
+      },
+    },
+  });
+  new Electroview({ rpc });
+  return rpc;
+}
+
+/** Typed from the schema by the SDK itself, so a request cannot drift from its handler. */
+type Rpc = Awaited<ReturnType<typeof makeRpc>>;
+
 let rpcPromise: Promise<Rpc> | undefined;
 
 function connect(): Promise<Rpc> {
-  rpcPromise ??= (async () => {
-    const { Electroview } = await import('electrobun/view');
-    // Same helper as the bun side, so both derive local/remote from one schema
-    const rpc = Electroview.defineRPC<CairnRPC>({
-      handlers: {
-        requests: {},
-        messages: {
-          progress: (p: Progress) => {
-            for (const fn of progressListeners) fn(p);
-          },
-          deckStatus: (s: DeckStatus) => {
-            for (const fn of deckStatusListeners) fn(s);
-          },
-          companion: (event: CompanionEvent) => {
-            for (const fn of companionListeners) fn(event);
-          },
-        },
-      },
-    });
-    new Electroview({ rpc });
-    return rpc as unknown as Rpc;
-  })();
+  rpcPromise ??= makeRpc();
   return rpcPromise;
 }
 
@@ -122,7 +99,7 @@ function connect(): Promise<Rpc> {
  * A code rather than a sentence, because the player words it in the reader's
  * own language; see `packages/core/src/errors.ts`.
  */
-const offline = (code: 'offline_pick' | 'offline_generate' | 'offline_search' | 'offline_delete'):
+const offline = (code: 'offline_pick' | 'offline_generate' | 'offline_chat' | 'offline_settings' | 'offline_delete'):
   CairnError => new CairnError(code);
 
 /**
@@ -187,8 +164,8 @@ export async function chatHistory(bookId: string): Promise<ChatSession> {
   return (await connect()).request.chatHistory({ bookId }, POLL_LIMIT).catch(rethrow);
 }
 
-export async function chatSend(params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }): Promise<boolean> {
-  if (!inShell) throw offline('offline_search');
+export async function chatSend(params: RequestParams<'chatSend'>): Promise<boolean> {
+  if (!inShell) throw offline('offline_chat');
   return (await connect()).request.chatSend(params, POLL_LIMIT).catch(rethrow);
 }
 
@@ -208,7 +185,7 @@ export async function getSettings(): Promise<ShellSettingsValues | undefined> {
 export async function setSettings(
   patch: Partial<ShellSettingsValues>,
 ): Promise<ShellSettingsValues> {
-  if (!inShell) throw offline('offline_generate');
+  if (!inShell) throw offline('offline_settings');
   return (await connect()).request.setSettings(patch, POLL_LIMIT).catch(rethrow);
 }
 
@@ -229,7 +206,7 @@ export async function modelStatus(): Promise<ModelStatus | undefined> {
  * rather than the poll one.
  */
 export async function previewVoice(locale: ContentLocale): Promise<string> {
-  if (!inShell) throw offline('offline_generate');
+  if (!inShell) throw offline('offline_settings');
   const rpc = await connect();
   const rel = await rpc.request.previewVoice({ locale }, ANSWER_LIMIT).catch(rethrow);
   return `${await libraryBase()}/${rel}`;

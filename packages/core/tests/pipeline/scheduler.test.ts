@@ -411,3 +411,46 @@ describe('momentum', () => {
     await scheduler.done;
   });
 });
+
+describe('waitFor 与 onReady 的先后', () => {
+  // `onReady` is where a deck is installed into the book. Resolving the waiter
+  // first let `generate` report station 1 playable before its files existed.
+  test('waitFor resolves only after onReady has finished with that deck', async () => {
+    const installed: string[] = [];
+    const s = startDeckScheduler({
+      nodes: nodes(2), store: memoryStore<NodeDeck>(), lookahead: 1,
+      build: async (n) => deck(n.id),
+      onReady: async (d) => { await tick(); installed.push(d.nodeId); },
+    });
+    await s.waitFor('n0');
+    expect(installed).toContain('n0');
+    await s.done;
+  });
+
+  test('a deck already in the store is installed before its waiter hears of it', async () => {
+    const store = memoryStore<NodeDeck>();
+    const installed: string[] = [];
+    await store.put('n0', deck('n0'));
+    const s = startDeckScheduler({
+      nodes: nodes(1), store, keyOf: (n) => n.id,
+      build: async (n) => deck(n.id),
+      onReady: async (d) => { await tick(); installed.push(d.nodeId); },
+    });
+    await s.waitFor('n0');
+    expect(installed).toEqual(['n0']);
+  });
+
+  test('a deck that cannot be installed is a failed station, and its waiter is told so', async () => {
+    const failures: string[] = [];
+    const s = startDeckScheduler({
+      nodes: nodes(1), store: memoryStore<NodeDeck>(),
+      build: async (n) => deck(n.id),
+      onReady: async () => { throw new Error('disk full'); },
+      onFailed: (id) => failures.push(id),
+    });
+    await expect(s.waitFor('n0')).rejects.toThrow('disk full');
+    await s.done;
+    expect(failures).toEqual(['n0']);
+    expect(s.progress).toMatchObject({ ready: 0, failed: 1, running: 0 });
+  });
+});

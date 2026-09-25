@@ -2,7 +2,7 @@ import type { RPCSchema } from 'electrobun/view';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import type { ChatSession } from '@cairn/core/companion/types';
-import type { CompanionEvent } from '../main/companion/events';
+import type { CompanionEvent } from './companion-events';
 import type { ContentLocale, ModelStatus, ShellSettingsValues, UiLocale } from './settings';
 import type { BookPreview, DeckStatus, Progress } from './types';
 
@@ -63,4 +63,7 @@ export type WebviewSchema = RPCSchema<{
 }>;
 
 export type CairnRPC = { bun: BunSchema; webview: WebviewSchema };
+
+/** One request's params, for the places that name them outside a call. */
+export type RequestParams<K extends keyof BunSchema['requests']> = BunSchema['requests'][K]['params'];
 export type { BookPreview, DeckStatus, Progress };

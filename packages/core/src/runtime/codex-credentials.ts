@@ -6,13 +6,10 @@
  * to call the model directly is sitting in `auth.json`, and an HTTP call with
  * it does the same work without the agent harness wrapped around every request.
  *
- * Two shapes come out of that file, and they go to different providers:
- *
- *  - an **API key** — the public API, `httpLlmProvider`, ordinary and licensed.
- *  - a **ChatGPT OAuth token** — ChatGPT's own backend, `chatGptCodexProvider`.
- *    Undocumented, and the request has to identify itself the way the CLI does.
- *    See the note at the top of `chatgpt-codex.ts`: it works and it is what
- *    `llm-space` ships, but it is not a licensed integration.
+ * Two shapes come out of that file: an **API key** for the public API, and a
+ * **ChatGPT OAuth token** for ChatGPT's own backend — undocumented, and what
+ * `llm-space` ships, but not a licensed integration. The companion reads it
+ * through `main/companion/model.ts`.
  *
  * Nothing here decides which to use. It reports what is on disk; the caller
  * picks, and the settings panel is where that choice is made visible.

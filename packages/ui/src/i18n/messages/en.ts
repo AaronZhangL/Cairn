@@ -55,8 +55,9 @@ export const en = {
 
     offline_pick: 'Choosing a file needs the desktop app — run `bun run start`.',
     offline_generate: 'Building a path needs the desktop app — run `bun run start`.',
-    offline_search: 'Searching the web needs the desktop app — run `bun run start`.',
     offline_delete: 'Deleting a book needs the desktop app — run `bun run start`.',
+    offline_chat: 'Asking about the book needs the desktop app — run `bun run start`.',
+    offline_settings: 'Changing this setting needs the desktop app — run `bun run start`.',
 
     unknown: 'Something went wrong.',
   },

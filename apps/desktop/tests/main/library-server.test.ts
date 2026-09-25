@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseRange, resolveInLibrary } from '../../src/main/library';
+import { parseRange, previewFile, resolveInLibrary } from '../../src/main/library-server';
+import { VOICES } from '../../src/shared/settings';
 
 const ROOT = '/tmp/lib';
 const TOKEN = 'tok';
@@ -37,6 +38,21 @@ describe('resolveInLibrary', () => {
     }
     expect(resolveInLibrary(ROOT, `/${TOKEN}/books.json`, TOKEN)).toBe('/tmp/lib/books.json');
     expect(resolveInLibrary(ROOT, `/${TOKEN}/books/a/decks/n0.json`, TOKEN)).toBe('/tmp/lib/books/a/decks/n0.json');
+  });
+});
+
+describe('voice previews', () => {
+  test('every voice the panel offers can be auditioned over the server', () => {
+    // The file used to be written under the voice's name and allowed under the
+    // language's, so every preview 404'd.
+    for (const voice of [...VOICES.en, ...VOICES.zh]) {
+      expect(resolveInLibrary(ROOT, `/${TOKEN}/${previewFile(voice.id)}`, TOKEN)).toBeDefined();
+    }
+  });
+
+  test('a preview name cannot carry a path', () => {
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/.preview/..%2Fsettings.json`, TOKEN)).toBeUndefined();
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/.preview/settings.json`, TOKEN)).toBeUndefined();
   });
 });
 

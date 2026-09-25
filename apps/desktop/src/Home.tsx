@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 import { payloadOf } from '@cairn/core/errors';
-import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse';
+import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse/format';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { errorText, GearMark, TrashMark, useT } from '@cairn/ui';
 import { inShell } from './bridge';

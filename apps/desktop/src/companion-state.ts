@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@cairn/core/companion/types';
-import type { CompanionEvent } from './main/companion/events';
+import type { CompanionEvent } from './shared/companion-events';
 
 export interface CompanionViewState {
   readonly bookId: string;
