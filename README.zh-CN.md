@@ -8,10 +8,9 @@
 
 # Cairn
 
-<!-- 截图：把图片存为 docs/images/screenshot.png，然后删掉下一行两端的注释符号 -->
-<!-- ![Cairn](./docs/images/screenshot.png) -->
+![Cairn](./docs/images/screenshot.jpg)
 
-<!-- 视频：在 GitHub 网页上编辑本文件，把 .mp4 拖进来，用它生成的 https://github.com/user-attachments/assets/... 那一行替换这条注释 -->
+https://github.com/user-attachments/assets/6ca31192-dd04-4142-8f65-e5f59b4724d3
 
 Cairn 把一本书变成一组带朗读的短片，短片的时长由你希望了解这本书的深浅控制。
 

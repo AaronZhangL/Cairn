@@ -8,10 +8,9 @@ English | [中文](./README.zh-CN.md)
 
 # Cairn
 
-<!-- SCREENSHOT: save the image as docs/images/screenshot.png, then delete the two comment markers around the next line. -->
-<!-- ![Cairn](./docs/images/screenshot.png) -->
+![Cairn](./docs/images/screenshot.jpg)
 
-<!-- VIDEO: drag the .mp4 into GitHub's web editor for this file; replace this whole comment with the https://github.com/user-attachments/assets/... line it inserts. -->
+https://github.com/user-attachments/assets/6ca31192-dd04-4142-8f65-e5f59b4724d3
 
 Cairn turns a book into a series of short narrated clips. How long they run depends on how
 deeply you want to know the book.
