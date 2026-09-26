@@ -34,11 +34,29 @@ Cairn 把一本书变成一组带朗读的短片，短片的时长由你希望�
 xattr -dr com.apple.quarantine /Applications/Cairn.app
 ```
 
-第一次打开时，在**设置**里选择模型服务商并填入 key。[pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai)
-支持的服务商都可以用。
+第一次打开时，在**设置**里选择模型服务商，见 [支持的模型](#支持的模型)。
 
-暂不支持无约束模型。「无约束」指服务端不能强制模型按指定的 JSON 格式（JSON Schema）回复，格式对不对全靠模型自觉。
-生成一本书要调用模型上百次，每次都需要格式正确的结构化结果，所以设置里只列出支持约束输出（structured output）的模型。
+## 支持的模型
+
+Cairn 通过 [pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai) 调用模型。
+生成站点和伴读对话可以用同一个模型，也可以给伴读单独选一个。
+
+| 服务商 | 接入方式 | 默认模型 |
+| --- | --- | --- |
+| OpenAI | API key（`OPENAI_API_KEY`） | `gpt-5.4-mini` |
+| OpenAI Codex | 用 `codex login` 登录的 ChatGPT 账户 | `gpt-5.6-sol` |
+| Anthropic | API key（`ANTHROPIC_API_KEY`） | `claude-haiku-4-5` |
+| Google | API key（`GEMINI_API_KEY`） | `gemini-3.5-flash` |
+| DeepSeek | API key（`DEEPSEEK_API_KEY`） | `deepseek-flash` |
+| OpenRouter | API key（`OPENROUTER_API_KEY`） | `google/gemini-2.5-flash` |
+| Groq | API key（`GROQ_API_KEY`） | `llama-3.3-70b-versatile` |
+| 自定义 | 任意 OpenAI 兼容接口，比如本地模型服务 | 自己填 |
+
+key 一栏可以直接填 key，也可以填 `$变量名` 读取环境变量。选中的服务商没有可用凭据时，Cairn 会改用第一个有凭据的。
+
+设置里只列出支持约束输出（structured output）的模型，也就是服务端能强制模型按 JSON Schema 回复。
+生成一本书要调用模型上百次，每次都需要格式正确的结构化结果，所以只靠模型自觉守格式的不提供。
+xAI、Moonshot 和 MiniMax 暂时不在列表里。
 
 ## 从源码构建
 

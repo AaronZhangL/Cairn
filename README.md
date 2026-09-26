@@ -37,13 +37,31 @@ moving it to Applications:
 xattr -dr com.apple.quarantine /Applications/Cairn.app
 ```
 
-On first launch, open **Settings** and pick a model provider and key. Any provider
-[pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai) supports will work.
+On first launch, open **Settings** and pick a model provider. See [Supported models](#supported-models).
 
-Unconstrained models are not supported yet. A model is unconstrained when the provider cannot
-force its reply to match a JSON Schema, so whether the format comes back right is up to the model.
-Building one book takes about a hundred model calls, each of which needs well-formed structured
-output, so Settings lists only models that support constrained (structured) output.
+## Supported models
+
+Cairn calls models through [pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai). The
+same model can build stations and answer in the companion, or the companion can use its own.
+
+| Provider | How to connect | Default model |
+| --- | --- | --- |
+| OpenAI | API key (`OPENAI_API_KEY`) | `gpt-5.4-mini` |
+| OpenAI Codex | Your ChatGPT account, signed in with `codex login` | `gpt-5.6-sol` |
+| Anthropic | API key (`ANTHROPIC_API_KEY`) | `claude-haiku-4-5` |
+| Google | API key (`GEMINI_API_KEY`) | `gemini-3.5-flash` |
+| DeepSeek | API key (`DEEPSEEK_API_KEY`) | `deepseek-flash` |
+| OpenRouter | API key (`OPENROUTER_API_KEY`) | `google/gemini-2.5-flash` |
+| Groq | API key (`GROQ_API_KEY`) | `llama-3.3-70b-versatile` |
+| Custom | Any OpenAI-compatible endpoint, such as a local server | You choose |
+
+A key field can hold the key itself or `$NAME` to read an environment variable. If the chosen
+provider has no credentials, Cairn uses the first one that does.
+
+Settings lists only models with constrained (structured) output, where the provider can force the
+reply to match a JSON Schema. Building one book takes about a hundred model calls, and each needs
+well-formed structured output, so a model that only tries to follow the format is not offered.
+xAI, Moonshot and MiniMax are not in the list for now.
 
 ## Build from source
 
