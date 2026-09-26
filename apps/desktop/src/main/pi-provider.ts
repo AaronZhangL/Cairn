@@ -25,7 +25,9 @@ import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { xaiProvider } from '@earendil-works/pi-ai/providers/xai';
 import { LlmError, type LlmProvider, type LlmRequest } from '@cairn/core/llm';
-import { modelIn, type ProviderId } from '../shared/providers';
+import type { CodexCredentials } from '@cairn/core/runtime';
+import type { ProviderId } from '../shared/providers';
+import { codexRegistry } from './codex-provider';
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 
@@ -81,12 +83,14 @@ export interface PiProviderConfig {
   readonly apiKey: string;
   readonly model: string;
   readonly baseUrl?: string;
+  /** What `openai-codex` signs in with; unused by every other provider. */
+  readonly codex?: CodexCredentials;
   readonly timeoutMs?: number;
   /**
    * Injected by tests. Without it every path here needs a real vendor and a real
    * key, which is the same reason `LlmProvider` exists one layer up.
    */
-  readonly build?: (id: ProviderId, modelId: string, baseUrl?: string) => PiRegistry;
+  readonly build?: (id: ProviderId, modelId: string, baseUrl?: string, codex?: CodexCredentials) => PiRegistry;
 }
 
 export function piLlmProvider(config: PiProviderConfig): LlmProvider {
@@ -108,7 +112,7 @@ export function piLlmProvider(config: PiProviderConfig): LlmProvider {
       request.signal?.addEventListener('abort', onAbort, { once: true });
 
       try {
-        const reply = await models.completeSimple(model, context(request, model), {
+        const reply = await models.completeSimple(model, context(request), {
           apiKey: config.apiKey,
           signal: controller.signal,
           maxTokens: model.maxTokens,
@@ -156,8 +160,10 @@ export function piRegistry(
   providerId: ProviderId,
   modelId: string,
   baseUrl?: string,
+  codex?: CodexCredentials,
 ): { models: Registry; model: Model<never> } | undefined {
   if (providerId === 'custom') return custom(modelId, baseUrl);
+  if (providerId === 'openai-codex') return codex ? codexRegistry(modelId, codex) : undefined;
 
   const provider = providerFor(providerId);
   if (!provider) return undefined;
@@ -200,7 +206,7 @@ function custom(modelId: string, baseUrl?: string): { models: Registry; model: M
 }
 
 function resolve(config: PiProviderConfig): { models: Registry; model: Model<never> } {
-  const built = (config.build ?? piRegistry)(config.providerId, config.model, config.baseUrl);
+  const built = (config.build ?? piRegistry)(config.providerId, config.model, config.baseUrl, config.codex);
   if (!built) {
     throw new LlmError(
       `提供方 ${config.providerId} 无法提供模型 ${config.model}`, 'provider_failed',
@@ -209,13 +215,7 @@ function resolve(config: PiProviderConfig): { models: Registry; model: Model<nev
   return built;
 }
 
-function context(request: LlmRequest, model: Model<never>): Context {
-  const strict = modelIn(
-    // The catalog is keyed by our provider ids, which are pi-ai's own
-    model.provider as ProviderId,
-    model.id,
-  )?.strict === true;
-
+function context(request: LlmRequest): Context {
   return {
     ...(request.system ? { systemPrompt: request.system } : {}),
     messages: [{ role: 'user', content: request.prompt, timestamp: Date.now() }],
@@ -227,7 +227,9 @@ function context(request: LlmRequest, model: Model<never>): Context {
           // A TypeBox schema *is* a JSON Schema object at runtime, and no adapter
           // validates it — `validateToolArguments` is an opt-in helper.
           parameters: request.schema as Tool['parameters'],
-          constrainedSampling: { type: 'json_schema', strict: strict ? 'require' : 'prefer' },
+          // `prefer` is strict wherever pi-ai can make the schema strict. `require`
+          // throws where it cannot — a slide is a union of objects, so every deck.
+          constrainedSampling: { type: 'json_schema', strict: 'prefer' },
         }],
       }
       : {}),

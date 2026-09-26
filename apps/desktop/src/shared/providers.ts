@@ -20,11 +20,12 @@ import { MINIMAX_CN_MODELS } from '@earendil-works/pi-ai/providers/minimax-cn.mo
 import { MINIMAX_MODELS } from '@earendil-works/pi-ai/providers/minimax.models';
 import { MOONSHOTAI_MODELS } from '@earendil-works/pi-ai/providers/moonshotai.models';
 import { OPENAI_MODELS } from '@earendil-works/pi-ai/providers/openai.models';
+import { OPENAI_CODEX_MODELS } from '@earendil-works/pi-ai/providers/openai-codex.models';
 import { OPENROUTER_MODELS } from '@earendil-works/pi-ai/providers/openrouter.models';
 import { XAI_MODELS } from '@earendil-works/pi-ai/providers/xai.models';
 
 export const PROVIDER_IDS = [
-  'openai', 'anthropic', 'google', 'deepseek', 'openrouter',
+  'openai', 'openai-codex', 'anthropic', 'google', 'deepseek', 'openrouter',
   'groq', 'xai', 'moonshotai', 'minimax', 'minimax-cn', 'custom',
 ] as const;
 
@@ -52,6 +53,8 @@ export interface Provider {
   readonly envKey?: string;
   /** Only `custom` has no endpoint of its own. */
   readonly needsBaseUrl: boolean;
+  /** Uses the account `codex login` signed in, so there is no key to type. */
+  readonly signIn: boolean;
   readonly models: readonly ProviderModel[];
 }
 
@@ -72,6 +75,7 @@ interface Chrome {
 
 const CHROME: Readonly<Record<ProviderId, Chrome>> = {
   openai: { label: 'OpenAI', getKeyUrl: 'https://platform.openai.com/api-keys', faviconDomain: 'openai.com', defaultModel: 'gpt-5.4-mini', envKey: 'OPENAI_API_KEY' },
+  'openai-codex': { label: 'OpenAI Codex', getKeyUrl: 'https://openai.com/codex', faviconDomain: 'openai.com', defaultModel: 'gpt-5.6-sol' },
   anthropic: { label: 'Anthropic', getKeyUrl: 'https://console.anthropic.com/settings/keys', faviconDomain: 'anthropic.com', defaultModel: 'claude-haiku-4-5', envKey: 'ANTHROPIC_API_KEY' },
   google: { label: 'Google', getKeyUrl: 'https://aistudio.google.com/apikey', faviconDomain: 'ai.google.dev', defaultModel: 'gemini-3.5-flash', envKey: 'GEMINI_API_KEY' },
   deepseek: { label: 'DeepSeek', getKeyUrl: 'https://platform.deepseek.com/api_keys', faviconDomain: 'deepseek.com', defaultModel: 'deepseek-flash', envKey: 'DEEPSEEK_API_KEY' },
@@ -97,6 +101,7 @@ interface CatalogEntry {
 
 const CATALOGS: Readonly<Partial<Record<ProviderId, Readonly<Record<string, CatalogEntry>>>>> = {
   openai: OPENAI_MODELS,
+  'openai-codex': OPENAI_CODEX_MODELS,
   anthropic: ANTHROPIC_MODELS,
   google: GOOGLE_MODELS,
   deepseek: DEEPSEEK_MODELS,
@@ -140,6 +145,7 @@ export const PROVIDERS: readonly Provider[] = PROVIDER_IDS.map((id) => {
     ...CHROME[id],
     baseUrl: baseUrlOf(catalog),
     needsBaseUrl: id === 'custom',
+    signIn: id === 'openai-codex',
     // Every model, so a stored pick still resolves; the panel reads `OFFERED_PROVIDERS`.
     models: Object.entries(catalog ?? {})
       .map(([modelId, entry]) => toModel(modelId, entry))
@@ -153,7 +159,8 @@ export const PROVIDERS: readonly Provider[] = PROVIDER_IDS.map((id) => {
  * strict support brings a vendor back with no change here.
  */
 export const OFFERED_PROVIDERS: readonly Provider[] = PROVIDERS
-  .map((provider) => ({ ...provider, models: provider.models.filter((m) => m.strict) }))
+  // A signed-in account's models carry no strict flag, and llm-space offers them all
+  .map((provider) => (provider.signIn ? provider : { ...provider, models: provider.models.filter((m) => m.strict) }))
   .filter((provider) => provider.needsBaseUrl || provider.models.length > 0);
 
 export function providerById(id: ProviderId): Provider | undefined {

@@ -31,7 +31,7 @@ bun run start     # the real desktop app
 bun run package   # a distributable .app
 ```
 
-`bun run start` needs `codex` on PATH and a network path to the narration service. Outside-the-book search defaults
+`bun run start` needs a model — an API key, or a `codex login` for the OpenAI Codex provider — and a network path to the narration service. Outside-the-book search defaults
 to keyless Firecrawl; Brave Search and Tavily are selectable with keys. `bun run dev` needs none of them and says so in the
 answer pane rather than faking a reply.
 
@@ -404,11 +404,13 @@ Two details that are load-bearing and not obvious:
   outcome, including `'length'` for a truncated reply. Not reading it turns a failed call into
   an empty one.
 
-The `codex exec` CLI remains as the fallback for an app with nothing configured, and reports
-itself as not ready. Each of its calls carries roughly 18k tokens of agent harness overhead,
-several times the chapter text itself — which is why the map stage batches chapters
-(`DEFAULT_BATCH_SIZE`). An HTTP provider costs a few hundred tokens of envelope instead and
-could drop the batch size to 1 for cleaner per-chapter notes.
+**Which provider answers follows llm-space.** `openai-codex` is a provider like any other,
+signed in with whatever `codex login` left in `~/.codex` (OAuth token first, then an API key);
+the settings panel shows no key field for it. `main/route.ts` picks the default if it has
+credentials, otherwise the first provider that does, by name — generation and the companion
+alike. With none, generation fails with `no_model`; nothing falls back to the `codex exec`
+CLI, which only `bun run replay` still uses. That CLI carried ~18k tokens of harness per call,
+which is why the map stage batches chapters (`DEFAULT_BATCH_SIZE`).
 
 Everything stays behind `LlmProvider`, so swapping any of this remains a one-file change.
 `packages/core` never imports pi-ai; `main/pi-provider.ts` does.

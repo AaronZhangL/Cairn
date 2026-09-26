@@ -21,7 +21,7 @@ export type ErrorCode =
   | 'unsupported_format' | 'empty_file' | 'corrupt_archive' | 'no_content' | 'decode_failed'
   | 'scanned_pdf' | 'unreadable_pdf' | 'drm_protected' | 'mixed_selection'
   // The model
-  | 'llm_timeout' | 'llm_aborted' | 'llm_bad_output' | 'llm_failed'
+  | 'llm_timeout' | 'llm_aborted' | 'llm_bad_output' | 'llm_failed' | 'no_model'
   // Synthesis
   | 'tts_missing' | 'tts_failed' | 'tts_no_cues' | 'tts_unaligned'
   // The pipeline itself

@@ -4,10 +4,16 @@ import {
 } from '../../src/shared/providers';
 
 describe('provider registry', () => {
-  test('every vendor but `custom` names the environment variable its key field starts out reading', () => {
+  test('every vendor but `custom` and Codex names the environment variable its key field starts out reading', () => {
     for (const id of PROVIDER_IDS) {
-      expect(providerById(id)?.envKey === undefined).toBe(id === 'custom');
+      expect(providerById(id)?.envKey === undefined).toBe(id === 'custom' || id === 'openai-codex');
     }
+  });
+
+  test('Codex signs in with the codex login instead of a key, and is offered like llm-space offers it', () => {
+    expect(providerById('openai-codex')?.signIn).toBe(true);
+    expect(PROVIDERS.filter((p) => p.signIn).map((p) => p.id)).toEqual(['openai-codex']);
+    expect(OFFERED_PROVIDERS.find((p) => p.id === 'openai-codex')?.models.length).toBeGreaterThan(0);
   });
 
   test('every id resolves, and only `custom` ships without models', () => {
@@ -62,8 +68,8 @@ describe('provider registry', () => {
     expect(modelIn('google', 'gemini-2.5-flash')?.strict).toBe(false);
   });
 
-  test('the panel is offered constrained models only', () => {
-    for (const provider of OFFERED_PROVIDERS) {
+  test('the panel is offered constrained models only, except where the account decides', () => {
+    for (const provider of OFFERED_PROVIDERS.filter((p) => !p.signIn)) {
       expect(provider.models.every((m) => m.strict), provider.id).toBe(true);
     }
   });
@@ -73,7 +79,7 @@ describe('provider registry', () => {
   test('a vendor with no constrained model is not offered, custom always is', () => {
     const offered = OFFERED_PROVIDERS.map((p) => p.id);
     for (const id of PROVIDER_IDS) {
-      expect(offered.includes(id), id).toBe(id === 'custom' || hasConstrainedModel(id));
+      expect(offered.includes(id), id).toBe(id === 'custom' || id === 'openai-codex' || hasConstrainedModel(id));
     }
     expect(offered).not.toContain('xai');
   });

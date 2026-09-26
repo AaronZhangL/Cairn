@@ -9,9 +9,8 @@
  */
 export { codexCliProvider, type CodexOptions } from './codex-cli';
 export {
-  type CodexApiKeyLogin, type CodexLogin, type CodexOAuthLogin,
-  FALLBACK_CODEX_MODEL, readCodexLogin, refreshAccessToken, refreshCodexLogin,
-  type RefreshedTokens,
+  type CodexCredentials, type CodexWireApi,
+  readCodexCredentials, refreshAccessToken, refreshCodexLogin, type RefreshedTokens,
 } from './codex-credentials';
 export {
   edgeTtsNarrator, ensureNarrationReachable, forgetNarrationProbe, speakSample, synthesize,

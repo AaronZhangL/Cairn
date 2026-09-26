@@ -56,7 +56,22 @@ function shellWith(overrides: Partial<ShellSettings['prefs']> = {}): ShellSettin
 const render = (shell?: ShellSettings): string =>
   renderToStaticMarkup(createElement(SettingsProvider, null, createElement(ModelsPage, { shell })));
 
+const CODEX: ProviderInfo = {
+  id: 'openai-codex', label: 'OpenAI Codex', getKeyUrl: 'https://openai.com/codex', faviconDomain: 'openai.com',
+  baseUrl: 'https://chatgpt.com/backend-api', needsBaseUrl: false, signIn: true,
+  models: [{ id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', strict: false }],
+};
+
 describe('ModelsPage', () => {
+  // As in llm-space: the signed-in account replaces the key and the endpoint
+  test('Codex asks for no key and no endpoint, and says it uses the signed-in account', () => {
+    const html = render({ ...shellWith({ generationProvider: 'openai-codex' }), providers: [...PROVIDERS, CODEX] });
+    expect(html).toContain('OpenAI Codex uses your signed-in account. No API key is required.');
+    expect(html).not.toContain('type="password"');
+    expect(html).not.toContain('https://chatgpt.com/backend-api');
+    expect(html).toContain('GPT-5.6 Sol');
+  });
+
   test('renders every provider, and opens on the generation default', () => {
     const html = render(shellWith());
     for (const provider of PROVIDERS) expect(html).toContain(provider.label);

@@ -3,13 +3,29 @@ import { createModels } from '@earendil-works/pi-ai';
 import {
   fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall,
 } from '@earendil-works/pi-ai/providers/faux';
-import type { AssistantMessage } from '@earendil-works/pi-ai';
+import type { AssistantMessage, Tool } from '@earendil-works/pi-ai';
+import { resolveJsonSchemaStrictSampling } from '@earendil-works/pi-ai/api/constrained-sampling';
 import { forcedToolChoice, piLlmProvider, type PiRegistry } from '../../src/main/pi-provider';
 
 const SCHEMA = {
   type: 'object',
   properties: { title: { type: 'string' } },
   required: ['title'],
+  additionalProperties: false,
+} as const;
+
+const variantOf = (kind: string) => ({
+  type: 'object',
+  properties: { kind: { type: 'string', const: kind } },
+  required: ['kind'],
+  additionalProperties: false,
+});
+
+/** The shape of a slide: one of several objects. */
+const UNION_SCHEMA = {
+  type: 'object',
+  properties: { slide: { anyOf: [variantOf('a'), variantOf('b')] } },
+  required: ['slide'],
   additionalProperties: false,
 } as const;
 
@@ -134,6 +150,29 @@ describe('piLlmProvider', () => {
     const { llm, seen } = provider([fauxAssistantMessage('ok')]);
     await llm.complete({ prompt: 'p' });
     expect((seen.options as { maxRetryDelayMs?: number }).maxRetryDelayMs).toBe(0);
+  });
+
+  // Every deck failed on DeepSeek: a slide is a union of objects, which pi-ai
+  // cannot make strict, and `require` turned that into a thrown error.
+  test('a schema pi-ai cannot make strict still reaches a strict model', async () => {
+    const faux = fauxProvider({ provider: 'deepseek', models: [{ id: 'deepseek-flash' }] });
+    const seen: { tools?: readonly Tool[] } = {};
+    faux.setResponses([(context) => {
+      // faux reports the tools it was handed on the first message, not on `context.tools`
+      seen.tools = (context.messages[0] as { toolsAdded?: readonly Tool[] }).toolsAdded;
+      return fauxAssistantMessage([fauxToolCall('emit', { slide: { kind: 'a' } })], { stopReason: 'toolUse' });
+    }]);
+    const models = createModels();
+    models.setProvider(faux.provider);
+    const model = models.getModel('deepseek', 'deepseek-flash')!;
+    const llm = piLlmProvider({
+      providerId: 'deepseek', apiKey: 'k', model: 'deepseek-flash',
+      build: () => ({ models, model }) as PiRegistry,
+    });
+
+    await llm.complete({ prompt: 'p', schema: UNION_SCHEMA });
+    const [tool] = seen.tools ?? [];
+    expect(() => resolveJsonSchemaStrictSampling(tool!, true)).not.toThrow();
   });
 
   test('the system prompt travels separately from the user prompt', async () => {

@@ -3,6 +3,9 @@ import type { Messages } from './messages/en';
 
 type Entry = Messages['errors'][keyof Messages['errors']];
 
+/** Codes whose sentence cannot say what happened: a model call fails for a vendor's own reasons. */
+const TAIL_SAYS_WHY: ReadonlySet<ErrorPayload['code']> = new Set(['unknown', 'llm_failed']);
+
 /**
  * The sentence for a failure, in the reader's language.
  *
@@ -21,7 +24,7 @@ export function errorText(payload: ErrorPayload, t: Messages): string {
 
   // The tail is a stderr snippet or an exit code — never translated, and only
   // worth showing when the sentence above it cannot say what actually happened.
-  return payload.detail && (payload.code === 'unknown' || entry === undefined)
+  return payload.detail && (TAIL_SAYS_WHY.has(payload.code) || entry === undefined)
     ? `${base}\n${payload.detail}`
     : base;
 }

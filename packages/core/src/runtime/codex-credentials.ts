@@ -1,48 +1,32 @@
 /**
- * Borrow whatever the Codex CLI already stored in `~/.codex`.
+ * Borrow whatever the Codex CLI already stored in `~/.codex`, so the
+ * `openai-codex` provider needs no key of its own.
  *
- * The point is to drop the subprocess without making the owner dig out a key
- * they already have. If `codex` is logged in on this machine, everything needed
- * to call the model directly is sitting in `auth.json`, and an HTTP call with
- * it does the same work without the agent harness wrapped around every request.
- *
- * Two shapes come out of that file: an **API key** for the public API, and a
- * **ChatGPT OAuth token** for ChatGPT's own backend — undocumented, and what
- * `llm-space` ships, but not a licensed integration. The companion reads it
- * through `main/companion/model.ts`.
- *
- * Nothing here decides which to use. It reports what is on disk; the caller
- * picks, and the settings panel is where that choice is made visible.
+ * The same reading as llm-space: a ChatGPT OAuth token first — ChatGPT's own
+ * backend, undocumented and not a licensed integration — then an API key.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export interface CodexApiKeyLogin {
-  readonly kind: 'apiKey';
-  readonly apiKey: string;
-  /** Empty when `config.toml` names none; the caller supplies a default. */
-  readonly baseUrl: string;
-  readonly model: string;
-}
+/** The APIs a `wire_api` in `config.toml` can name. */
+export type CodexWireApi = 'openai-completions' | 'anthropic-messages' | 'openai-responses';
 
-export interface CodexOAuthLogin {
-  readonly kind: 'oauth';
-  readonly accessToken: string;
-  /** The backend requires this alongside the token; without it every call 401s. */
-  readonly accountId: string;
-  readonly model: string;
-  /** Absent on a login old enough not to have stored one. */
-  readonly refreshToken?: string;
-}
+export type CodexCredentials =
+  | { readonly mode: 'oauth'; readonly apiKey: string }
+  | {
+    readonly mode: 'apiKey';
+    readonly apiKey: string;
+    readonly api: CodexWireApi;
+    /** Empty when `config.toml` names no endpoint. */
+    readonly baseUrl: string;
+  };
 
-export type CodexLogin =
-  | { readonly kind: 'none' }
-  | CodexApiKeyLogin
-  | CodexOAuthLogin;
-
-/** What `codex` falls back to, and what a ChatGPT login is most likely to allow. */
-export const FALLBACK_CODEX_MODEL = 'gpt-5.6-sol';
+const WIRE_API: Readonly<Record<string, CodexWireApi>> = {
+  completions: 'openai-completions',
+  messages: 'anthropic-messages',
+  responses: 'openai-responses',
+};
 
 /**
  * Where a ChatGPT login is renewed, and as whom.
@@ -54,33 +38,27 @@ export const FALLBACK_CODEX_MODEL = 'gpt-5.6-sol';
 const TOKEN_URL = 'https://auth.openai.com/oauth/token';
 const CODEX_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 
-export async function readCodexLogin(
+/** The same rules as llm-space's `getCodexCredentials`: the signed-in account first, then an API key. */
+export async function readCodexCredentials(
   codexDir = join(homedir(), '.codex'),
-): Promise<CodexLogin> {
+): Promise<CodexCredentials | undefined> {
   const auth = await readJson(join(codexDir, 'auth.json'));
-  if (!auth) return { kind: 'none' };
+  if (!auth) return undefined;
 
-  const config = await readConfig(join(codexDir, 'config.toml'));
-  const model = config.model || FALLBACK_CODEX_MODEL;
+  const tokens = auth.tokens as { access_token?: unknown } | undefined;
+  const oauthToken = firstString(tokens?.access_token);
+  if (oauthToken) return { mode: 'oauth', apiKey: oauthToken };
 
-  // An API key wins when both are present: it is the licensed path.
-  const apiKey = firstString(auth.OPENAI_API_KEY, auth.apiKey);
-  if (apiKey) return { kind: 'apiKey', apiKey, baseUrl: config.baseUrl, model };
+  const apiKey = firstString(auth.OPENAI_API_KEY);
+  if (!apiKey) return undefined;
 
-  const tokens = auth.tokens as {
-    access_token?: unknown; account_id?: unknown; refresh_token?: unknown;
-  } | undefined;
-  const accessToken = firstString(tokens?.access_token);
-  const accountId = firstString(tokens?.account_id);
-  const refreshToken = firstString(tokens?.refresh_token);
-  if (accessToken && accountId) {
-    return {
-      kind: 'oauth', accessToken, accountId, model,
-      ...(refreshToken ? { refreshToken } : {}),
-    };
-  }
-
-  return { kind: 'none' };
+  const provider = await activeModelProvider(join(codexDir, 'config.toml'));
+  return {
+    mode: 'apiKey',
+    apiKey,
+    api: provider?.api ?? 'openai-responses',
+    baseUrl: provider?.baseUrl ?? '',
+  };
 }
 
 export interface RefreshedTokens {
@@ -175,19 +153,29 @@ async function readJson(path: string): Promise<Record<string, unknown> | undefin
   }
 }
 
-/**
- * The two keys worth reading out of `config.toml`.
- *
- * Deliberately regexes rather than a TOML parser: two optional values do not
- * justify a dependency, and a config this cannot read falls back to defaults
- * rather than failing the whole run.
- */
-export async function readConfig(
+/** The `[model_providers.<name>]` section `model_provider` points at, if it names an endpoint. */
+async function activeModelProvider(
   path: string,
-): Promise<{ readonly model: string; readonly baseUrl: string }> {
-  const toml = await readFile(path, 'utf8').catch(() => '');
-  return {
-    model: toml.match(/^\s*model\s*=\s*["']([^"']+)["']/m)?.[1] ?? '',
-    baseUrl: toml.match(/^\s*base_url\s*=\s*["']([^"']+)["']/m)?.[1] ?? '',
-  };
+): Promise<{ readonly api: CodexWireApi; readonly baseUrl: string } | undefined> {
+  const lines = (await readFile(path, 'utf8').catch(() => '')).split('\n');
+  const active = lines
+    .map((line) => /^\s*model_provider\s*=\s*"([^"]+)"/.exec(line)?.[1])
+    .find((value) => value !== undefined);
+  if (!active) return undefined;
+
+  const header = `[model_providers.${active}]`;
+  let inSection = false;
+  let baseUrl: string | undefined;
+  let wireApi: string | undefined;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === header) { inSection = true; continue; }
+    if (inSection && trimmed.startsWith('[')) break;
+    if (!inSection) continue;
+    const match = /^(\w+)\s*=\s*"([^"]*)"/.exec(trimmed);
+    if (match?.[1] === 'base_url') baseUrl = match[2];
+    else if (match?.[1] === 'wire_api') wireApi = match[2];
+  }
+  if (!baseUrl) return undefined;
+  return { api: (wireApi ? WIRE_API[wireApi] : undefined) ?? 'openai-responses', baseUrl };
 }

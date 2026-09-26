@@ -29,7 +29,8 @@ export const en = {
     llm_timeout: 'The model took too long to answer.',
     llm_aborted: 'That call was cancelled.',
     llm_bad_output: 'The model returned something this app could not read.',
-    llm_failed: 'The model command failed. Check that `codex` is installed and on PATH.',
+    llm_failed: 'The model call failed.',
+    no_model: 'No model is set up. Add an API key in Settings, or sign in to Codex with `codex login`.',
 
     tts_missing: 'The narration service could not be reached, so nothing can be narrated. Check the network and try again.',
     tts_failed: 'Narration failed while synthesising.',
@@ -253,6 +254,7 @@ export const en = {
       status: 'In force',
       statusReady: (provider: string, detail: string) => `${provider} · ${detail}`,
       statusNoKey: 'No API key yet — generation will fail until one is set.',
+      signedInAccount: 'OpenAI Codex uses your signed-in account. No API key is required.',
       recheck: 'Check again',
       chatSource: 'Companion model',
       chatHint: 'Only affects conversations. Station generation keeps the model above.',

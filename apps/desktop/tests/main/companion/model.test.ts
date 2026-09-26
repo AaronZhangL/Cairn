@@ -3,20 +3,21 @@ import { DEFAULT_SHELL_SETTINGS } from '../../../src/shared/settings';
 import { resolveChatModel, ChatModelError } from '../../../src/main/companion/model';
 
 describe('resolveChatModel', () => {
-  const jwt = (expiresAtSeconds: number): string =>
-    `header.${Buffer.from(JSON.stringify({ exp: expiresAtSeconds })).toString('base64url')}.signature`;
+  const none = { env: {}, codex: async () => undefined };
 
-  test('uses the existing Codex OAuth login without moving its credential', async () => {
-    const resolved = await resolveChatModel(DEFAULT_SHELL_SETTINGS, {
-      readLogin: async () => ({
-        kind: 'oauth', accessToken: 'test-token', accountId: 'acct', model: 'gpt-5.6-sol',
-      }),
+  test('Codex answers with the signed-in account', async () => {
+    const resolved = await resolveChatModel({ ...DEFAULT_SHELL_SETTINGS, generationProvider: 'openai-codex' }, {
+      env: {}, codex: async () => ({ mode: 'oauth', apiKey: 'test-token' }),
     });
-
     expect(resolved.model.provider).toBe('openai-codex');
     expect(resolved.model.id).toBe('gpt-5.6-sol');
     expect(await resolved.getApiKey('openai-codex')).toBe('test-token');
   });
+
+  test('nothing configured anywhere is reported before any request', async () => {
+    await expect(resolveChatModel(DEFAULT_SHELL_SETTINGS, none)).rejects.toBeInstanceOf(ChatModelError);
+  });
+
 
   test('`inherit` follows the generation provider', async () => {
     const resolved = await resolveChatModel({
@@ -24,7 +25,7 @@ describe('resolveChatModel', () => {
       generationProvider: 'anthropic',
       chatProvider: 'inherit',
       providers: { anthropic: { apiKey: 'secret', baseUrl: '', model: 'claude-haiku-4-5' } },
-    });
+    }, none);
 
     expect(resolved.model.provider).toBe('anthropic');
     expect(resolved.model.id).toBe('claude-haiku-4-5');
@@ -36,7 +37,7 @@ describe('resolveChatModel', () => {
       ...DEFAULT_SHELL_SETTINGS,
       generationProvider: 'custom',
       providers: { custom: { apiKey: 'secret', baseUrl: 'https://example.com/v1', model: 'custom-chat' } },
-    });
+    }, none);
 
     expect(resolved.model.id).toBe('custom-chat');
     expect(resolved.model.baseUrl).toBe('https://example.com/v1');
@@ -57,7 +58,7 @@ describe('resolveChatModel', () => {
         openai: { apiKey: 'generation-only', baseUrl: '', model: '' },
         [id]: { apiKey: 'chat-only', baseUrl: '', model },
       },
-    });
+    }, none);
     expect(resolved.model.provider).toBe(id);
     expect(resolved.model.api).toBe(api);
     expect(resolved.model.id).toBe(model);
@@ -71,7 +72,7 @@ describe('resolveChatModel', () => {
       ...DEFAULT_SHELL_SETTINGS,
       chatProvider: 'deepseek',
       providers: { deepseek: { apiKey: 'secret', baseUrl: '', model: '' } },
-    });
+    }, none);
     expect(resolved.model.id).toBe('deepseek-flash');
   });
 
@@ -80,7 +81,7 @@ describe('resolveChatModel', () => {
       ...DEFAULT_SHELL_SETTINGS,
       chatProvider: 'anthropic',
       providers: { anthropic: { apiKey: '', baseUrl: '', model: 'claude-haiku-4-5' } },
-    })).rejects.toMatchObject({ code: 'no_credential' });
+    }, none)).rejects.toMatchObject({ code: 'no_credential' });
   });
 
   test('an unavailable provider model fails explicitly', async () => {
@@ -88,47 +89,10 @@ describe('resolveChatModel', () => {
       ...DEFAULT_SHELL_SETTINGS,
       chatProvider: 'deepseek',
       providers: { deepseek: { apiKey: 'secret', baseUrl: '', model: 'not-in-catalog' } },
-    })).rejects.toMatchObject({ code: 'model_unavailable' });
+    }, none)).rejects.toMatchObject({ code: 'model_unavailable' });
   });
 
-  test('reports missing credentials before a model request', async () => {
-    await expect(resolveChatModel(DEFAULT_SHELL_SETTINGS, {
-      readLogin: async () => ({ kind: 'none' }),
-    })).rejects.toBeInstanceOf(ChatModelError);
-  });
 
-  test('refreshes an expired OAuth token before passing it to Pi', async () => {
-    let current = jwt(100);
-    let refreshes = 0;
-    const resolved = await resolveChatModel(DEFAULT_SHELL_SETTINGS, {
-      readLogin: async () => ({ kind: 'oauth', accessToken: current, refreshToken: 'refresh', accountId: 'acct', model: 'gpt-5.6-sol' }),
-      refreshLogin: async () => { refreshes += 1; current = jwt(10_000); return current; },
-      now: () => 1_000_000,
-    });
 
-    expect(await resolved.getApiKey('openai-codex')).toBe(current);
-    expect(await resolved.getApiKey('openai-codex')).toBe(current);
-    expect(refreshes).toBe(1);
-  });
 
-  test('does not refresh a valid OAuth token', async () => {
-    const token = jwt(10_000);
-    let refreshes = 0;
-    const resolved = await resolveChatModel(DEFAULT_SHELL_SETTINGS, {
-      readLogin: async () => ({ kind: 'oauth', accessToken: token, refreshToken: 'refresh', accountId: 'acct', model: 'gpt-5.6-sol' }),
-      refreshLogin: async () => { refreshes += 1; return 'new-token'; },
-      now: () => 1_000_000,
-    });
-
-    expect(await resolved.getApiKey('openai-codex')).toBe(token);
-    expect(refreshes).toBe(0);
-  });
-
-  test('does not pass a known expired token when refresh fails', async () => {
-    await expect(resolveChatModel(DEFAULT_SHELL_SETTINGS, {
-      readLogin: async () => ({ kind: 'oauth', accessToken: jwt(100), refreshToken: 'refresh', accountId: 'acct', model: 'gpt-5.6-sol' }),
-      refreshLogin: async () => undefined,
-      now: () => 1_000_000,
-    })).rejects.toBeInstanceOf(ChatModelError);
-  });
 });

@@ -40,6 +40,8 @@ export interface ProviderInfo {
   readonly envKey?: string;
   /** Only a custom endpoint has none of its own. */
   readonly needsBaseUrl: boolean;
+  /** Uses the account `codex login` signed in: no key field, no endpoint. */
+  readonly signIn?: boolean;
   readonly models: readonly ProviderModelInfo[];
 }
 
@@ -52,7 +54,7 @@ export interface ProviderProfile {
 }
 
 export interface ModelStatus {
-  /** A provider id, or `codex-cli` when nothing is configured. Never translated. */
+  /** The provider that will actually answer. Never translated. */
   readonly provider: string;
   readonly ready: boolean;
   /** An endpoint, a model name, or a reason. Never translated. */

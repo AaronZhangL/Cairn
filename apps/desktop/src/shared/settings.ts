@@ -124,7 +124,7 @@ export type ChatProvider = ProviderId | 'inherit';
 
 export interface ModelStatus {
   /** Which route is in force. */
-  readonly provider: ProviderId | 'codex-cli';
+  readonly provider: ProviderId;
   /** False means generation will fail until the reader fixes something. */
   readonly ready: boolean;
   /** The endpoint, the model, or why it is not ready. Shown verbatim. */
@@ -149,8 +149,7 @@ export interface ShellSettingsValues {
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 
 export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
-  // Nothing configured. `resolveProvider` falls back to the codex CLI and reports
-  // itself as not ready, which is what the panel shows until a key is entered.
+  // Nothing configured: `resolveProvider` reports not ready until a key or a codex login exists.
   providers: {},
   generationProvider: 'openai',
   chatProvider: 'inherit',

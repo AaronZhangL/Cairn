@@ -87,37 +87,45 @@ function ProviderDetail({ shell, provider }: {
 
   return (
     <Section title={provider.label}>
-      <StackedRow
-        label={t.settings.models.apiKey}
-        htmlFor={keyId}
-        aside={provider.getKeyUrl ? (
-          <Link className="set-link" href={provider.getKeyUrl}>
-            {t.settings.models.getKey}
-          </Link>
-        ) : undefined}
-      >
-        <SecretField
-          id={keyId}
-          value={profile?.apiKey ?? (provider.envKey ? `$${provider.envKey}` : '')}
-          onChange={(value) => shell.setProvider(provider.id, { apiKey: value })}
-          showLabel={t.settings.search.showKey}
-          hideLabel={t.settings.search.hideKey}
-        />
-      </StackedRow>
+      {provider.signIn ? (
+        <div className="set-row">
+          <span className="set-hint">{t.settings.models.signedInAccount}</span>
+        </div>
+      ) : (
+        <>
+          <StackedRow
+            label={t.settings.models.apiKey}
+            htmlFor={keyId}
+            aside={provider.getKeyUrl ? (
+              <Link className="set-link" href={provider.getKeyUrl}>
+                {t.settings.models.getKey}
+              </Link>
+            ) : undefined}
+          >
+            <SecretField
+              id={keyId}
+              value={profile?.apiKey ?? (provider.envKey ? `$${provider.envKey}` : '')}
+              onChange={(value) => shell.setProvider(provider.id, { apiKey: value })}
+              showLabel={t.settings.search.showKey}
+              hideLabel={t.settings.search.hideKey}
+            />
+          </StackedRow>
 
-      <Row
-        label={t.settings.models.baseUrl}
-        {...(provider.needsBaseUrl ? { hint: t.settings.models.baseUrlRequired } : {})}
-        htmlFor={urlId}
-      >
-        <input
-          id={urlId}
-          className="set-input"
-          value={profile?.baseUrl ?? ''}
-          placeholder={provider.baseUrl || t.settings.models.baseUrlPlaceholder}
-          onChange={(e) => shell.setProvider(provider.id, { baseUrl: e.target.value })}
-        />
-      </Row>
+          <Row
+            label={t.settings.models.baseUrl}
+            {...(provider.needsBaseUrl ? { hint: t.settings.models.baseUrlRequired } : {})}
+            htmlFor={urlId}
+          >
+            <input
+              id={urlId}
+              className="set-input"
+              value={profile?.baseUrl ?? ''}
+              placeholder={provider.baseUrl || t.settings.models.baseUrlPlaceholder}
+              onChange={(e) => shell.setProvider(provider.id, { baseUrl: e.target.value })}
+            />
+          </Row>
+        </>
+      )}
 
       {provider.models.length > 0 ? (
         <Row

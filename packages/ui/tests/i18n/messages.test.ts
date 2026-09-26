@@ -99,6 +99,13 @@ describe('errorText', () => {
     expect(text).toContain('boom');
   });
 
+  // Every provider fails as `llm_failed`; blaming codex sent a DeepSeek reader to check their PATH
+  test.each(LOCALES)('%s shows why a model call failed, without naming codex', (locale) => {
+    const text = errorText(payload('llm_failed', {}, 'object and array unions are unsupported'), messagesFor(locale));
+    expect(text).toContain('object and array unions are unsupported');
+    expect(text).not.toContain('codex');
+  });
+
   test('a known code does not have its technical tail appended', () => {
     const text = errorText(payload('tts_failed', {}, 'stderr noise'), messagesFor('en'));
     expect(text).not.toContain('stderr noise');

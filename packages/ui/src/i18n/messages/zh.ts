@@ -20,7 +20,8 @@ export const zh: Messages = {
     llm_timeout: '模型太久没有回应。',
     llm_aborted: '这次调用已取消。',
     llm_bad_output: '模型返回了这个程序读不懂的内容。',
-    llm_failed: 'codex 命令失败了。确认它已安装并在 PATH 上。',
+    llm_failed: '模型调用失败了。',
+    no_model: '还没有可用的模型。在设置里填一个 API 密钥，或者用 `codex login` 登录 Codex。',
 
     tts_missing: '连不上朗读服务，无法合成旁白。检查网络后重试。',
     tts_failed: '旁白合成失败。',
@@ -241,6 +242,7 @@ export const zh: Messages = {
       status: '当前生效',
       statusReady: (provider: string, detail: string) => `${provider} · ${detail}`,
       statusNoKey: '还没有 API 密钥——在填之前生成会失败。',
+      signedInAccount: 'OpenAI Codex 使用当前已登录账户，无需 API Key。',
       recheck: '重新检测',
       chatSource: '对话模型',
       chatHint: '只影响对话。生成站点仍用上面那个模型。',

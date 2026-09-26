@@ -180,7 +180,7 @@ It is the only process that listens, and it is not reachable from outside the ma
 | Desktop shell | Electrobun | Small native shell; the reference project ships Mac and Windows with it |
 | Build (webview) | Vite | Small output, fast dev |
 | UI | React | The slide layouts are components; nothing heavier is needed |
-| Generation model | `LlmProvider` | Codex login, API key, or CLI fallback. See below |
+| Generation model | `LlmProvider` | An API key, or the `codex login` account as the OpenAI Codex provider. See below |
 | Companion model | Pi agent core + Pi AI | Streaming tool loop, cancellation, and selected model route |
 | Narration | `edge-tts`, voice `zh-CN-YunjianNeural` | Free, no key, sentence-level subtitles alongside the audio; Microsoft tunes this voice for audiobooks and commentary |
 | Web search | Tavily | The companion may search when it helps answer accurately |
@@ -208,7 +208,8 @@ never interpolated into tag names or instruction sections; test rendered prompts
 containing `&`, `<`, quotes, and text that looks like a closing tag. The pipeline prompts are
 only partly tagged today, so this is a migration target, not a description of the code.
 
-**The cost of `codex exec`:** each call carries roughly 18k tokens of agent harness overhead,
+**The cost of `codex exec`** — generation's original route, now used only by `bun run replay`:
+each call carries roughly 18k tokens of agent harness overhead,
 several times the chapter text itself. That is why the map stage batches chapters
 (`DEFAULT_BATCH_SIZE`) rather than sending one call per chapter. A plain HTTP provider would have
 a few hundred tokens of overhead and could drop the batch size to 1 for cleaner per-chapter
@@ -273,6 +274,15 @@ service over its WebSocket instead. Word-boundary events replace the CLI's SRT, 
 rather than joining the event texts, because `alignSentences` locates a sentence by cumulative
 character offset and joined words drop every space. Measured, that error was two seconds by the
 second sentence of an English paragraph.
+
+### Codex is a provider, the way llm-space has it
+
+The codex login used to be a hidden fallback: a default provider with no key quietly became
+`codex exec` for generation and the ChatGPT backend for the companion, and a spent Codex quota
+surfaced as an unexplained failure. It is now `openai-codex` in the registry, credentials read
+exactly as llm-space's `getCodexCredentials` reads them, with the panel saying it uses the
+signed-in account. `main/route.ts` follows llm-space's `resolveModelConfig`: the default if
+available, else the first available provider by name, else nothing — reported as `no_model`.
 
 ### One provider registry for generation and the companion
 

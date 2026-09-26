@@ -1,14 +1,8 @@
 /**
  * The model, plus optional recording.
  *
- * Two ways to reach it, both behind `LlmProvider` so the choice is a setting
- * rather than a code change:
- *
- *  - **A configured provider** — whichever of `shared/providers.ts` the reader
- *    holds a key for, called through pi-ai.
- *  - **The codex CLI** — the original, kept for when nothing is configured. It
- *    costs ~18k tokens of agent harness per call, which is why it is no longer
- *    what runs by default and why it reports itself as not ready.
+ * Whichever provider of `shared/providers.ts` has credentials — a key, or for
+ * `openai-codex` the `codex login` account — called through pi-ai.
  *
  * Tracing is off unless turned on — by `CAIRN_TRACE=1` or in settings — and
  * deliberately so: a trace holds the prompts, which for the map stage is the
@@ -22,10 +16,11 @@
 import { join } from 'node:path';
 import { tracingProvider } from '@cairn/core/llm';
 import type { LlmProvider } from '@cairn/core/llm';
-import { codexCliProvider, traceDirSink } from '@cairn/core/runtime';
-import {
-  defaultApiKey, modelOf, resolveSecret, type ModelStatus, type ShellSettingsValues,
-} from '../shared/settings';
+import { CairnError } from '@cairn/core/errors';
+import { type CodexCredentials, traceDirSink } from '@cairn/core/runtime';
+import type { ModelStatus, ShellSettingsValues } from '../shared/settings';
+import { codexCredentials } from './codex-provider';
+import { resolveRoute } from './route';
 import { piLlmProvider } from './pi-provider';
 import { readSettings, tracingOn } from './settings';
 import { DATA_DIR } from './store';
@@ -34,8 +29,14 @@ import { DATA_DIR } from './store';
 export const traceDir = (bookId: string): string =>
   join(DATA_DIR, '.cache', bookId, 'trace');
 
+/** What resolving reads besides settings; injected by tests so they never see this machine's login. */
+export interface ResolveInputs {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly codex?: () => Promise<CodexCredentials | undefined>;
+}
+
 /**
- * Build the provider the current settings ask for.
+ * Build the provider that will actually answer: see `route.ts` for which.
  *
  * Resolved per run rather than once at import: the reader can change this in
  * the settings panel while a book is open, and the next run should honour it
@@ -43,31 +44,26 @@ export const traceDir = (bookId: string): string =>
  */
 export async function resolveProvider(
   settings?: ShellSettingsValues,
-): Promise<{ readonly provider: LlmProvider; readonly status: ModelStatus }> {
+  inputs: ResolveInputs = {},
+): Promise<{ readonly provider: LlmProvider | undefined; readonly status: ModelStatus }> {
   const stored = settings ?? await readSettings();
-  const id = stored.generationProvider;
-  const profile = stored.providers[id];
-  const model = modelOf(stored, id);
-  const apiKey = resolveSecret(profile?.apiKey ?? defaultApiKey(id), process.env) ?? '';
-  const baseUrl = profile?.baseUrl.trim() ?? '';
+  const route = resolveRoute(stored, inputs.env ?? process.env, await (inputs.codex ?? codexCredentials)());
 
   // No key is not an error yet — the reader may be halfway through typing one.
   // Generation is what surfaces it, and the panel says so before then.
-  if (apiKey.length === 0 && !baseUrl) {
-    return {
-      provider: codexCliProvider(),
-      status: { provider: 'codex-cli', ready: false, detail: 'no-api-key' },
-    };
+  if (!route) {
+    return { provider: undefined, status: { provider: stored.generationProvider, ready: false, detail: 'no-api-key' } };
   }
 
   return {
     provider: piLlmProvider({
-      providerId: id,
-      apiKey,
-      model,
-      ...(baseUrl ? { baseUrl } : {}),
+      providerId: route.id,
+      apiKey: route.apiKey,
+      model: route.model,
+      ...(route.baseUrl ? { baseUrl: route.baseUrl } : {}),
+      ...(route.codex ? { codex: route.codex } : {}),
     }),
-    status: { provider: id, ready: true, detail: model },
+    status: { provider: route.id, ready: true, detail: route.model },
   };
 }
 
@@ -78,5 +74,6 @@ export async function modelStatus(): Promise<ModelStatus> {
 /** The provider for work done on one book's behalf, recorded under its cache when tracing is on. */
 export async function providerFor(bookId: string): Promise<LlmProvider> {
   const { provider } = await resolveProvider();
+  if (!provider) throw new CairnError('no_model');
   return (await tracingOn()) ? tracingProvider(provider, traceDirSink(traceDir(bookId))) : provider;
 }
