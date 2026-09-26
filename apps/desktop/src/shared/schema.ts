@@ -45,7 +45,7 @@ export type BunSchema = RPCSchema<{
     setSettings: { params: Partial<ShellSettingsValues>; response: ShellSettingsValues };
     /** Whether this is a dev build, which shows the switches only a developer needs. */
     devBuild: { params: void; response: boolean };
-    /** The library path, for showing and for revealing in Finder. */
+    /** The library path, for showing and for revealing in the file manager. */
     dataDir: { params: void; response: string };
     /** Writes a sample under the library root and returns its relative path. */
     previewVoice: { params: { locale: ContentLocale }; response: string };

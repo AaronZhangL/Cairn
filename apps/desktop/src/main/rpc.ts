@@ -229,9 +229,9 @@ export function createHandlers({ books, weread, devBuild, menu, emit }: HandlerD
       return rel;
     },
 
-    /** Show the library in Finder or Explorer. Never opens a file, only reveals the folder. */
+    /** Show the library in the system file manager. Never opens a file, only reveals the folder. */
     async revealDataDir(): Promise<null> {
-      const opener = process.platform === 'win32' ? 'explorer' : 'open';
+      const opener = { darwin: 'open', win32: 'explorer' }[process.platform as string] ?? 'xdg-open';
       Bun.spawn([opener, DATA_DIR], { stdout: 'ignore', stderr: 'ignore' });
       return null;
     },

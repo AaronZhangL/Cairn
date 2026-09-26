@@ -311,7 +311,7 @@ export const en = {
       trace: 'Record every model call',
       traceHint: 'For troubleshooting. Uses more disk space.',
       location: 'Where books and audio live',
-      reveal: 'Reveal in Finder',
+      reveal: 'Open folder',
       cache: 'Pipeline cache',
       cacheHint: 'Clearing it means the model runs again on the next generation.',
       clear: 'Clear cache',

@@ -10,7 +10,7 @@ body {
      below multiplies by --text-scale too. Slide type is deliberately not
      scaled — it is a fraction of the stage and its budgets live in fit.ts. */
   font: calc(15px * var(--text-scale, 1))/1.55 -apple-system, 'SF Pro Text',
-        'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+        'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   /* Body sits at zero tracking; larger type tightens and smaller type opens up.
      One letter-spacing for every size is wrong somewhere — see docs/DESIGN.md. */
   letter-spacing: 0;
@@ -684,7 +684,7 @@ body {
 .set-control { flex: 0 0 auto; }
 .set-path {
   display: block; margin-top: 3px; max-width: 100%;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: calc(11px * var(--text-scale, 1)); color: var(--dim);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: calc(11px * var(--text-scale, 1)); color: var(--dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -865,7 +865,7 @@ body {
 .md p { white-space: pre-line; }
 .md .md-h { font-weight: 700; color: var(--ink); }
 .md strong { font-weight: 650; color: var(--ink); }
-.md code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; background: var(--soft); border-radius: 4px; padding: 0 .3em; }
+.md code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92em; background: var(--soft); border-radius: 4px; padding: 0 .3em; }
 .md pre { overflow-x: auto; background: var(--soft); border-radius: 6px; padding: 8px 10px; }
 .md pre code { background: none; padding: 0; }
 .md blockquote { border-left: 2px solid var(--line); padding-left: 9px; color: var(--dim); }

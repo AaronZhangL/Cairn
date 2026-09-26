@@ -382,7 +382,7 @@
 .s-aside {
   align-self: flex-end; max-width: 60cqw; margin-top: -.6cqw;
   display: flex; align-items: center; gap: 1.2cqw;
-  font-family: Georgia, 'Songti SC', serif; font-style: italic; font-synthesis: none;
+  font-family: Georgia, 'Songti SC', SimSun, serif; font-style: italic; font-synthesis: none;
   font-size: calc(1.7cqw * var(--fit, 1)); color: var(--stage-dim);
   letter-spacing: calc(0em + var(--fit-track, 0em));
   white-space: nowrap;

@@ -299,7 +299,7 @@ export const zh: Messages = {
       trace: '记录每次模型调用',
       traceHint: '用于排查问题，会占用更多磁盘空间。',
       location: '书与音频存放位置',
-      reveal: '在访达中打开',
+      reveal: '打开文件夹',
       cache: '管线缓存',
       cacheHint: '清掉后重新生成会重跑模型。',
       clear: '清空缓存',

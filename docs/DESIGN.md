@@ -108,7 +108,8 @@ The pattern: **large type tightens, body sits at zero, small type opens up**; le
 inversely to size. Hierarchy is built from weight, size and leading together, not from size
 alone — weight adds presence without taking more space.
 
-System fonts first (`-apple-system` / `SF Pro Text` / `PingFang SC`), with
+System fonts first (`-apple-system` / `SF Pro Text` / `PingFang SC`; `Segoe UI` /
+`Microsoft YaHei` on Windows), with
 `font-optical-sizing: auto`. They already ship optical sizing and tracking tables; override only
 with a reason.
 
