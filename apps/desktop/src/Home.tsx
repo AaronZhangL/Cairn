@@ -6,6 +6,7 @@ import type { LibraryEntry } from '@cairn/core/store/library';
 import { errorText, GearMark, TrashMark, useT } from '@cairn/ui';
 import { bookMeta, inShell } from './bridge';
 import type { BookMeta } from './shared/types';
+import { shortcuts } from './shortcut';
 
 /**
  * The first screen: put a book in.
@@ -71,7 +72,7 @@ export function Home({
           className="home-gear"
           onClick={onSettings}
           aria-label={t.home.settings}
-          title={`${t.home.settings} (⌘,)`}
+          title={`${t.home.settings} (${shortcuts.label(',')})`}
         >
           <GearMark />
         </button>

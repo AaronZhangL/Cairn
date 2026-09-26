@@ -15,6 +15,7 @@ import {
   listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, retryBook, setMenuLocale,
   wereadStart,
 } from './bridge';
+import { shortcuts } from './shortcut';
 import { useBundle } from './useBundle';
 import { useShellSettings } from './useShellSettings';
 import { applyCompanionEvent, beginCompanionTurn, emptyCompanionView } from './companion-state';
@@ -154,13 +155,13 @@ export function App(): ReactElement {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // ⌘, opens settings, as it does in every macOS app
-      if (e.metaKey && e.key === ',') {
+      if (shortcuts.matches(e, ',')) {
         e.preventDefault();
         setSettingsOpen(true);
         return;
       }
       // ⌘B / ⌘J fold the side panes, as they do in an editor
-      if (e.metaKey && (e.key === 'b' || e.key === 'j')) {
+      if (shortcuts.matches(e, 'b') || shortcuts.matches(e, 'j')) {
         e.preventDefault();
         (e.key === 'b' ? left : right).toggleCollapsed();
         return;
@@ -284,13 +285,13 @@ export function App(): ReactElement {
         control={{ collapsed: left.state.collapsed, toggle: left.toggleCollapsed }}
         side="left"
         label={t.panel.stagePane}
-        hint="⌘B"
+        hint={shortcuts.label('b')}
       />
       <PanelToggle
         control={{ collapsed: right.state.collapsed, toggle: right.toggleCollapsed }}
         side="right"
         label={t.panel.askPane}
-        hint="⌘J"
+        hint={shortcuts.label('j')}
       />
 
       <StagePane
