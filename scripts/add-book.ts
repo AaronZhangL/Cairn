@@ -2,7 +2,9 @@
 /**
  * Add a book to the app's library from the terminal.
  *
- *   bun run add-book <file> [--budget quick|brief|solid|full]
+ *   bun run add-book <file> [more.md …] [--budget quick|brief|solid|full]
+ *
+ * Several files must all be Markdown notes; they are walked as one path.
  *
  * The same book builder the app runs, with the app's settings and library, so
  * a book added here is the book the app would have made — and a run cut short
@@ -11,10 +13,11 @@
 import { resolve } from 'node:path';
 import { bookIdFor, createBookBuilder } from '../packages/core/src/books/builder';
 import type { DeckStatus, Progress } from '../packages/core/src/books/progress';
+import { ACCEPTED_EXTENSIONS } from '../packages/core/src/parse/format';
 import { budgetsFor, shapeOf, suggestBudgets, type BudgetId } from '../packages/core/src/pipeline/budget';
 import { edgeTtsNarrator } from '../packages/core/src/runtime/edge-tts-ws';
 import { providerFor } from '../apps/desktop/src/main/provider';
-import { readBook } from '../apps/desktop/src/main/inspect';
+import { readBook, sourceOf } from '../apps/desktop/src/main/inspect';
 import { readSettings } from '../apps/desktop/src/main/settings';
 import { library } from '../apps/desktop/src/main/store';
 import { voiceFor } from '../apps/desktop/src/shared/settings';
@@ -23,14 +26,15 @@ const BUDGET_IDS: readonly BudgetId[] = ['quick', 'brief', 'solid', 'full'];
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const file = args.find((a) => !a.startsWith('--'));
-  if (!file) return usage();
+  const files = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--budget');
+  if (files.length === 0) return usage();
 
   const wanted = flag(args, '--budget') as BudgetId | undefined;
   if (wanted && !BUDGET_IDS.includes(wanted)) return usage(`未知预算：${wanted}`);
 
-  const source = resolve(file);
-  const book = await readBook(source);
+  const paths = files.map((f) => resolve(f));
+  const source = sourceOf(paths);
+  const book = await readBook(paths);
   console.log(`《${book.title}》${book.author ? ` · ${book.author}` : ''}`);
   console.log(`${book.chapters.length} 章 · ${book.totalWords.toLocaleString()} 字\n`);
 
@@ -82,9 +86,9 @@ const flag = (args: string[], name: string): string | undefined => {
 
 function usage(message?: string): void {
   if (message) console.error(`${message}\n`);
-  console.log(`用法：bun run add-book <书文件> [--budget quick|brief|solid|full]
+  console.log(`用法：bun run add-book <书文件 | 多篇 .md 笔记> [--budget quick|brief|solid|full]
 
-支持 .epub / .txt / .md
+支持 ${ACCEPTED_EXTENSIONS.join(' / ')}
 预算档位：${BUDGET_IDS.map((id) => `\n  ${id}`).join('')}
 
 四个档位的实际时长按书的体量和章节结构推导，选书之后才知道。

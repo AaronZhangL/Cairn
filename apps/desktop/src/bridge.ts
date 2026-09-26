@@ -159,9 +159,9 @@ export async function pickBook(): Promise<BookPreview | null> {
   return (await connect()).request.pickBook(undefined, NO_LIMIT).catch(rethrow);
 }
 
-export async function generateBook(filePath: string, budgetId: BudgetId): Promise<LibraryEntry> {
+export async function generateBook(filePaths: readonly string[], budgetId: BudgetId): Promise<LibraryEntry> {
   if (!inShell) throw offline('offline_generate');
-  return (await connect()).request.generateBook({ filePath, budgetId }, NO_LIMIT).catch(rethrow);
+  return (await connect()).request.generateBook({ filePaths, budgetId }, NO_LIMIT).catch(rethrow);
 }
 
 export async function markBookFinished(bookId: string, nodeId: string): Promise<boolean> {

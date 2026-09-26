@@ -11,6 +11,7 @@
  */
 
 import type { ContentLocale } from '../parse/language';
+import type { SourceKind } from '../types';
 
 /**
  * What a run is worth, recorded rather than recomputed.
@@ -64,6 +65,8 @@ export interface LibraryEntry {
    */
   readonly language?: ContentLocale;
   readonly voice?: string;
+  /** Recorded so a half-built path of notes resumes speaking of notes. Absent means a book. */
+  readonly kind?: SourceKind;
 }
 
 export const LIBRARY_INDEX = 'books.json';

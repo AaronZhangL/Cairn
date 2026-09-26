@@ -63,16 +63,24 @@ function narrator(): Narrator & { voices: string[] } {
 let library: Library;
 let voices: string[];
 let statuses: DeckStatus[];
+let requests: LlmRequest[];
 let builder: BookBuilder;
+
+const NOTES_MARK = '自己写的笔记';
 
 beforeEach(async () => {
   library = openLibrary(await mkdtemp(join(tmpdir(), 'cairn-builder-')));
   const n = narrator();
   voices = n.voices;
   statuses = [];
+  requests = [];
   builder = createBookBuilder({
     library, narrator: n,
-    providerFor: async () => model(),
+    providerFor: async () => {
+      const m = model();
+      requests = m.seen;
+      return m;
+    },
     voiceFor: async (language) => (language === 'zh' ? 'zh-CN-XiaoxiaoNeural' : 'en-US-AvaNeural'),
     onDeckStatus: (s) => statuses.push(s),
   });
@@ -109,6 +117,22 @@ describe('generate', () => {
     await settled;
     expect(entry.voice).toBe('zh-CN-XiaoxiaoNeural');
     expect(new Set(voices)).toEqual(new Set(['zh-CN-XiaoxiaoNeural']));
+  });
+
+  test('notes are spoken of as the reader\'s own in every call, and recorded as notes', async () => {
+    const { entry, settled } = await builder.generate({ ...book, kind: 'notes' }, '/notes/a.md', 'brief');
+    await settled;
+    expect(entry.kind).toBe('notes');
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every((r) => r.system?.includes(NOTES_MARK))).toBe(true);
+    expect((await library.loadPath(entry.id)).stages.at(-1)?.title).toBe('回头看');
+  });
+
+  test('a book is not told it is notes', async () => {
+    const { entry, settled } = await builder.generate(book, '/books/a.txt', 'brief');
+    await settled;
+    expect(entry.kind).toBeUndefined();
+    expect(requests.some((r) => r.system?.includes(NOTES_MARK))).toBe(false);
   });
 
   test('the generation cache sits under the library, where resume and remove look for it', async () => {
@@ -161,6 +185,14 @@ describe('resume', () => {
     await builder.resume(id);
     await builder.schedulerFor(id)?.done;
     expect(voices).toEqual([DEFAULT_VOICE]);
+  });
+
+  test('half-built notes resume as notes', async () => {
+    await halfBuilt({ language: 'zh', kind: 'notes' });
+    await builder.resume(id);
+    await builder.schedulerFor(id)?.done;
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every((r) => r.system?.includes(NOTES_MARK))).toBe(true);
   });
 
   test('a book with a language but no recorded voice takes the setting for that language', async () => {

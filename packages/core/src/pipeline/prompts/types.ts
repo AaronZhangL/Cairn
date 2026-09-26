@@ -112,6 +112,17 @@ export interface Prompts {
     readonly brief: string;
   };
 
+  /**
+   * A path through the reader's own notes. The preamble opens every system
+   * prompt; the recap strings replace the book's, since the reader sees them.
+   */
+  readonly notes: {
+    readonly preamble: string;
+    readonly stageTitle: string;
+    readonly title: string;
+    readonly brief: string;
+  };
+
   /** Chapter titles invented during parsing, which end up in the path. */
   readonly parse: {
     readonly untitled: string;
@@ -119,5 +130,7 @@ export interface Prompts {
     readonly part: (n: number) => string;
     readonly section: (n: number) => string;
     readonly whole: string;
+    /** A path made of notes from more than one folder. */
+    readonly notes: (n: number) => string;
   };
 }

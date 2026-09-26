@@ -12,7 +12,7 @@
  * intact. Its `sourceChapters` is the union of the stations it recaps, so the
  * provenance invariant holds here too: it cites nothing the path did not cite.
  */
-import type { DraftDeck, PathNode, Stage } from '../types';
+import type { DraftDeck, PathNode, Stage, SourceKind } from '../types';
 import type { LlmProvider } from '../llm/types';
 import { clampNodeMinutes, type ReadingBudget, totalMinutes } from './budget';
 import type { ReduceResult } from './reduce';
@@ -41,8 +41,10 @@ function recapMinutes(stationCount: number, budget: ReadingBudget): number {
  * The overrun it causes is one station's worth and is reported honestly in
  * `totalMinutes`.
  */
-export function withRecap(reduced: ReduceResult, locale: ContentLocale = 'zh'): ReduceResult {
-  const prompts = promptsFor(locale);
+export function withRecap(
+  reduced: ReduceResult, locale: ContentLocale = 'zh', kind: SourceKind = 'book',
+): ReduceResult {
+  const prompts = promptsFor(locale, kind);
   if (reduced.nodes.length < MIN_STATIONS) return reduced;
 
   const chapters = [...new Set(reduced.nodes.flatMap((n) => n.sourceChapters))].sort((a, b) => a - b);
@@ -77,8 +79,9 @@ export async function makeRecapDeck(
   provider: LlmProvider,
   signal?: AbortSignal,
   locale: ContentLocale = 'zh',
+  kind: SourceKind = 'book',
 ): Promise<DraftDeck> {
-  const prompts = promptsFor(locale);
+  const prompts = promptsFor(locale, kind);
   const count = slideCount(node.estMinutes);
   const walked = stations
     .map((s, i) => {

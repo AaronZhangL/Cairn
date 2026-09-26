@@ -6,7 +6,13 @@
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import type { ContentLocale } from '../parse/language';
 import type {
-  Chapter, ChapterContrast, ChapterFigure, ChapterNote, ChapterRelation, ChapterSequence,
+  Chapter,
+  ChapterContrast,
+  ChapterFigure,
+  ChapterNote,
+  ChapterRelation,
+  ChapterSequence,
+  SourceKind,
 } from '../types';
 import { type JobOptions, type JobStore, runJob, type JobResult } from './job';
 import {
@@ -74,6 +80,7 @@ export interface MapOptions extends Omit<JobOptions, 'concurrency'> {
   readonly concurrency?: number;
   /** The book's own language, which decides what language the notes come back in. */
   readonly locale?: ContentLocale;
+  readonly kind?: SourceKind;
 }
 
 export interface MapOutcome {
@@ -87,7 +94,7 @@ export async function mapChapters(
   store: JobStore<readonly ChapterNote[]>,
   options: MapOptions = {},
 ): Promise<MapOutcome> {
-  const prompts = promptsFor(options.locale ?? 'zh');
+  const prompts = promptsFor(options.locale ?? 'zh', options.kind);
   const batchSize = Math.max(1, options.batchSize ?? DEFAULT_BATCH_SIZE);
   const batches = groupIntoBatches(chapters, batchSize);
 

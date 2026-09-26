@@ -14,6 +14,7 @@ export const zh: Messages = {
     decode_failed: '读不出这个文件的文字编码。',
     scanned_pdf: '这个 PDF 是扫描件，里面没有文字层。先用 OCR 工具转出文字再添加。',
     unreadable_pdf: 'PDF 打不开：文件损坏，或者设了密码。',
+    mixed_selection: '一次选多个文件时，只能都是 Markdown 笔记。书请一本一本添加。',
     drm_protected: '这本 Kindle 书带有 DRM 保护，读不出正文。只能添加无 DRM 的 MOBI / AZW3。',
 
     llm_timeout: '模型太久没有回应。',

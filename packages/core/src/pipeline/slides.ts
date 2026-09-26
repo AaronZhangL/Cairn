@@ -16,8 +16,17 @@ import {
   strs, variant,
 } from './slide-fields';
 import type {
-  ChapterNote, ComparePane, DraftDeck, DraftSlide, MatrixRow, PathNode, QuoteSource,
-  RelationLink, Slide, TimelineItem,
+  ChapterNote,
+  ComparePane,
+  DraftDeck,
+  DraftSlide,
+  MatrixRow,
+  PathNode,
+  QuoteSource,
+  RelationLink,
+  Slide,
+  TimelineItem,
+  SourceKind,
 } from '../types';
 
 import { CairnError } from '../errors';
@@ -105,8 +114,9 @@ export async function makeDeck(
   provider: LlmProvider,
   signal?: AbortSignal,
   locale: ContentLocale = 'zh',
+  kind: SourceKind = 'book',
 ): Promise<DraftDeck> {
-  const prompts = promptsFor(locale);
+  const prompts = promptsFor(locale, kind);
   const count = slideCount(node.estMinutes);
 
   return composeDeck(

@@ -13,7 +13,9 @@ it. It runs on macOS today; see [Requirements](#requirements) for other platform
 ## What it does
 
 - **Reads EPUB, PDF, MOBI/AZW3, DOCX, TXT and Markdown.** A PDF needs a text layer (scans are
-  refused, not OCR'd), and a Kindle file must be DRM-free. Previewing a book (title, author, chapters, word count) needs
+  refused, not OCR'd), and a Kindle file must be DRM-free.
+- **Walks your own notes.** Pick one or several Markdown files and they become one path, narrated
+  as your notes ("you wrote…") rather than as someone else's book. Previewing a book (title, author, chapters, word count) needs
   no model call.
 - **Four reading budgets:** skim, gist, read, or walk it all. Their lengths come from the book's
   own size and structure. A tighter budget drops whole stations instead of thinning every one.

@@ -21,7 +21,7 @@ import { DEFAULT_VOICE, type Narrator } from '../pipeline/tts';
 import { fileStore } from '../store/file-store';
 import { bookSlug, type LibraryEntry, type PathQuality } from '../store/library';
 import type { Library } from '../store/library-disk';
-import type { ChapterNote, NodeDeck, ParsedBook, Path } from '../types';
+import type { ChapterNote, NodeDeck, ParsedBook, Path, SourceKind } from '../types';
 import type { DeckStatus, Progress } from './progress';
 
 export interface BookBuilderDeps {
@@ -79,6 +79,7 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
     quality: PathQuality | undefined,
     voice: string,
     locale: ContentLocale,
+    kind: SourceKind,
     provider: LlmProvider,
     store: Parameters<typeof startDeckScheduler>[0]['store'],
   ): { scheduler: DeckScheduler; settled: Promise<LibraryEntry | undefined> } {
@@ -108,7 +109,7 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
       nodes: path.nodes,
       store,
       keyOf: (node) => deckKey(node, voice),
-      build: (node) => buildNode(node, path, byChapter, audioDir, provider, narrator, { voice, locale }),
+      build: (node) => buildNode(node, path, byChapter, audioDir, provider, narrator, { voice, locale, kind }),
       onReady: async (deck, progress) => {
         decks.push(deck);
         await library.installDeck(path.bookId, deck, audioDir);
@@ -174,22 +175,25 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
       const provider = await deps.providerFor(id);
       // Decided once, here, and then recorded: the setting may change mid-build
       const voice = await deps.voiceFor(book.language);
+      const kind = book.kind ?? 'book';
 
       const mapStore = await fileStore<readonly ChapterNote[]>(join(library.cacheDir(id), 'map.json'));
       const { notes } = await mapChapters(book.chapters, provider, mapStore, {
         locale: book.language,
+        kind,
         onProgress: (p) => onProgress({ stage: 'map', done: p.done + p.failed, total: p.total }),
       });
       if (notes.length === 0) throw new CairnError('map_empty');
 
       onProgress({ stage: 'classify', done: 0, total: 1 });
-      const cls = await classifyBook(book.title, notes, provider, undefined, book.language);
+      const cls = await classifyBook(book.title, notes, provider, undefined, book.language, kind);
 
       onProgress({ stage: 'reduce', done: 0, total: 1, note: cls.type });
       // Appended after reduce: reduce is judged against the budget, and a station it did not choose would fight that
       const reduced = withRecap(
-        await reduceToPath(notes, cls.type, book.totalWords, provider, { budget, locale: book.language }),
+        await reduceToPath(notes, cls.type, book.totalWords, provider, { budget, locale: book.language, kind }),
         book.language,
+        kind,
       );
 
       const path: Path = {
@@ -217,10 +221,11 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
         quality,
         language: book.language,
         voice,
+        ...(kind === 'notes' ? { kind } : {}),
       });
 
       const { scheduler, settled } = startBuilding(
-        path, notes, budgetId, quality, voice, book.language, provider, await deckStore(id, budgetId),
+        path, notes, budgetId, quality, voice, book.language, kind, provider, await deckStore(id, budgetId),
       );
 
       const first = path.nodes[0];
@@ -243,7 +248,7 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
 
       const budgetId = entry.budgetId as BudgetId;
       startBuilding(
-        path, notes, budgetId, entry.quality, await voiceOf(entry), entry.language ?? 'zh',
+        path, notes, budgetId, entry.quality, await voiceOf(entry), entry.language ?? 'zh', entry.kind ?? 'book',
         await deps.providerFor(bookId), await deckStore(bookId, budgetId),
       );
       return true;

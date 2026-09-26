@@ -22,6 +22,7 @@ bun test packages/core/tests/fit.test.ts     # one file
 bun run typecheck                            # all four projects, strict
 bun run add-book <file>                      # the app's book builder, from the terminal
 bun run replay <bookId> [file]               # list recorded model calls, or re-send one
+bun run eval [--against <runId>]             # judge a pipeline change on the fixed book set
 
 cd apps/desktop
 bun run dev       # Vite only: the three panes, no model, no shell
@@ -62,7 +63,7 @@ and an unreachable one would otherwise surface only after paying for every stati
 ```
 packages/
   core/          Domain types, parsing, pipeline, storage — no framework imports
-    parse/       epub.ts  pdf.ts  mobi.ts  docx.ts  txt.ts  markdown.ts  chunk.ts  text.ts
+    parse/       epub.ts  pdf.ts  mobi.ts  docx.ts  txt.ts  markdown.ts  notes.ts  chunk.ts  text.ts
                  pdf-layout.ts: lines back into prose · mobi-decode.ts: PalmDB and its
                  compressions · html-blocks.ts: heading split shared by EPUB and MOBI
     pipeline/prompts/  Every prompt, one file per language. `en` is the type's
@@ -74,6 +75,8 @@ packages/
                  map/classify/reduce/slides/tts stages — all pure or interface-driven
     books/       builder.ts: adding, resuming and removing a book — the one
                  composition of pipeline + library the app and `add-book` share
+    eval/        What `bun run eval` runs: code metrics, model judges, and the
+                 verdict. Never imported by the app
     store/       library.ts (layout, webview-safe), library-disk.ts (the library
                  on disk: one instance per root), file-backed JobStore
     runtime/     Everything that spawns a process or talks to a service:
@@ -184,6 +187,23 @@ Never: restating the signature; narrating steps (`// loop over chapters`); comme
   caught the original bug**, not just a test that the new code runs.
 - Slide overflow cannot be unit-tested. `?gauntlet` in `bun run dev` draws every layout at its
   worst; check there.
+
+### Judging a pipeline change
+
+`bun test` proves the code runs; it cannot say whether a path got better. `bun run eval` can. Run
+it after any change to a prompt or to classify, reduce or recap, and put the verdict in the commit
+message. Method and rationale: [`docs/EVAL.md`](docs/EVAL.md).
+
+- It re-runs classify + reduce on the library's frozen chapter notes for the books in
+  `scripts/eval-set.json`, then scores each path with code metrics and model judges and compares it
+  blind against a baseline.
+- **Compare like with like.** The shelf's paths were built by whatever model was configured then.
+  After switching models, run once without `--against` to make a new baseline, then judge code
+  changes with `--against <thatRunId>`. The current baseline is recorded in `docs/EVAL.md`.
+- **Read the per-book lines, not only the verdict.** A mean over three books hid Pro Git's paths
+  collapsing onto its first chapters; its position skew alone showed it.
+- A verdict needs at least three new paths, and a guard metric (faithfulness, coverage, budget)
+  that drops past the noise band overrides a pairwise win.
 
 ## Invariants
 
@@ -349,6 +369,7 @@ Use one root `CONTEXT.md` for Cairn's product vocabulary. See `docs/agents/domai
 | [`docs/PRD.md`](docs/PRD.md) | Before changing scope. The current product definition, organised by module. §6 is the companion |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries, data flow, dependency choices, and the decision record behind them |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Before touching `tokens.css` or any CSS that affects appearance |
+| [`docs/EVAL.md`](docs/EVAL.md) | Before changing a prompt or a stage after map, and before trusting an eval verdict |
 
 Two projects worth borrowing from:
 

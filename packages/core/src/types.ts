@@ -7,6 +7,9 @@ export type { ContentLocale, IconName };
 export type BookType = 'knowledge' | 'narrative';
 export type BookFormat = 'epub' | 'txt' | 'markdown' | 'pdf' | 'mobi' | 'docx';
 
+/** Whose words these are. The pipeline speaks of a book's author, but of notes as the reader's own. */
+export type SourceKind = 'book' | 'notes';
+
 /** One chapter from parsing. `text` lives only in IndexedDB and never enters an exported bundle. */
 export interface Chapter {
   readonly idx: number;
@@ -19,6 +22,8 @@ export interface ParsedBook {
   readonly title: string;
   readonly author?: string;
   readonly format: BookFormat;
+  /** Absent means a book. */
+  readonly kind?: SourceKind;
   readonly chapters: readonly Chapter[];
   readonly totalWords: number;
   /**
@@ -327,7 +332,8 @@ export class ParseError extends Error {
       | 'decode_failed'
       | 'scanned_pdf'
       | 'unreadable_pdf'
-      | 'drm_protected',
+      | 'drm_protected'
+      | 'mixed_selection',
     /** Values the reader's own wording needs — the extension, the missing part. */
     readonly params: Readonly<Record<string, string | number>> = {},
   ) {

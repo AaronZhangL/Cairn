@@ -1,0 +1,17 @@
+[
+  {
+    "id": "atomic-habits-804690",
+    "title": "Atomic Habits",
+    "why": "The common case: Chinese, popular method book, solid budget, 36 chapters. Its chapters are split into parts, which tests duplicate sourcing. Notes are from the current map"
+  },
+  {
+    "id": "pro-git",
+    "title": "Pro Git",
+    "why": "The opposite on every axis: English technical manual, 61 chapters with front matter, quick budget. Order matters in it, which tests prerequisites and what a tight budget drops"
+  },
+  {
+    "id": "incentives-6a0a00",
+    "title": "incentives",
+    "why": "Cheap smoke test and the few-chapters edge case: 5 chapters, 2.7k words"
+  }
+]

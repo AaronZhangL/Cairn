@@ -21,7 +21,15 @@ export interface Block {
  * A real EPUB spine item can run to tens of thousands of words; feeding that
  * straight into map loses content.
  */
-export function chunkBlocks(blocks: readonly Block[]): readonly Chapter[] {
+export interface ChunkOptions {
+  /** Blocks under this are dropped. A note the reader wrote is never a copyright page, so notes pass 1. */
+  readonly minWords?: number;
+  /** Whether adjacent small blocks of one group merge. A note's own sections are its author's choice. */
+  readonly merge?: boolean;
+}
+
+export function chunkBlocks(blocks: readonly Block[], options: ChunkOptions = {}): readonly Chapter[] {
+  const { minWords = MIN_WORDS, merge = true } = options;
   const sized = blocks
     .map((b) => ({ ...b, words: countWords(b.text) }))
     .filter((b) => b.words > 0);
@@ -32,7 +40,7 @@ export function chunkBlocks(blocks: readonly Block[]): readonly Chapter[] {
   } | null = null;
 
   const flush = (): void => {
-    if (!pending || pending.words < MIN_WORDS) {
+    if (!pending || pending.words < minWords) {
       pending = null;
       return;
     }
@@ -52,7 +60,7 @@ export function chunkBlocks(blocks: readonly Block[]): readonly Chapter[] {
     }
 
     const sameGroup = pending?.group === block.group;
-    if (pending && sameGroup && pending.words + block.words <= TARGET_WORDS) {
+    if (merge && pending && sameGroup && pending.words + block.words <= TARGET_WORDS) {
       pending.parts.push(block.text);
       pending.words += block.words;
       pending.count += 1;

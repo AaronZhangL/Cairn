@@ -7,7 +7,7 @@
  */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import type { ContentLocale } from '../parse/language';
-import type { BookType, ChapterNote, NodeKind, PathNode, Stage } from '../types';
+import type { BookType, ChapterNote, NodeKind, PathNode, Stage, SourceKind } from '../types';
 import { promptsFor, type Prompts } from './prompts';
 import {
   budgetsFor, clampNodeMinutes, DEFAULT_BUDGET_ID, exceedsBudget,
@@ -74,6 +74,7 @@ export interface ReduceOptions {
   readonly signal?: AbortSignal;
   /** The book's own language; the path's titles and briefs come back in it. */
   readonly locale?: ContentLocale;
+  readonly kind?: SourceKind;
 }
 
 
@@ -84,7 +85,7 @@ export async function reduceToPath(
   provider: LlmProvider,
   options: ReduceOptions = {},
 ): Promise<ReduceResult> {
-  const prompts = promptsFor(options.locale ?? 'zh');
+  const prompts = promptsFor(options.locale ?? 'zh', options.kind);
   const budget = options.budget
     ?? budgetsFor({ totalWords, chapterCount: notes.length })[DEFAULT_BUDGET_ID];
   const valid = new Set(notes.map((n) => n.idx));

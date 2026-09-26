@@ -17,7 +17,7 @@ export type BunSchema = RPCSchema<{
     libraryBase: { params: void; response: string };
     progressNow: { params: void; response: Progress | null };
     pickBook: { params: void; response: BookPreview | null };
-    generateBook: { params: { filePath: string; budgetId: BudgetId }; response: LibraryEntry };
+    generateBook: { params: { filePaths: readonly string[]; budgetId: BudgetId }; response: LibraryEntry };
     chatHistory: { params: { bookId: string }; response: ChatSession };
     chatSend: { params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }; response: boolean };
     chatCancel: { params: { turnId: string }; response: boolean };

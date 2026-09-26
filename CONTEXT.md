@@ -12,6 +12,12 @@ An ebook the reader owns and added, parsed locally into chapters. Its language c
 text, never from the interface.
 _Avoid_: Document, file (once parsed)
 
+**Notes**:
+The reader's own Markdown, added as one or several files and walked as a path like a book. Every
+stage is told these are the reader's words (`SourceKind` `'notes'`), so nothing is credited to an
+author. Not the same thing as a chapter note.
+_Avoid_: Notebook, document
+
 **Chapter note**:
 The map stage's compression of one chapter — gist, key points, verbatim quotes and structured
 material. Everything after map reads notes, never the book.

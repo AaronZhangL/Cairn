@@ -9,7 +9,8 @@
     "test": "bun test",
     "typecheck": "bun scripts/typecheck.ts",
     "add-book": "bun scripts/add-book.ts",
-    "replay": "bun scripts/replay.ts"
+    "replay": "bun scripts/replay.ts",
+    "eval": "bun scripts/eval.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

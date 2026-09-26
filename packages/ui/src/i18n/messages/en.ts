@@ -23,6 +23,7 @@ export const en = {
     decode_failed: 'That file’s text encoding could not be read.',
     scanned_pdf: 'That PDF is a scan with no text layer. Run it through OCR first, then add it.',
     unreadable_pdf: 'That PDF could not be opened: it is damaged or password-protected.',
+    mixed_selection: 'Several files at once must all be Markdown notes. Add books one at a time.',
     drm_protected: 'That Kindle book is DRM-protected, so its text cannot be read. Only DRM-free MOBI and AZW3 files work.',
 
     llm_timeout: 'The model took too long to answer.',

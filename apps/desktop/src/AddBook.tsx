@@ -78,7 +78,7 @@ export function AddBook({
     setError(undefined);
     setProgress({ stage: 'map', done: 0, total: 1 });
     try {
-      onDone(await generateBook(preview.filePath, budgetId));
+      onDone(await generateBook(preview.filePaths, budgetId));
     } catch (e) {
       setError(errorText(payloadOf(e), t));
       setProgress(undefined);

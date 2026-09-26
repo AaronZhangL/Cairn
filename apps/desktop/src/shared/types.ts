@@ -4,7 +4,8 @@ import type { ContentLocale } from './settings';
 /** Parse-only summary shown before any model call, so the budget choice is informed. */
 export interface BookPreview {
   readonly id: string;
-  readonly filePath: string;
+  /** One book, or several Markdown notes. */
+  readonly filePaths: readonly string[];
   readonly title: string;
   readonly author?: string;
   readonly chapters: number;

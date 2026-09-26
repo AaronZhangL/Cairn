@@ -1,7 +1,7 @@
 /** Classify stage: decide the book's type. Reads the gists from map, never the text. */
 import { type LlmProvider, parseJsonOutput } from '../llm/types';
 import type { ContentLocale } from '../parse/language';
-import type { BookType, ChapterNote } from '../types';
+import type { BookType, ChapterNote, SourceKind } from '../types';
 import { promptsFor } from './prompts';
 
 const SCHEMA = {
@@ -25,8 +25,9 @@ export async function classifyBook(
   provider: LlmProvider,
   signal?: AbortSignal,
   locale: ContentLocale = 'zh',
+  kind: SourceKind = 'book',
 ): Promise<Classification> {
-  const prompts = promptsFor(locale);
+  const prompts = promptsFor(locale, kind);
   const digest = notes
     .slice(0, 40)
     .map((n) => `${n.idx}. ${n.title} — ${n.gist}`)

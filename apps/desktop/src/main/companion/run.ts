@@ -8,6 +8,7 @@ import type { ChatMessage, ChatSession, Citation, EvidenceRecord } from '@cairn/
 import { escapeXml } from '@cairn/core/companion/xml';
 import { isBookId } from '@cairn/core/store/library';
 import { isFinished } from '@cairn/core/store/reading';
+import type { SourceKind } from '@cairn/core/types';
 import { effectiveSearchKey, readSettings } from '../settings';
 import { readReadingRecord } from '../reading';
 import { DATA_DIR, library } from '../store';
@@ -147,9 +148,12 @@ const ANSWER_LANGUAGE: Readonly<Record<UiLocale, string>> = {
   zh: 'Simplified Chinese',
 };
 
-function instruction(locale: UiLocale): string {
+/** Said once, up front: every rule below speaks of "the book", and for notes the reader wrote it. */
+const NOTES_RULE = '<rule>The current book is the reader\'s own notes, written by the reader. Call it their notes, never a book, and never attribute it to an author: say "you wrote", not "the author argues".</rule>';
+
+function instruction(locale: UiLocale, kind: SourceKind): string {
   return `<companion><role>You are Cairn's reading companion. Help the reader understand the current book and their question.</role>
-<rules>
+<rules>${kind === 'notes' ? `\n${NOTES_RULE}` : ''}
 <rule>For claims about this book, call read_notes or read_chapter before answering. Do not infer the book's contents from its title.</rule>
 <rule>Quote the current book only from text returned by read_chapter in this turn. Never invent a quotation.</rule>
 <rule>For current or uncertain outside facts, you may freely search_web and fetch_web. A search snippet alone does not support a detailed claim; fetch the page before citing it.</rule>
@@ -313,6 +317,7 @@ export async function runTurn(
       library.list(),
     ]);
     if (input.nodeId && !path.nodes.some((node) => node.id === input.nodeId)) throw new CompanionRunError('unknown_node');
+    const kind = entries.find((entry) => entry.id === input.bookId)?.kind ?? 'book';
     session = await loadSession(DATA_DIR, input.bookId, path.generatedAt);
     userMessage = {
       id: input.turnId, role: 'user', text: input.question, at: new Date().toISOString(),
@@ -335,17 +340,17 @@ export async function runTurn(
       messages: session?.messages.slice(state.retainedFrom) ?? [], atNode: input.nodeId,
     });
     const reserved = Math.min(model.model.maxTokens, Math.floor(model.model.contextWindow / 4));
-    if (shouldCompact(estimateTokens(instruction(input.locale) + context(working)), model.model.contextWindow, reserved)) {
+    if (shouldCompact(estimateTokens(instruction(input.locale, kind) + context(working)), model.model.contextWindow, reserved)) {
       working = await compactContext(working, session.messages, {
         recentTurns: 3,
         summarize: async (prompt) => summarize(prompt, model, input.signal),
       });
       await saveWorking(DATA_DIR, input.bookId, path.generatedAt, working);
     }
-    if (shouldCompact(estimateTokens(instruction(input.locale) + context(working)), model.model.contextWindow, reserved)) {
+    if (shouldCompact(estimateTokens(instruction(input.locale, kind) + context(working)), model.model.contextWindow, reserved)) {
       throw new CompanionRunError('model_failed');
     }
-    const prompt = `${instruction(input.locale)}${context(working)}</companion>`;
+    const prompt = `${instruction(input.locale, kind)}${context(working)}</companion>`;
     const tools = makeTools(input.bookId, input.signal, (name, resultId, text, evidence) => {
       if (evidence) turnEvidence.push(evidence);
       toolMessages.push({ id: randomUUID(), role: 'tool', name, resultId, text, at: new Date().toISOString() });

@@ -6,7 +6,7 @@
  * decided here once; `deckKey` is what makes a built deck reusable.
  */
 import type { LlmProvider } from '../llm/types';
-import type { ChapterNote, NodeDeck, Path, PathNode } from '../types';
+import type { ChapterNote, NodeDeck, Path, PathNode, SourceKind } from '../types';
 import { fingerprint } from './fingerprint';
 import type { ContentLocale } from '../parse/language';
 import { isRecap, makeRecapDeck } from './recap';
@@ -42,6 +42,7 @@ export function deckKey(node: PathNode, voice?: string): string {
 /** What synthesis needs, plus the language the content itself is written in. */
 export interface NodeBuildOptions extends TtsOptions {
   readonly locale?: ContentLocale;
+  readonly kind?: SourceKind;
 }
 
 export async function buildNode(
@@ -59,9 +60,9 @@ export async function buildNode(
     // stations, not the book. Sending it the chapters its sourceChapters point
     // at would be the whole book in one prompt.
     ? await makeRecapDeck(
-      node, path.nodes.filter((n) => !isRecap(n)), path.title, provider, options.signal, locale,
+      node, path.nodes.filter((n) => !isRecap(n)), path.title, provider, options.signal, locale, options.kind,
     )
-    : await makeDeck(node, chapterNotes(node, byChapter), provider, options.signal, locale);
+    : await makeDeck(node, chapterNotes(node, byChapter), provider, options.signal, locale, options.kind);
 
   return narrator.speak(draft, deckAudioPath(audioDir, deckKey(node, options.voice)), options);
 }

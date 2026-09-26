@@ -21,7 +21,7 @@ import type { CompanionEvent } from '../shared/companion-events';
 import type { RequestParams } from '../shared/schema';
 import { modelStatus } from './provider';
 import type { BookPreview, Progress } from '../shared/types';
-import { inspect, readBook } from './inspect';
+import { inspect, readBook, sourceOf } from './inspect';
 import { CairnError } from '@cairn/core/errors';
 import { encodingErrors } from '../shared/errors';
 
@@ -64,20 +64,22 @@ export function createHandlers({ books, menu, emit }: HandlerDeps) {
     },
 
     /** Native picker, then a parse-only preview so the budget choice is informed. */
+    /** Several files are several notes; `readBook` refuses a mix of notes and books. */
     async pickBook(): Promise<BookPreview | null> {
-      const [picked] = await openFileDialog({
+      const picked = (await openFileDialog({
         allowedFileTypes: ACCEPTED_EXTENSIONS.map((e) => e.slice(1)).join(','),
         canChooseFiles: true,
         canChooseDirectory: false,
-      });
-      return picked ? inspect(picked) : null;
+        allowsMultipleSelection: true,
+      })).filter((p) => p.length > 0);
+      return picked.length > 0 ? inspect(picked) : null;
     },
 
-    async generateBook(params: { filePath: string; budgetId: BudgetId }): Promise<LibraryEntry> {
+    async generateBook(params: { filePaths: readonly string[]; budgetId: BudgetId }): Promise<LibraryEntry> {
       latest = { stage: 'map', done: 0, total: 1 };
       try {
-        const book = await readBook(params.filePath);
-        const { entry } = await books.generate(book, params.filePath, params.budgetId, (p) => {
+        const book = await readBook(params.filePaths);
+        const { entry } = await books.generate(book, sourceOf(params.filePaths), params.budgetId, (p) => {
           latest = p;
           emit.progress(p);
         });

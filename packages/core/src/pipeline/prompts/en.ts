@@ -242,11 +242,22 @@ ${r.walked}
 Closing chapter title: "${r.recapTitle}"`),
   },
 
+  notes: {
+    preamble: `This material is not a published book. It is the reader's own notes, written by the person you are speaking to.
+Wherever these instructions say "book", read "their notes"; wherever they say "author", read "the reader". Never attribute the notes to an author, and never call them a book.
+Speak to the reader as the one who wrote them: "you noted…", "in your notes on…".
+Notes are terse and uneven. Where a note is only a fragment, say less rather than fill it in from what you know.`,
+    stageTitle: 'Looking back',
+    title: 'What your notes add up to',
+    brief: 'Join every station walked back into one line, and say what the notes, taken together, come to.',
+  },
+
   parse: {
     untitled: '(untitled)',
     opening: 'Opening',
     part: (n) => `Part ${n}`,
     section: (n) => `Section ${n}`,
     whole: 'Full text',
+    notes: (n) => `${n} notes`,
   },
 };

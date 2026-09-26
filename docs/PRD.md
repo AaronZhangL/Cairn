@@ -52,7 +52,8 @@ chapters — those appear only in a quote's provenance, which says 原书第 N �
 The reader-facing noun lives in `packages/ui/src/copy.ts` so changing it stays one edit.
 
 1. **Pick a book** — a local EPUB, PDF, MOBI/AZW3, DOCX, TXT or Markdown file. A PDF must have a
-   text layer; a Kindle file must be DRM-free.
+   text layer; a Kindle file must be DRM-free. Or one or more Markdown files of the reader's own
+   notes, walked as one path in file-name order and narrated as theirs, not an author's.
 2. **Preview** — parse only, no model call, so picking a file stays instant: title, author,
    chapter count, word count.
 3. **Pick a budget** — four rungs, described below.
