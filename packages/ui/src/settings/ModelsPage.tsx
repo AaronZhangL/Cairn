@@ -89,7 +89,6 @@ function ProviderDetail({ shell, provider }: {
     <Section title={provider.label}>
       <StackedRow
         label={t.settings.models.apiKey}
-        hint={t.settings.models.secretHint}
         htmlFor={keyId}
         aside={provider.getKeyUrl ? (
           <Link className="set-link" href={provider.getKeyUrl}>

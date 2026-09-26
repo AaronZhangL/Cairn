@@ -130,7 +130,6 @@ export function NarrationPage({ shell }: { shell?: ShellSettings }): ReactElemen
     <Section title={t.settings.pages.narration}>
       <Row
         label={t.settings.narration.language}
-        hint={t.settings.narration.languageHint}
         htmlFor={languageId}
       >
         <Select
@@ -158,7 +157,6 @@ function VoiceRow({ shell, locale }: { shell: ShellSettings; locale: Locale }): 
   return (
     <Row
       label={locale === 'en' ? t.settings.narration.voiceEn : t.settings.narration.voiceZh}
-      hint={locale === 'en' ? t.settings.narration.voiceEnHint : t.settings.narration.voiceZhHint}
       htmlFor={id}
     >
       <span className="set-voice">
@@ -256,7 +254,7 @@ function SearchKeyRow({ shell, which, label, hint }: {
   return (
     <StackedRow
       label={label}
-      hint={<>{hint} {t.settings.models.secretHint}</>}
+      hint={hint}
       htmlFor={id}
       aside={(
         <Link className="set-link" href={SEARCH_KEY_URL[which]}>

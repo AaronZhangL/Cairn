@@ -130,10 +130,7 @@ export function SettingsPanel({
 
         <div className="set-body">
           <header className="set-head">
-            <div>
-              <div className="set-title">{t.settings.pages[tab]}</div>
-              <div className="set-desc">{description(tab, t)}</div>
-            </div>
+            <div className="set-title">{t.settings.pages[tab]}</div>
             <button type="button" className="set-x" aria-label={t.settings.close} onClick={onClose}>
               <CloseMark />
             </button>
@@ -153,20 +150,6 @@ export function SettingsPanel({
       </div>
     </div>
   );
-}
-
-function description(tab: SettingsTab, t: ReturnType<typeof useUi>['t']): string {
-  const byTab: Readonly<Record<SettingsTab, string>> = {
-    general: t.settings.general.desc,
-    appearance: t.settings.appearance.desc,
-    playback: t.settings.playback.desc,
-    models: t.settings.models.desc,
-    narration: t.settings.narration.desc,
-    search: t.settings.search.desc,
-    weread: t.settings.weread.desc,
-    data: t.settings.data.desc,
-  };
-  return byTab[tab];
 }
 
 function CloseMark(): ReactElement {
