@@ -10,7 +10,7 @@ describe('resolveChatModel', () => {
       env: {}, codex: async () => ({ mode: 'oauth', apiKey: 'test-token' }),
     });
     expect(resolved.model.provider).toBe('openai-codex');
-    expect(resolved.model.id).toBe('gpt-5.6-sol');
+    expect(resolved.model.id).toBe('gpt-6-sol');
     expect(await resolved.getApiKey('openai-codex')).toBe('test-token');
   });
 

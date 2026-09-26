@@ -42,13 +42,13 @@ Cairn 通过 [pi-ai](https://github.com/earendil-works/pi/tree/main/packages/ai)
 
 | 服务商 | 接入方式 | 默认模型 |
 | --- | --- | --- |
-| OpenAI | API key（`OPENAI_API_KEY`） | `gpt-5.4-mini` |
-| OpenAI Codex | 用 `codex login` 登录的 ChatGPT 账户 | `gpt-5.6-sol` |
+| OpenAI | API key（`OPENAI_API_KEY`） | `gpt-6-sol` |
+| OpenAI Codex | 用 `codex login` 登录的 ChatGPT 账户 | `gpt-6-sol` |
 | Anthropic | API key（`ANTHROPIC_API_KEY`） | `claude-haiku-4-5` |
-| Google | API key（`GEMINI_API_KEY`） | `gemini-3.5-flash` |
+| Google | API key（`GEMINI_API_KEY`） | `gemini-3.8-flash` |
 | DeepSeek | API key（`DEEPSEEK_API_KEY`） | `deepseek-flash` |
-| OpenRouter | API key（`OPENROUTER_API_KEY`） | `google/gemini-2.5-flash` |
-| Groq | API key（`GROQ_API_KEY`） | `llama-3.3-70b-versatile` |
+| OpenRouter | API key（`OPENROUTER_API_KEY`） | `google/gemini-3.8-flash` |
+| Groq | API key（`GROQ_API_KEY`） | `qwen/qwen3.8-27b` |
 | 自定义 | 任意 OpenAI 兼容接口，比如本地模型服务 | 自己填 |
 
 key 一栏可以直接填 key，也可以填 `$变量名` 读取环境变量。选中的服务商没有可用凭据时，Cairn 会改用第一个有凭据的。

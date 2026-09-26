@@ -19,7 +19,7 @@ describe('resolveProvider', () => {
     const { provider, status } = await resolveProvider({ ...DEFAULT_SHELL_SETTINGS, generationProvider: 'openai-codex' }, {
       env: {}, codex: async () => ({ mode: 'oauth', apiKey: 'token' }),
     });
-    expect(status).toEqual({ provider: 'openai-codex', ready: true, detail: 'gpt-5.6-sol' });
+    expect(status).toEqual({ provider: 'openai-codex', ready: true, detail: 'gpt-6-sol' });
     expect(provider?.name).toBe('pi:openai-codex');
   });
 
@@ -59,7 +59,7 @@ describe('resolveProvider', () => {
       providers: { openai: { apiKey: 'secret', baseUrl: '', model: '' } },
     }, none);
     expect(status.ready).toBe(true);
-    expect(status.detail).toBe('gpt-5.4-mini');
+    expect(status.detail).toBe('gpt-6-sol');
   });
 
   /** Concurrency and overhead drive the map batch size and the scheduler. */

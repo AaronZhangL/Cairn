@@ -9,7 +9,7 @@ describe('routeFor', () => {
   test('Codex is available exactly when a codex login is', () => {
     expect(routeFor(DEFAULT_SHELL_SETTINGS, 'openai-codex', {}, undefined)).toBeUndefined();
     expect(routeFor(DEFAULT_SHELL_SETTINGS, 'openai-codex', {}, oauth))
-      .toMatchObject({ id: 'openai-codex', apiKey: 'token', model: 'gpt-5.6-sol', codex: oauth });
+      .toMatchObject({ id: 'openai-codex', apiKey: 'token', model: 'gpt-6-sol', codex: oauth });
   });
 
   test('a vendor needs a key, read through `$NAME` when the field holds one', () => {

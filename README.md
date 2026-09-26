@@ -45,13 +45,13 @@ same model can build stations and answer in the companion, or the companion can 
 
 | Provider | How to connect | Default model |
 | --- | --- | --- |
-| OpenAI | API key (`OPENAI_API_KEY`) | `gpt-5.4-mini` |
-| OpenAI Codex | Your ChatGPT account, signed in with `codex login` | `gpt-5.6-sol` |
+| OpenAI | API key (`OPENAI_API_KEY`) | `gpt-6-sol` |
+| OpenAI Codex | Your ChatGPT account, signed in with `codex login` | `gpt-6-sol` |
 | Anthropic | API key (`ANTHROPIC_API_KEY`) | `claude-haiku-4-5` |
-| Google | API key (`GEMINI_API_KEY`) | `gemini-3.5-flash` |
+| Google | API key (`GEMINI_API_KEY`) | `gemini-3.8-flash` |
 | DeepSeek | API key (`DEEPSEEK_API_KEY`) | `deepseek-flash` |
-| OpenRouter | API key (`OPENROUTER_API_KEY`) | `google/gemini-2.5-flash` |
-| Groq | API key (`GROQ_API_KEY`) | `llama-3.3-70b-versatile` |
+| OpenRouter | API key (`OPENROUTER_API_KEY`) | `google/gemini-3.8-flash` |
+| Groq | API key (`GROQ_API_KEY`) | `qwen/qwen3.8-27b` |
 | Custom | Any OpenAI-compatible endpoint, such as a local server | You choose |
 
 A key field can hold the key itself or `$NAME` to read an environment variable. If the chosen
