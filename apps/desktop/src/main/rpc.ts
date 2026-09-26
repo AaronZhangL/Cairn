@@ -15,7 +15,8 @@ import { webUrl } from './external-url';
 import { libraryServer, previewFile } from './library-server';
 import { DATA_DIR, library } from './store';
 import { markBookFinished } from './reading';
-import { loadSession } from './companion/session';
+import { loadSession, saveSession } from './companion/session';
+import { saveWorking } from './companion/working';
 import { runTurn } from './companion/run';
 import type { CompanionEvent } from '../shared/companion-events';
 import type { RequestParams } from '../shared/schema';
@@ -156,6 +157,16 @@ export function createHandlers({ books, weread, devBuild, menu, emit }: HandlerD
           console.error('chatSend failed', cause);
         })
         .finally(() => { if (activeChat?.turnId === params.turnId) activeChat = undefined; });
+      return true;
+    },
+
+    /** Refused mid-turn: the turn would save the old conversation back over the cleared one. */
+    async chatClear(params: { bookId: string }): Promise<boolean> {
+      if (!isBookId(params.bookId)) throw new Error('invalid_book_id');
+      if (activeChat) return false;
+      const { generatedAt } = await library.loadPath(params.bookId);
+      await saveSession(DATA_DIR, params.bookId, { pathGeneratedAt: generatedAt, messages: [], evidence: [] });
+      await saveWorking(DATA_DIR, params.bookId, generatedAt, { summary: '', retainedFrom: 0 });
       return true;
     },
 

@@ -198,6 +198,11 @@ export async function chatSend(params: RequestParams<'chatSend'>): Promise<boole
   return (await connect()).request.chatSend(params, POLL_LIMIT).catch(rethrow);
 }
 
+export async function chatClear(bookId: string): Promise<boolean> {
+  if (!inShell) return false;
+  return (await connect()).request.chatClear({ bookId }, POLL_LIMIT).catch(rethrow);
+}
+
 export async function retryBook(bookId: string): Promise<boolean> {
   if (!inShell) return false;
   return (await connect()).request.retryBook({ bookId }, POLL_LIMIT).catch(rethrow);

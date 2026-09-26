@@ -21,6 +21,8 @@ export type BunSchema = RPCSchema<{
     chatHistory: { params: { bookId: string }; response: ChatSession };
     chatSend: { params: { turnId: string; bookId: string; nodeId?: string; question: string; locale: UiLocale; selection?: string }; response: boolean };
     chatCancel: { params: { turnId: string }; response: boolean };
+    /** `/clear`: forget this path's conversation and the model's working context. */
+    chatClear: { params: { bookId: string }; response: boolean };
     /**
      * Tell the builder which station the reader is on, so the next ones built
      * are the next ones they will reach.

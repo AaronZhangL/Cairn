@@ -11,13 +11,16 @@ import {
 import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
-  chatCancel, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
+  chatCancel, chatClear, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
   listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, retryBook, setMenuLocale,
   wereadStart,
 } from './bridge';
 import { useBundle } from './useBundle';
 import { useShellSettings } from './useShellSettings';
 import { applyCompanionEvent, beginCompanionTurn, emptyCompanionView } from './companion-state';
+
+/** Typed in the companion's box, it clears the conversation instead of asking the model. */
+const CLEAR_COMMAND = '/clear';
 
 export function App(): ReactElement {
   const [books, setBooks] = useState<readonly LibraryEntry[]>([]);
@@ -172,6 +175,12 @@ export function App(): ReactElement {
 
   const askQuestion = useCallback((question: string) => {
     if (!node || !bookId) return;
+    if (question.trim().toLowerCase() === CLEAR_COMMAND) {
+      void chatClear(bookId)
+        .then((cleared) => { if (cleared) setChat(emptyCompanionView(bookId)); })
+        .catch((cause: unknown) => console.error('chatClear', cause));
+      return;
+    }
     const id = crypto.randomUUID();
     const sel = selection;
     setSelection(undefined);
