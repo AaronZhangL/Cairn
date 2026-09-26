@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # The desktop typechecks need the Electrobun SDK that `electrobun prepare` projects, which is macOS-only here.
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - run: bun install --frozen-lockfile
+
+      - name: Prepare Electrobun SDK
+        working-directory: apps/desktop
+        run: bunx electrobun prepare
+
+      - run: bun test
+
+      - run: bun run typecheck
+
+      - name: Bundle webview
+        working-directory: apps/desktop
+        run: bun run build

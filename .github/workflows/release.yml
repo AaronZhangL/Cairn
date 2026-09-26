@@ -1,0 +1,62 @@
+name: Release
+
+# Push a tag matching the app version in apps/desktop/electrobun.config.ts, e.g. `v0.1.0`.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - run: bun install --frozen-lockfile
+
+      # Tag names can hold shell metacharacters, so they reach scripts through env, never ${{ }}.
+      - name: Check tag against app version
+        id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          APP_VERSION="$(bun -e "import c from './apps/desktop/electrobun.config.ts'; console.log(c.app.version)")"
+          if [ "$VERSION" != "$APP_VERSION" ]; then
+            echo "::error::tag $TAG does not match app version $APP_VERSION in apps/desktop/electrobun.config.ts"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Electrobun SDK
+        working-directory: apps/desktop
+        run: bunx electrobun prepare
+
+      - run: bun test
+
+      - run: bun run typecheck
+
+      - name: Package
+        working-directory: apps/desktop
+        run: bun run package
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          DMG="Cairn-${VERSION}-arm64.dmg"
+          cp apps/desktop/artifacts/macos-arm64-Cairn.dmg "$DMG"
+          gh release create "$TAG" "$DMG" --title "Cairn $VERSION" --generate-notes
