@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   defaultModelOf, hasConstrainedModel, modelIn, OFFERED_PROVIDERS, PROVIDER_IDS, PROVIDERS, providerById,
+  type ProviderId,
 } from '../../src/shared/providers';
 
 describe('provider registry', () => {
@@ -59,6 +60,17 @@ describe('provider registry', () => {
       const flags = provider.models.map((m) => m.strict);
       expect(flags.indexOf(false) === -1 || flags.lastIndexOf(true) < flags.indexOf(false), provider.id).toBe(true);
     }
+  });
+
+  // The catalog is alphabetical, which buried GPT-6 between gpt-4 and o1.
+  test('newer models sort ahead of older ones, with vendor-prefixed ids grouped by vendor', () => {
+    const ids = (id: ProviderId) => providerById(id)!.models.map((m) => m.id);
+    expect(ids('openai').slice(0, 3)).toEqual(['gpt-6-astra', 'gpt-6-luna', 'gpt-6-sol']);
+    expect(ids('openai').indexOf('gpt-5.6-sol')).toBeLessThan(ids('openai').indexOf('gpt-5.4-mini'));
+    expect(ids('google')[0]).toBe('gemini-3.8-flash');
+    const groq = ids('groq');
+    expect(groq.indexOf('openai/gpt-oss-120b')).toBeLessThan(groq.indexOf('qwen/qwen3.8-27b'));
+    expect(groq.indexOf('qwen/qwen3.8-27b')).toBeLessThan(groq.indexOf('qwen/qwen3.6-27b'));
   });
 
   // Gemini carries no catalog flag; pi-ai goes by major version. Reading the flag

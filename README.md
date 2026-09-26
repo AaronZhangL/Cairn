@@ -60,7 +60,7 @@ provider has no credentials, Cairn uses the first one that does.
 Settings lists only models with constrained (structured) output, where the provider can force the
 reply to match a JSON Schema. Building one book takes about a hundred model calls, and each needs
 well-formed structured output, so a model that only tries to follow the format is not offered.
-xAI, Moonshot and MiniMax are not in the list for now.
+xAI, Moonshot and MiniMax are not in the list for now. Newer models are listed first.
 
 ## Build from source
 

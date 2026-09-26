@@ -131,6 +131,24 @@ function toModel(id: string, entry: CatalogEntry): ProviderModel {
   };
 }
 
+/** The first `major[.-]minor` in an id; the guards keep `gpt-oss-120b` and `-2512` date stamps from reading as versions. */
+const VERSION = /(?<!\d)(\d{1,2})(?:[.-](\d{1,2})(?![\db]))?(?![\db])/;
+
+function versionOf(id: string): number {
+  const match = VERSION.exec(id);
+  return match ? Number(match[1]) + Number(match[2] ?? 0) / 100 : 0;
+}
+
+function vendorOf(id: string): string {
+  const slash = id.indexOf('/');
+  return slash < 0 ? '' : id.slice(0, slash);
+}
+
+/** The catalog carries no release date, so the version in the id stands in for one. Across vendors it means nothing. */
+function newestFirst(a: string, b: string): number {
+  return vendorOf(a).localeCompare(vendorOf(b)) || versionOf(b) - versionOf(a) || a.localeCompare(b);
+}
+
 function baseUrlOf(catalog: Readonly<Record<string, CatalogEntry>> | undefined): string {
   for (const entry of Object.values(catalog ?? {})) {
     if (typeof entry.baseUrl === 'string' && entry.baseUrl) return entry.baseUrl;
@@ -149,7 +167,7 @@ export const PROVIDERS: readonly Provider[] = PROVIDER_IDS.map((id) => {
     // Every model, so a stored pick still resolves; the panel reads `OFFERED_PROVIDERS`.
     models: Object.entries(catalog ?? {})
       .map(([modelId, entry]) => toModel(modelId, entry))
-      .sort((a, b) => Number(b.strict) - Number(a.strict) || a.id.localeCompare(b.id)),
+      .sort((a, b) => Number(b.strict) - Number(a.strict) || newestFirst(a.id, b.id)),
   };
 });
 

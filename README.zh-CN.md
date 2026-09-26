@@ -55,7 +55,7 @@ key 一栏可以直接填 key，也可以填 `$变量名` 读取环境变量。�
 
 设置里只列出支持约束输出（structured output）的模型，也就是服务端能强制模型按 JSON Schema 回复。
 生成一本书要调用模型上百次，每次都需要格式正确的结构化结果，所以只靠模型自觉守格式的不提供。
-xAI、Moonshot 和 MiniMax 暂时不在列表里。
+xAI、Moonshot 和 MiniMax 暂时不在列表里。新模型排在前面。
 
 ## 从源码构建
 
