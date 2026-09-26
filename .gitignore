@@ -49,3 +49,6 @@ docs/research/
 
 # Logs
 *.log
+
+# Local issue tracker: specs and issues stay on this machine.
+.scratch/
