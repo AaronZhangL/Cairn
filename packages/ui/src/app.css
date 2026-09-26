@@ -858,3 +858,16 @@ body {
   .set-provider { width: auto; }
   .set-provider-name { flex: 0 0 auto; }
 }
+
+.md > * + * { margin-top: .6em; }
+.md ul, .md ol { padding-left: 1.3em; }
+.md li + li { margin-top: .2em; }
+.md p { white-space: pre-line; }
+.md .md-h { font-weight: 700; color: var(--ink); }
+.md strong { font-weight: 650; color: var(--ink); }
+.md code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; background: var(--soft); border-radius: 4px; padding: 0 .3em; }
+.md pre { overflow-x: auto; background: var(--soft); border-radius: 6px; padding: 8px 10px; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { border-left: 2px solid var(--line); padding-left: 9px; color: var(--dim); }
+.md a { color: var(--accent); }
+.md .chip { margin-left: 4px; vertical-align: 1px; }
