@@ -183,6 +183,16 @@ body {
 .shelf-item:hover { border-color: var(--accent); }
 .shelf-name { font-size: 14px; font-weight: 600; }
 .shelf-meta { font-size: 12px; color: var(--dim); }
+.shelf-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.shelf-item:has(.shelf-cover) { flex-direction: row; align-items: center; gap: 12px; }
+.shelf-cover {
+  flex: 0 0 auto; width: 40px; height: 58px; object-fit: cover;
+  border-radius: 3px; border: 1px solid var(--line);
+}
+.shelf-intro {
+  font-size: 12px; color: var(--dim); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 /* The row owns the border so the delete control sits inside it, not beside it. */
 .shelf-row { position: relative; display: flex; align-items: stretch; gap: 8px; }
@@ -238,6 +248,14 @@ body {
 .modal-sub { font-size: 13px; color: var(--dim); margin-bottom: 18px; }
 .modal-label { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 .modal-hint { font-size: 12px; color: var(--dim); margin-top: 12px; line-height: 1.7; }
+.modal-quote {
+  font-size: 13px; color: var(--dim); margin-top: 12px; line-height: 1.7;
+  /* Three lines held open, so the modal does not jump between a short quote and a long one */
+  min-height: calc(13px * 1.7 * 3);
+  animation: quote-in .6s ease;
+}
+@keyframes quote-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal-quote { animation: none; } }
 .modal-error { font-size: 12.5px; color: var(--accent); margin-top: 14px; line-height: 1.7; }
 
 .primary {

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { payloadOf } from '@cairn/core/errors';
 import { FEATURED_FORMATS } from '@cairn/core/parse/format';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { errorText, GearMark, TrashMark, useT } from '@cairn/ui';
-import { inShell } from './bridge';
+import { bookMeta, inShell } from './bridge';
+import type { BookMeta } from './shared/types';
 
 /**
  * The first screen: put a book in.
@@ -14,9 +15,11 @@ import { inShell } from './bridge';
  * shelf below it is for walking a path again, and nothing opens until it is picked.
  */
 export function Home({
-  books, onAdd, onOpen, onDelete, onSettings,
+  books, base, onAdd, onOpen, onDelete, onSettings,
 }: {
   books: readonly LibraryEntry[];
+  /** The library server's base URL, for covers. */
+  base?: string;
   onAdd: () => void;
   onOpen: (bookId: string) => void;
   /** Absent outside the desktop shell, where there is no main process to delete with. */
@@ -28,6 +31,21 @@ export function Home({
   const [confirming, setConfirming] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [failed, setFailed] = useState<{ id: string; why: string }>();
+  const [meta, setMeta] = useState<Readonly<Record<string, BookMeta>>>({});
+
+  const ids = books.map((b) => b.id).join('\n');
+  // One at a time: a first launch with a key looks every book up, and a burst helps nobody
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      for (const id of ids.split('\n').filter(Boolean)) {
+        const found = await bookMeta(id);
+        if (!live) return;
+        if (found) setMeta((m) => ({ ...m, [id]: found }));
+      }
+    })();
+    return () => { live = false; };
+  }, [ids]);
 
   const remove = async (bookId: string): Promise<void> => {
     setBusy(bookId);
@@ -71,17 +89,7 @@ export function Home({
           {books.map((b) => (
             <div className="shelf-row" key={b.id}>
               <button type="button" className="shelf-item" onClick={() => onOpen(b.id)}>
-                <span className="shelf-name">{b.title}</span>
-                <span className="shelf-meta">
-                  {t.unit.count(b.stations)} · {b.complete === false ? t.unit.approx : ''}
-                  {t.unit.minutes(b.minutes)}
-                  {b.complete === false && (
-                    <span className="shelf-building">
-                      {t.home.built(b.built ?? 0, b.stations)}
-                    </span>
-                  )}
-                  {b.author ? ` · ${b.author}` : ''}
-                </span>
+                <ShelfText book={b} meta={meta[b.id]} {...(base ? { base } : {})} />
               </button>
 
               {onDelete && (confirming === b.id ? (
@@ -125,5 +133,33 @@ export function Home({
         </section>
       )}
     </div>
+  );
+}
+
+function ShelfText({ book: b, meta, base }: {
+  book: LibraryEntry;
+  meta?: BookMeta | undefined;
+  base?: string;
+}): ReactElement {
+  const t = useT();
+  return (
+    <>
+      {meta?.cover && base && <img className="shelf-cover" src={`${base}/${meta.cover}`} alt="" />}
+      <span className="shelf-text">
+        <span className="shelf-name">{b.title}</span>
+        <span className="shelf-meta">
+          {t.unit.count(b.stations)} · {b.complete === false ? t.unit.approx : ''}
+          {t.unit.minutes(b.minutes)}
+          {b.complete === false && (
+            <span className="shelf-building">
+              {t.home.built(b.built ?? 0, b.stations)}
+            </span>
+          )}
+          {b.author ? ` · ${b.author}` : ''}
+          {meta?.rating !== undefined ? ` · ${t.home.rating(meta.rating)}` : ''}
+        </span>
+        {meta?.intro && <span className="shelf-intro">{meta.intro}</span>}
+      </span>
+    </>
   );
 }

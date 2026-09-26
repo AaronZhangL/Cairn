@@ -1,0 +1,68 @@
+  plan: {
+    propose: {
+      system: (type, coverage) => {
+        const shape = type === 'narrative'
+          ? 'This is a narrative book: a chapter of the path is a stretch of the story worth walking.'
+          : 'This is a knowledge book: a chapter of the path makes one idea, argument or practice clear.';
+
+        return systemPrompt(`You are proposing candidate chapters for a reading path through a book. You see one slice of the book in full and the rest only as a table of contents. Other slices are handled separately, and a later step chooses among all the candidates, so propose what this slice offers — do not try to cover the whole book from here.
+
+${shape}
+
+How much the reader wants: ${coverage}
+
+Hard rules:
+1. Work only from the chapter summaries I give you. Do not use anything you already know about this book.
+2. Every key point names the one chapter it comes from, and that chapter must be in this slice. A point that belongs to a chapter you only know by its title does not go in.
+3. Each candidate makes one thing clear. Two things are two candidates.
+4. weight says how badly the book would be misrepresented without this candidate: 3 its spine, 2 a real part of it, 1 detail. Front matter, acknowledgements and indexes get no candidate at all.
+5. Output JSON only.`);
+      },
+
+      user: (r) => {
+        const [lo, hi] = r.minutesPerNode;
+        return userPrompt(`Propose up to ${r.count} candidate chapters from chapters ${r.firstChapter}–${r.lastChapter}. Fewer is right when the slice has less worth walking.
+
+Each candidate:
+- estMinutes between ${lo} and ${hi}
+- brief says what it has to make clear (2-3 sentences)
+- keyPoints: 2-4, each with the chapter it comes from`, `The budget the reader chose: ${r.budgetLabel}
+
+<contents>
+${r.outline}
+</contents>
+
+<slice>
+${r.part}
+</slice>`);
+      },
+    },
+
+    arrange: {
+      system: (type) => systemPrompt(`You are putting the chapters of a reading path in order and grouping them into stages. The chapters are already chosen: do not add, drop, merge or rewrite any.
+
+${type === 'narrative'
+    ? 'This is a narrative book. The order should follow the story.'
+    : 'This is a knowledge book. The order should follow understanding: what a chapter relies on comes before it.'}
+
+Stage names say what the reader is doing right now ("Building the model", "Putting it to work"), not the book's table of contents. At least 2 chapters per stage. Output JSON only.`),
+
+      user: (r) => userPrompt(`Order these chapters and group them into about ${r.stageCount} stages. Refer to each chapter by its id; use every id exactly once.`, r.stations),
+    },
+
+    refine: {
+      system: systemPrompt(`You are reviewing a reading path through a book against the book's chapter summaries, and fixing what you find. You may reorder chapters, regroup them, rename stages, and drop a chapter that repeats another. You may not add, merge or rewrite chapters.
+
+Look for: two chapters that teach the same thing; a chapter that relies on something a later one introduces; a stage name that misdescribes its chapters.
+Judge only from the summaries given. When nothing needs fixing, return the path as it is. Output JSON only.`),
+
+      user: (r) => userPrompt(`Review this path and return it fixed, in about ${r.stageCount} stages. List each problem you fixed.`, `<summaries>
+${r.digest}
+</summaries>
+
+<path>
+${r.path}
+</path>`),
+    },
+  },
+

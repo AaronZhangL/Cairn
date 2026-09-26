@@ -180,10 +180,13 @@ function VoiceRow({ shell, locale }: { shell: ShellSettings; locale: Locale }): 
   );
 }
 
-const SEARCH_KEY_URL: Readonly<Record<'brave' | 'firecrawl' | 'tavily', string>> = {
+type KeyedService = 'brave' | 'firecrawl' | 'tavily' | 'weread';
+
+const SEARCH_KEY_URL: Readonly<Record<KeyedService, string>> = {
   brave: 'https://api-dashboard.search.brave.com/app/keys',
   firecrawl: 'https://www.firecrawl.dev/app/api-keys',
   tavily: 'https://app.tavily.com/home',
+  weread: 'https://weread.qq.com/r/weread-skills',
 };
 
 export function SearchPage({ shell }: { shell?: ShellSettings }): ReactElement {
@@ -228,9 +231,21 @@ export function SearchPage({ shell }: { shell?: ShellSettings }): ReactElement {
   );
 }
 
+export function WereadPage({ shell }: { shell?: ShellSettings }): ReactElement {
+  const { t } = useUi();
+
+  if (!shell) return <Offline title={t.settings.pages.weread} />;
+
+  return (
+    <Section title={t.settings.pages.weread}>
+      <SearchKeyRow shell={shell} which="weread" label={t.settings.weread.key} hint={t.settings.weread.keyHint} />
+    </Section>
+  );
+}
+
 function SearchKeyRow({ shell, which, label, hint }: {
   shell: ShellSettings;
-  which: 'brave' | 'firecrawl' | 'tavily';
+  which: KeyedService;
   label: string;
   hint: string;
 }): ReactElement {
@@ -255,9 +270,6 @@ function SearchKeyRow({ shell, which, label, hint }: {
         onChange={(value) => shell.setPref(field, value)}
         showLabel={t.settings.search.showKey}
         hideLabel={t.settings.search.hideKey}
-        keepValue={shell.keptSecret}
-        savedLabel={t.settings.search.savedKey}
-        clearLabel={t.settings.search.clearKey}
       />
     </StackedRow>
   );
@@ -295,14 +307,16 @@ export function DataPage({ shell }: { shell?: ShellSettings }): ReactElement {
 
       {/* A trace is the book's own text written down a second time, so it lives
           beside the data directory rather than among the keys. */}
-      <Row label={t.settings.data.trace} hint={<span className="set-hint warn">{t.settings.data.traceHint}</span>}>
-        <Switch
-          id={traceId}
-          checked={shell.prefs.trace}
-          onChange={(next) => shell.setPref('trace', next)}
-          label={t.settings.data.trace}
-        />
-      </Row>
+      {shell.devBuild && (
+        <Row label={t.settings.data.trace} hint={<span className="set-hint warn">{t.settings.data.traceHint}</span>}>
+          <Switch
+            id={traceId}
+            checked={shell.prefs.trace}
+            onChange={(next) => shell.setPref('trace', next)}
+            label={t.settings.data.trace}
+          />
+        </Row>
+      )}
 
       <Row label={t.settings.data.cache} hint={t.settings.data.cacheHint}>
         {confirming ? (

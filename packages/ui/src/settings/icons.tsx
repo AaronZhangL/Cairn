@@ -72,6 +72,15 @@ export function SearchMark(): ReactElement {
   );
 }
 
+export function BookMark(): ReactElement {
+  return (
+    <svg {...BOX} {...STROKE} aria-hidden="true">
+      <path d="M3 5.5C5.5 4 9 4 12 6c3-2 6.5-2 9-.5V19c-2.5-1.5-6-1.5-9 .5-3-2-6.5-2-9-.5z" />
+      <path d="M12 6v13.5" />
+    </svg>
+  );
+}
+
 export function CacheMark(): ReactElement {
   return (
     <svg {...BOX} {...STROKE} aria-hidden="true">

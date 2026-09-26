@@ -1,0 +1,108 @@
+/**
+ * Choosing a path's stations from candidates, in code. Budgeted greedy coverage
+ * (Lin & Bilmes): take the candidate with the best gain per minute until the
+ * budget is spent. Gain rewards chapters and slices of the book not yet walked,
+ * so a tight budget spreads across the book instead of stopping at its opening.
+ */
+import type { ChapterNote, NodeKind, PathNode } from '../types';
+import { exceedsBudget, type ReadingBudget } from './budget';
+
+export interface CandidatePoint {
+  readonly text: string;
+  readonly chapter: number;
+}
+
+export interface Candidate {
+  readonly title: string;
+  readonly kind: NodeKind;
+  readonly brief: string;
+  /** Each point cites its own chapter, so a station's sources are exactly where its points come from. */
+  readonly points: readonly CandidatePoint[];
+  readonly estMinutes: number;
+  /** 3 the book's spine, 2 a real part of it, 1 detail. */
+  readonly weight: number;
+  /** Which slice of the book proposed it. */
+  readonly part: number;
+}
+
+/** A candidate whose chapters are all walked already still adds something, but little. */
+const REPEAT_WORTH = 0.2;
+/**
+ * Weights are judged within one slice and do not compare across slices, so reaching
+ * an untouched slice must outweigh one slice's spine over another's substance.
+ */
+const NEW_PART_WORTH = 2;
+
+export const sourcesOf = (c: Candidate): readonly number[] =>
+  [...new Set(c.points.map((p) => p.chapter))].sort((a, b) => a - b);
+
+export function selectCandidates(candidates: readonly Candidate[], budget: ReadingBudget): readonly Candidate[] {
+  const chosen = new Set<number>();
+  const chapters = new Set<number>();
+  const parts = new Set<number>();
+  let minutes = 0;
+
+  while (minutes < budget.targetMinutes) {
+    const pick = bestNext(candidates, chosen, chapters, parts, budget.maxMinutes - minutes);
+    if (pick === undefined) break;
+    const c = candidates[pick];
+    if (!c) break;
+    chosen.add(pick);
+    sourcesOf(c).forEach((ch) => chapters.add(ch));
+    parts.add(c.part);
+    minutes += c.estMinutes;
+  }
+
+  return candidates.filter((_, i) => chosen.has(i));
+}
+
+function bestNext(
+  candidates: readonly Candidate[],
+  chosen: ReadonlySet<number>,
+  chapters: ReadonlySet<number>,
+  parts: ReadonlySet<number>,
+  room: number,
+): number | undefined {
+  let best: number | undefined;
+  let bestRatio = 0;
+  candidates.forEach((c, i) => {
+    if (chosen.has(i) || c.estMinutes > room || c.estMinutes <= 0) return;
+    const sources = sourcesOf(c);
+    const fresh = sources.filter((ch) => !chapters.has(ch)).length / Math.max(1, sources.length);
+    const gain = c.weight * (REPEAT_WORTH + (1 - REPEAT_WORTH) * fresh) + (parts.has(c.part) ? 0 : NEW_PART_WORTH);
+    const ratio = gain / c.estMinutes;
+    if (ratio > bestRatio) {
+      best = i;
+      bestRatio = ratio;
+    }
+  });
+  return best;
+}
+
+export interface Spread {
+  /** Share of chapters cited by at least one station. */
+  readonly coverage: number;
+  /** Mean position of cited chapters, 0 = start, 1 = end, minus 0.5. Positive leans late. */
+  readonly skew: number;
+}
+
+export function citedSpread(nodes: readonly PathNode[], notes: readonly ChapterNote[]): Spread {
+  const rank = new Map(notes.map((n, i) => [n.idx, i]));
+  const ranks = nodes.flatMap((n) => n.sourceChapters).flatMap((c) => {
+    const r = rank.get(c);
+    return r === undefined ? [] : [r];
+  });
+  const count = notes.length;
+  const coverage = count === 0 ? 0 : new Set(ranks).size / count;
+  const skew = ranks.length === 0 || count < 2
+    ? 0
+    : ranks.reduce((sum, r) => sum + r / (count - 1), 0) / ranks.length - 0.5;
+  return { coverage, skew };
+}
+
+/** How several drafts of one path are ranked against each other. Code only, never a model: see docs/EVAL.md. */
+export function pathScore(nodes: readonly PathNode[], notes: readonly ChapterNote[], budget: ReadingBudget): number {
+  const { coverage, skew } = citedSpread(nodes, notes);
+  const spread = coverage - Math.abs(skew);
+  return exceedsBudget(nodes, budget) ? spread - 1 : spread;
+}

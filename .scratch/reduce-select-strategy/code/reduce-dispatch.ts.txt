@@ -1,0 +1,39 @@
+export async function reduceToPath(
+  notes: readonly ChapterNote[],
+  type: BookType,
+  totalWords: number,
+  provider: LlmProvider,
+  options: ReduceOptions = {},
+): Promise<ReduceResult> {
+  const budget = options.budget
+    ?? budgetsFor({ totalWords, chapterCount: notes.length })[DEFAULT_BUDGET_ID];
+  const once = (): Promise<ReduceResult> => (options.strategy === 'select'
+    ? reduceBySelection(notes, type, totalWords, provider, options, budget)
+    : reduceInOneCall(notes, type, totalWords, provider, options, budget));
+
+  const samples = Math.max(1, Math.floor(options.samples ?? 1));
+  if (samples === 1) return once();
+  const drafts = await Promise.allSettled(Array.from({ length: samples }, once));
+  const made = drafts.flatMap((d) => (d.status === 'fulfilled' ? [d.value] : []));
+  const scored = made.map((r) => ({ r, score: pathScore(r.nodes, notes, budget) }));
+  const best = scored.reduce<(typeof scored)[number] | undefined>((a, b) => (a && a.score >= b.score ? a : b), undefined);
+  if (!best) throw drafts.find((d): d is PromiseRejectedResult => d.status === 'rejected')?.reason;
+  return best.r;
+}
+
+async function reduceBySelection(
+  notes: readonly ChapterNote[], type: BookType, totalWords: number, provider: LlmProvider,
+  options: ReduceOptions, budget: ReadingBudget,
+): Promise<ReduceResult> {
+  const prompts = promptsFor(options.locale ?? 'zh', options.kind);
+  const planned = await planPath({
+    notes, type, budget, prompts,
+    targetNodes: suggestNodeCount(totalWords, budget),
+    budgetLabel: prompts.reduce.budgetLabel(budget.targetMinutes, budget.id),
+    coverage: prompts.reduce.coverage[budget.id],
+    refine: options.refine === true,
+    ...(options.signal ? { signal: options.signal } : {}),
+  }, provider);
+  return { ...planned, budget, totalMinutes: totalMinutes(planned.nodes), retries: 0 };
+}
+

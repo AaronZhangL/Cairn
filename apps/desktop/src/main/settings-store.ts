@@ -1,30 +1,20 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
-  DEFAULT_SHELL_SETTINGS, parseSettings, type ProviderId, type ProviderProfile,
-  type ProviderProfiles, redactSettings, REDACTED_SECRET, type ShellSettingsValues,
+  DEFAULT_SHELL_SETTINGS, parseSettings, upgradeLegacyKeys,
+  type ProviderProfiles, type ShellSettingsValues,
 } from '../shared/settings';
 
-/**
- * Merge a patch's provider profiles over the stored ones.
- *
- * Two rules, and both exist because the renderer never holds a real key. A
- * profile the patch does not mention is kept, so editing OpenAI cannot wipe
- * Anthropic. And a key that comes back as the stand-in means "unchanged", so
- * saving any other field does not erase the secret behind it.
- *
- * The old shape had one key field per role, so switching vendors had to drop it.
- * Per-provider profiles retire that hazard: each vendor's key has its own home.
- */
+/** A profile the patch does not mention is kept, so editing OpenAI cannot wipe Anthropic. */
 function mergeProviders(current: ProviderProfiles, patch: ProviderProfiles): ProviderProfiles {
-  const out: Partial<Record<ProviderId, ProviderProfile>> = { ...current };
-  for (const [id, profile] of Object.entries(patch) as [ProviderId, ProviderProfile][]) {
-    out[id] = {
-      ...profile,
-      apiKey: profile.apiKey === REDACTED_SECRET ? current[id]?.apiKey ?? '' : profile.apiKey,
-    };
-  }
-  return out;
+  return { ...current, ...patch };
+}
+
+/** Marks a file written since key fields took `$NAME`; see `upgradeLegacyKeys`. */
+const KEY_REFS = 1;
+
+function isLegacy(raw: unknown): raw is Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && (raw as { keyRefs?: unknown }).keyRefs !== KEY_REFS;
 }
 
 export function createSettingsStore(root: string, tavilyEnvKey = process.env.TAVILY_API_KEY) {
@@ -36,7 +26,8 @@ export function createSettingsStore(root: string, tavilyEnvKey = process.env.TAV
   const read = async (): Promise<ShellSettingsValues> => {
     if (cached) return cached;
     try {
-      cached = parseSettings(JSON.parse(await readFile(file, 'utf8')), fallback);
+      const raw = JSON.parse(await readFile(file, 'utf8')) as unknown;
+      cached = parseSettings(isLegacy(raw) ? upgradeLegacyKeys(raw) : raw, fallback);
     } catch {
       cached = fallback;
     }
@@ -49,11 +40,8 @@ export function createSettingsStore(root: string, tavilyEnvKey = process.env.TAV
       const next = parseSettings({
         ...current, ...patch,
         ...(patch.providers ? { providers: mergeProviders(current.providers, patch.providers) } : {}),
-        tavilyKey: patch.tavilyKey === REDACTED_SECRET ? current.tavilyKey : patch.tavilyKey,
-        braveKey: patch.braveKey === REDACTED_SECRET ? current.braveKey : patch.braveKey,
-        firecrawlKey: patch.firecrawlKey === REDACTED_SECRET ? current.firecrawlKey : patch.firecrawlKey,
       }, current);
-      await writeFile(file, JSON.stringify(next, null, 2));
+      await writeFile(file, JSON.stringify({ ...next, keyRefs: KEY_REFS }, null, 2));
       cached = next;
       return next;
     });
@@ -61,9 +49,5 @@ export function createSettingsStore(root: string, tavilyEnvKey = process.env.TAV
     return nextWrite;
   };
 
-  return {
-    read,
-    readForRenderer: async (): Promise<ShellSettingsValues> => redactSettings(await read()),
-    write,
-  };
+  return { read, write };
 }

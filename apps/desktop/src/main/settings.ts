@@ -12,21 +12,22 @@
  */
 import { DATA_DIR } from './store';
 import { createSettingsStore } from './settings-store';
-import type { ShellSettingsValues } from '../shared/settings';
+import { resolveSecret, type ShellSettingsValues } from '../shared/settings';
 
 const settingsStore = createSettingsStore(DATA_DIR);
 export const readSettings = settingsStore.read;
-export const readSettingsForRenderer = settingsStore.readForRenderer;
 export const writeSettings = settingsStore.write;
 
-/** A saved key takes precedence over the selected provider's environment key. */
-export function effectiveSearchKey(
-  settings: ShellSettingsValues,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string | undefined {
-  if (settings.searchProvider === 'brave') return settings.braveKey.trim() || env.BRAVE_SEARCH_API_KEY || undefined;
-  if (settings.searchProvider === 'firecrawl') return settings.firecrawlKey.trim() || env.FIRECRAWL_API_KEY || undefined;
-  return settings.tavilyKey.trim() || env.TAVILY_API_KEY || undefined;
+type Env = Readonly<Record<string, string | undefined>>;
+
+export function effectiveSearchKey(settings: ShellSettingsValues, env: Env = process.env): string | undefined {
+  if (settings.searchProvider === 'brave') return resolveSecret(settings.braveKey, env);
+  if (settings.searchProvider === 'firecrawl') return resolveSecret(settings.firecrawlKey, env);
+  return resolveSecret(settings.tavilyKey, env);
+}
+
+export function effectiveWereadKey(settings: ShellSettingsValues, env: Env = process.env): string | undefined {
+  return resolveSecret(settings.wereadKey, env);
 }
 
 /** Either switch turns tracing on; the environment cannot be overridden to off. */

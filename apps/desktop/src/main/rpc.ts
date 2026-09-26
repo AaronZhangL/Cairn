@@ -1,13 +1,13 @@
 import { openExternal, openFileDialog } from 'electrobun/main/utils';
 import type { BookBuilder } from '@cairn/core/books/builder';
+import type { Weread } from './weread/service';
 import { ACCEPTED_EXTENSIONS } from '@cairn/core/parse/format';
 import type { BudgetId } from '@cairn/core/pipeline/budget';
 import { isBookId, type LibraryEntry } from '@cairn/core/store/library';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { speakSample } from '@cairn/core/runtime';
-import { readSettings, readSettingsForRenderer, writeSettings } from './settings';
-import { redactSettings } from '../shared/settings';
+import { readSettings, writeSettings } from './settings';
 import type {
   ContentLocale, ModelStatus, ShellSettingsValues, UiLocale,
 } from '../shared/settings';
@@ -20,11 +20,16 @@ import { runTurn } from './companion/run';
 import type { CompanionEvent } from '../shared/companion-events';
 import type { RequestParams } from '../shared/schema';
 import { modelStatus } from './provider';
-import type { BookPreview, Progress } from '../shared/types';
+import type { BookMeta, BookPreview, Progress } from '../shared/types';
 import { inspect, readBook, sourceOf } from './inspect';
 import { CairnError } from '@cairn/core/errors';
 import { encodingErrors } from '../shared/errors';
 
+
+const quietly = <T>(what: string, fallback: T) => (cause: unknown): T => {
+  console.error(what, cause);
+  return fallback;
+};
 
 const message = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -32,6 +37,8 @@ const message = (cause: unknown): string =>
 /** What the handlers need from the rest of the process, assembled once in `index.ts`. */
 export interface HandlerDeps {
   readonly books: BookBuilder;
+  readonly weread: Weread;
+  readonly devBuild: boolean;
   /** Rebuilds the native menu in the reader's language. */
   readonly menu: (locale: UiLocale) => void;
   /** Pushed to the window; fire-and-forget, so each has a pull-side twin. */
@@ -41,7 +48,7 @@ export interface HandlerDeps {
   };
 }
 
-export function createHandlers({ books, menu, emit }: HandlerDeps) {
+export function createHandlers({ books, weread, devBuild, menu, emit }: HandlerDeps) {
   /** One reader, one conversation: a second send while a turn runs is refused. */
   let activeChat: { readonly turnId: string; readonly controller: AbortController } | undefined;
 
@@ -103,6 +110,20 @@ export function createHandlers({ books, menu, emit }: HandlerDeps) {
       return books.resume(params.bookId).catch(() => false);
     },
 
+    /* ---- WeChat Reading: an extra, so a failure is logged and reads as nothing ---- */
+
+    async wereadQuotes(params: { title: string; author?: string }): Promise<readonly string[]> {
+      return weread.quotes(params.title, params.author).catch(quietly('wereadQuotes', []));
+    },
+
+    async bookMeta(params: { bookId: string }): Promise<BookMeta | null> {
+      return weread.meta(params.bookId).catch(quietly('bookMeta', null));
+    },
+
+    async wereadStart(params: { bookId: string }): Promise<string | null> {
+      return weread.startStation(params.bookId).catch(quietly('wereadStart', null));
+    },
+
     async markBookFinished(params: { bookId: string; nodeId: string }): Promise<boolean> {
       return markBookFinished(params.bookId, params.nodeId);
     },
@@ -156,11 +177,15 @@ export function createHandlers({ books, menu, emit }: HandlerDeps) {
     /* ---- settings ---- */
 
     async getSettings(): Promise<ShellSettingsValues> {
-      return readSettingsForRenderer();
+      return readSettings();
     },
 
     async setSettings(patch: Partial<ShellSettingsValues>): Promise<ShellSettingsValues> {
-      return redactSettings(await writeSettings(patch));
+      return writeSettings(patch);
+    },
+
+    async devBuild(): Promise<boolean> {
+      return devBuild;
     },
 
     /** Where generated books live, as a path a human can read and open. */

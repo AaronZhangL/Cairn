@@ -48,6 +48,8 @@ export interface Provider {
   readonly getKeyUrl: string;
   readonly faviconDomain: string;
   readonly baseUrl: string;
+  /** The environment variable pi-ai reads this vendor's key from. `custom` has none. */
+  readonly envKey?: string;
   /** Only `custom` has no endpoint of its own. */
   readonly needsBaseUrl: boolean;
   readonly models: readonly ProviderModel[];
@@ -65,19 +67,20 @@ interface Chrome {
   readonly getKeyUrl: string;
   readonly faviconDomain: string;
   readonly defaultModel: string;
+  readonly envKey?: string;
 }
 
 const CHROME: Readonly<Record<ProviderId, Chrome>> = {
-  openai: { label: 'OpenAI', getKeyUrl: 'https://platform.openai.com/api-keys', faviconDomain: 'openai.com', defaultModel: 'gpt-5.4-mini' },
-  anthropic: { label: 'Anthropic', getKeyUrl: 'https://console.anthropic.com/settings/keys', faviconDomain: 'anthropic.com', defaultModel: 'claude-haiku-4-5' },
-  google: { label: 'Google', getKeyUrl: 'https://aistudio.google.com/apikey', faviconDomain: 'ai.google.dev', defaultModel: 'gemini-3.5-flash' },
-  deepseek: { label: 'DeepSeek', getKeyUrl: 'https://platform.deepseek.com/api_keys', faviconDomain: 'deepseek.com', defaultModel: 'deepseek-flash' },
-  openrouter: { label: 'OpenRouter', getKeyUrl: 'https://openrouter.ai/keys', faviconDomain: 'openrouter.ai', defaultModel: 'google/gemini-2.5-flash' },
-  groq: { label: 'Groq', getKeyUrl: 'https://console.groq.com/keys', faviconDomain: 'groq.com', defaultModel: 'llama-3.3-70b-versatile' },
-  xai: { label: 'xAI', getKeyUrl: 'https://console.x.ai', faviconDomain: 'x.ai', defaultModel: 'grok-4.7' },
-  moonshotai: { label: 'Moonshot', getKeyUrl: 'https://platform.moonshot.cn/console/api-keys', faviconDomain: 'moonshot.cn', defaultModel: 'kimi-k2.6' },
-  minimax: { label: 'MiniMax', getKeyUrl: 'https://www.minimax.io/platform/user-center/basic-information', faviconDomain: 'minimax.io', defaultModel: 'MiniMax-M2.7' },
-  'minimax-cn': { label: 'MiniMax 中国', getKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information', faviconDomain: 'minimaxi.com', defaultModel: 'MiniMax-M2.7' },
+  openai: { label: 'OpenAI', getKeyUrl: 'https://platform.openai.com/api-keys', faviconDomain: 'openai.com', defaultModel: 'gpt-5.4-mini', envKey: 'OPENAI_API_KEY' },
+  anthropic: { label: 'Anthropic', getKeyUrl: 'https://console.anthropic.com/settings/keys', faviconDomain: 'anthropic.com', defaultModel: 'claude-haiku-4-5', envKey: 'ANTHROPIC_API_KEY' },
+  google: { label: 'Google', getKeyUrl: 'https://aistudio.google.com/apikey', faviconDomain: 'ai.google.dev', defaultModel: 'gemini-3.5-flash', envKey: 'GEMINI_API_KEY' },
+  deepseek: { label: 'DeepSeek', getKeyUrl: 'https://platform.deepseek.com/api_keys', faviconDomain: 'deepseek.com', defaultModel: 'deepseek-flash', envKey: 'DEEPSEEK_API_KEY' },
+  openrouter: { label: 'OpenRouter', getKeyUrl: 'https://openrouter.ai/keys', faviconDomain: 'openrouter.ai', defaultModel: 'google/gemini-2.5-flash', envKey: 'OPENROUTER_API_KEY' },
+  groq: { label: 'Groq', getKeyUrl: 'https://console.groq.com/keys', faviconDomain: 'groq.com', defaultModel: 'llama-3.3-70b-versatile', envKey: 'GROQ_API_KEY' },
+  xai: { label: 'xAI', getKeyUrl: 'https://console.x.ai', faviconDomain: 'x.ai', defaultModel: 'grok-4.7', envKey: 'XAI_API_KEY' },
+  moonshotai: { label: 'Moonshot', getKeyUrl: 'https://platform.moonshot.cn/console/api-keys', faviconDomain: 'moonshot.cn', defaultModel: 'kimi-k2.6', envKey: 'MOONSHOT_API_KEY' },
+  minimax: { label: 'MiniMax', getKeyUrl: 'https://www.minimax.io/platform/user-center/basic-information', faviconDomain: 'minimax.io', defaultModel: 'MiniMax-M2.7', envKey: 'MINIMAX_API_KEY' },
+  'minimax-cn': { label: 'MiniMax 中国', getKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information', faviconDomain: 'minimaxi.com', defaultModel: 'MiniMax-M2.7', envKey: 'MINIMAX_CN_API_KEY' },
   custom: { label: 'Custom', getKeyUrl: '', faviconDomain: '', defaultModel: '' },
 };
 

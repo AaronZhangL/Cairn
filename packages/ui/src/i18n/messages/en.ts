@@ -56,6 +56,7 @@ export const en = {
     brave_key_missing: 'No Brave Search API key is set, so it cannot search the web.',
     brave_failed: (p: { status?: number }) => `Brave Search answered with ${p.status ?? '?'}.`,
     firecrawl_failed: (p: { status?: number }) => `Firecrawl search answered with ${p.status ?? '?'}.`,
+    weread_failed: (p: { status?: number }) => `WeChat Reading answered with ${p.status ?? '?'}.`,
 
     offline_pick: 'Choosing a file needs the desktop app — run `bun run start`.',
     offline_generate: 'Building a path needs the desktop app — run `bun run start`.',
@@ -159,6 +160,8 @@ export const en = {
     delete: 'Delete',
     cancel: 'Cancel',
     deleteAria: (title: string) => `Delete ${title}`,
+    /** WeChat Reading's recommendation score, as it words it. */
+    rating: (score: number) => `${Math.round(score)}% recommend`,
     deleteTitle: 'Delete this book',
     settings: 'Settings',
   },
@@ -178,7 +181,7 @@ export const en = {
     recommended: 'suggested',
     another: 'Pick another',
     generating: 'Building',
-    note: 'The book never leaves this machine. You can close this window while it builds.',
+    note: 'The Cairn is going up stone by stone, feel free to step away.',
     stages: {
       map: 'Compressing each chapter',
       classify: 'Working out the kind of book',
@@ -213,6 +216,7 @@ export const en = {
       models: 'Model',
       narration: 'Narration',
       search: 'Search',
+      weread: 'WeChat Reading',
       data: 'Data & cache',
     },
     general: {
@@ -243,9 +247,8 @@ export const en = {
       setDefault: 'Use for generation',
       getKey: 'Get a key',
       apiKey: 'API key',
-      secretHint: 'A saved key stays in the main process and is never sent back here. Type a new one to replace it, or clear it. With none saved, the provider’s environment variable is read.',
+      secretHint: 'A value starting with $ reads that environment variable, e.g. $OPENAI_API_KEY.',
       baseUrl: 'Endpoint',
-      baseUrlHint: 'Leave empty for the provider’s own.',
       baseUrlRequired: 'Required — a custom endpoint has none of its own.',
       baseUrlPlaceholder: 'https://…/v1',
       modelName: 'Model',
@@ -292,24 +295,26 @@ export const en = {
       },
     },
     search: {
-      desc: 'Credentials stay in the main process; the player never holds one.',
+      desc: 'Which search service the companion uses to look beyond the book.',
       searchProvider: 'Web search',
       searchProviderHint: 'Search queries are sent to the selected provider. Fetching pages remains separate.',
       braveProvider: 'Brave Search',
       firecrawlProvider: 'Firecrawl · key optional',
       tavilyProvider: 'Tavily · API key',
       brave: 'Brave Search API Key',
-      braveHint: 'Required when Brave is selected. An empty field reads BRAVE_SEARCH_API_KEY.',
+      braveHint: 'Required when Brave is selected.',
       firecrawl: 'Firecrawl API Key',
-      firecrawlHint: 'Optional. Without a key, Firecrawl uses its limited free tier. An empty field reads FIRECRAWL_API_KEY.',
+      firecrawlHint: 'Optional. Without a key, Firecrawl uses its limited free tier.',
       tavily: 'Tavily API Key',
-      tavilyHint:
-        'Used only when Tavily is selected. Left empty, the TAVILY_API_KEY environment variable is read.',
+      tavilyHint: 'Used only when Tavily is selected.',
       getKey: 'Get a key ↗',
       showKey: 'Show key',
       hideKey: 'Hide key',
-      savedKey: 'Saved — type to replace it',
-      clearKey: 'Clear'
+    },
+    weread: {
+      desc: 'Your WeChat Reading account, for highlights, covers and where you left off.',
+      key: 'WeChat Reading API Key',
+      keyHint: 'Optional. Sends the title and author to WeChat Reading to show its popular highlights while a book builds, fill in the cover, and start from where you stopped reading there.',
     },
     data: {
       trace: 'Record every model call',

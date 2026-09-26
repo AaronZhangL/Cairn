@@ -1,0 +1,63 @@
+import { describe, expect, test } from 'bun:test';
+import { budgetsFor } from '../../src/pipeline/budget';
+import { type Candidate, citedSpread, pathScore, selectCandidates } from '../../src/pipeline/select';
+import type { ChapterNote, PathNode } from '../../src/types';
+
+const budget = { ...budgetsFor({ totalWords: 140_000, chapterCount: 60 }).quick, targetMinutes: 12, maxMinutes: 12 };
+
+const cand = (title: string, chapters: number[], part: number, weight = 2, estMinutes = 3): Candidate => ({
+  title, kind: 'concept', brief: '', estMinutes, weight, part,
+  points: chapters.map((chapter) => ({ text: `${title}-${chapter}`, chapter })),
+});
+
+describe('selectCandidates', () => {
+  test('紧预算下取材铺开到全书，而不是停在开头：Pro Git 的 quick 路径曾只取前 18 章', () => {
+    const opening = [0, 1, 2, 3, 4, 5].map((i) => cand(`开头${i}`, [i], 0, 3));
+    const later = [cand('中段', [30], 2, 2), cand('后段', [50], 4, 2)];
+    const chosen = selectCandidates([...opening, ...later], budget).map((c) => c.title);
+    expect(chosen).toContain('中段');
+    expect(chosen).toContain('后段');
+  });
+
+  test('总时长不超过预算上限', () => {
+    const many = Array.from({ length: 20 }, (_, i) => cand(`c${i}`, [i], i % 5, 2, 3));
+    const chosen = selectCandidates(many, budget);
+    expect(chosen.reduce((sum, c) => sum + c.estMinutes, 0)).toBeLessThanOrEqual(budget.maxMinutes);
+    expect(chosen.length).toBe(4);
+  });
+
+  test('章节全被覆盖过的候选排在新章节之后', () => {
+    const chosen = selectCandidates([
+      cand('甲', [1, 2], 0, 3), cand('重复', [1, 2], 0, 3), cand('新的', [3], 0, 2), cand('又一个', [4], 0, 2),
+    ], { ...budget, targetMinutes: 9, maxMinutes: 9 });
+    expect(chosen.map((c) => c.title)).toEqual(['甲', '新的', '又一个']);
+  });
+
+  test('保持候选的原有顺序', () => {
+    const chosen = selectCandidates([cand('a', [1], 0, 1), cand('b', [20], 1, 3)], budget);
+    expect(chosen.map((c) => c.title)).toEqual(['a', 'b']);
+  });
+});
+
+const notes: readonly ChapterNote[] = Array.from({ length: 10 }, (_, idx) => ({
+  idx, title: `${idx}`, gist: '', keyPoints: [], quotes: [],
+}));
+const node = (id: string, sourceChapters: number[], estMinutes = 3): PathNode => ({
+  id, idx: 0, title: id, kind: 'concept', brief: '', keyPoints: [], sourceChapters, estMinutes,
+});
+
+describe('citedSpread / pathScore', () => {
+  test('只引开头时偏移为负，覆盖按去重章节计', () => {
+    const s = citedSpread([node('a', [0, 1]), node('b', [1])], notes);
+    expect(s.coverage).toBe(0.2);
+    expect(s.skew).toBeLessThan(-0.3);
+  });
+
+  test('铺开的草稿比挤在开头的得分高，超预算的最低', () => {
+    const spread = pathScore([node('a', [0]), node('b', [5]), node('c', [9])], notes, budget);
+    const opening = pathScore([node('a', [0]), node('b', [1]), node('c', [2])], notes, budget);
+    const over = pathScore([node('a', [0], 9), node('b', [5], 9), node('c', [9], 9)], notes, budget);
+    expect(spread).toBeGreaterThan(opening);
+    expect(over).toBeLessThan(opening);
+  });
+});

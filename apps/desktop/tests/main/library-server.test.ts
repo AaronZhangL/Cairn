@@ -11,6 +11,12 @@ describe('resolveInLibrary', () => {
       .toBe('/tmp/lib/books/a/path.json');
   });
 
+  test('serves a cover beside the book, and nothing else by that name', () => {
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/books/a/cover.jpg`, TOKEN)).toBe('/tmp/lib/books/a/cover.jpg');
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/books/a/weread.json`, TOKEN)).toBeUndefined();
+    expect(resolveInLibrary(ROOT, `/${TOKEN}/books/a/cover.svg`, TOKEN)).toBeUndefined();
+  });
+
   test('rejects a wrong or missing token', () => {
     expect(resolveInLibrary(ROOT, '/other/books.json', TOKEN)).toBeUndefined();
     expect(resolveInLibrary(ROOT, '/books.json', TOKEN)).toBeUndefined();

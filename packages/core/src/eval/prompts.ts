@@ -32,8 +32,8 @@ grouping: a stage title misdescribes the stations under it.
 Fail a mode only with a concrete example, and name the stations in the note. ${GROUNDED}`);
 
 export const PAIRWISE_SYSTEM = systemPrompt(`You are choosing the better of two reading paths through the same book, for the same reading budget.
-Better means: more faithful to the notes, spends the budget on what matters most, builds understanding in a sensible order, and does not repeat itself.
-Length is not merit. Where neither is clearly better, answer tie. ${GROUNDED}`);
+You see each path as an outline: stages, station titles, minutes and the chapters each station draws on. Judge the choice and the order — what the budget is spent on, whether it reaches what matters most in the notes, whether it builds understanding in a sensible order, whether it repeats itself.
+More stations is not merit. Where neither is clearly better, answer tie. ${GROUNDED}`);
 
 export const ideasUser = (notes: readonly ChapterNote[], count: number): string =>
   userPrompt(`List the ${count} most important ideas of this book.`, notesDigest(notes));
@@ -61,12 +61,30 @@ export const pairwiseUser = (
 ): string =>
   userPrompt(
     `Both paths were made for this budget: ${budget}. Which is better, A or B?`,
-    `<notes>\n${notesDigest(notes)}\n</notes>\n<path_a>\n${renderPath(first)}\n</path_a>\n<path_b>\n${renderPath(second)}\n</path_b>`,
+    `<notes>\n${notesDigest(notes)}\n</notes>\n<path_a>\n${renderOutline(first)}\n</path_a>\n<path_b>\n${renderOutline(second)}\n</path_b>`,
   );
 
 export function notesDigest(notes: readonly ChapterNote[]): string {
   return notes
     .map((n) => [`[${n.idx}] ${n.title}`, `  ${n.gist}`, ...n.keyPoints.map((k) => `  - ${k}`)].join('\n'))
+    .join('\n\n');
+}
+
+/**
+ * The pairwise judge sees outlines only. Shown full paths it preferred the wordier
+ * one nine times in ten whatever else differed (docs/EVAL.md, "Length bias"), and
+ * the wording is not reduce's job: faithfulness is judged elsewhere, station by station.
+ */
+export function renderOutline({ nodes, stages }: Proposal): string {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return stages
+    .map((stage) => [
+      `Stage: ${stage.title}`,
+      ...stage.nodeIds.flatMap((id) => {
+        const n = byId.get(id);
+        return n ? [`  [${n.id}] ${n.title} (${n.estMinutes} min, chapters ${n.sourceChapters.join(',')})`] : [];
+      }),
+    ].join('\n'))
     .join('\n\n');
 }
 

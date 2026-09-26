@@ -4,7 +4,8 @@ import type { BudgetId } from '@cairn/core/pipeline/budget';
 import type { LibraryEntry } from '@cairn/core/store/library';
 import { errorText, useT } from '@cairn/ui';
 import { payloadOf } from '@cairn/core/errors';
-import { generateBook, onProgress, pickBook, progressNow } from './bridge';
+import { generateBook, onProgress, pickBook, progressNow, wereadQuotes } from './bridge';
+import { QuoteCycle } from './QuoteCycle';
 import { VOICES } from './shared/settings';
 import type { BookPreview, Progress } from './shared/types';
 
@@ -34,12 +35,21 @@ export function AddBook({
   const [progress, setProgress] = useState<Progress>();
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string>();
+  const [quotes, setQuotes] = useState<readonly string[]>([]);
   /** The native dialog is not idempotent: opening it twice stacks two windows. */
   const picked = useRef(false);
 
   const polling = progress !== undefined && progress.stage !== 'done';
 
   useEffect(() => onProgress(setProgress), []);
+
+  // Fetched while the budget is being chosen, so they are there when the wait starts
+  useEffect(() => {
+    if (!preview) return;
+    let live = true;
+    void wereadQuotes(preview.title, preview.author).then((q) => { if (live) setQuotes(q); });
+    return () => { live = false; };
+  }, [preview]);
 
   // A run takes minutes; one dropped message would freeze the bar for all of it
   useEffect(() => {
@@ -157,9 +167,7 @@ export function AddBook({
             <div className="prog">
               <i style={{ width: `${pct(progress)}%` }} />
             </div>
-            <p className="modal-hint">
-              {t.add.note}
-            </p>
+            <QuoteCycle quotes={quotes} fallback={t.add.note} />
           </>
         )}
 

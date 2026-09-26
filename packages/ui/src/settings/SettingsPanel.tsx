@@ -3,15 +3,15 @@ import type { ReactElement } from 'react';
 import { useUi } from './SettingsProvider';
 import { ModelsPage } from './ModelsPage';
 import {
-  AppearancePage, DataPage, GeneralPage, NarrationPage, PlaybackPage, SearchPage,
+  AppearancePage, DataPage, GeneralPage, NarrationPage, PlaybackPage, SearchPage, WereadPage,
 } from './pages';
 import type { ShellSettings } from './shell';
 import {
-  CacheMark, GearMark, ModelMark, PaletteMark, PlaybackMark, SearchMark, WaveMark,
+  BookMark, CacheMark, GearMark, ModelMark, PaletteMark, PlaybackMark, SearchMark, WaveMark,
 } from './icons';
 
 export const SETTINGS_TABS = [
-  'general', 'appearance', 'playback', 'models', 'narration', 'search', 'data',
+  'general', 'appearance', 'playback', 'models', 'narration', 'weread', 'search', 'data',
 ] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -28,6 +28,7 @@ const PAGES: readonly {
   { tab: 'playback', group: 'reading', Icon: PlaybackMark },
   { tab: 'models', group: 'generation', Icon: ModelMark },
   { tab: 'narration', group: 'reading', Icon: WaveMark },
+  { tab: 'weread', group: 'reading', Icon: BookMark },
   { tab: 'search', group: 'generation', Icon: SearchMark },
   { tab: 'data', group: 'generation', Icon: CacheMark },
 ];
@@ -145,6 +146,7 @@ export function SettingsPanel({
             {tab === 'models' && <ModelsPage shell={shell} />}
             {tab === 'narration' && <NarrationPage shell={shell} />}
             {tab === 'search' && <SearchPage shell={shell} />}
+            {tab === 'weread' && <WereadPage shell={shell} />}
             {tab === 'data' && <DataPage shell={shell} />}
           </div>
         </div>
@@ -161,6 +163,7 @@ function description(tab: SettingsTab, t: ReturnType<typeof useUi>['t']): string
     models: t.settings.models.desc,
     narration: t.settings.narration.desc,
     search: t.settings.search.desc,
+    weread: t.settings.weread.desc,
     data: t.settings.data.desc,
   };
   return byTab[tab];

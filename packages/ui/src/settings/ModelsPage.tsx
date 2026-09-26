@@ -10,7 +10,7 @@ import { useId, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Link } from '../Link';
 import { useUi } from './SettingsProvider';
-import { Offline, Row, SecretField, Section, Select, StackedRow } from './rows';
+import { isEnvRef, Offline, Row, SecretField, Section, Select, StackedRow } from './rows';
 import type { ProviderInfo, ShellSettings } from './shell';
 
 export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
@@ -32,7 +32,8 @@ export function ModelsPage({ shell }: { shell?: ShellSettings }): ReactElement {
             provider={provider}
             active={current?.id === provider.id}
             isDefault={shell.prefs.generationProvider === provider.id}
-            configured={Boolean(shell.prefs.providers[provider.id]?.apiKey)}
+            // A `$NAME` may name a variable that is not set, so only a typed key earns the dot
+            configured={isTypedKey(shell.prefs.providers[provider.id]?.apiKey)}
             onPick={() => setSelected(provider.id)}
           />
         ))}
@@ -98,19 +99,16 @@ function ProviderDetail({ shell, provider }: {
       >
         <SecretField
           id={keyId}
-          value={profile?.apiKey ?? ''}
+          value={profile?.apiKey ?? (provider.envKey ? `$${provider.envKey}` : '')}
           onChange={(value) => shell.setProvider(provider.id, { apiKey: value })}
           showLabel={t.settings.search.showKey}
           hideLabel={t.settings.search.hideKey}
-          keepValue={shell.keptSecret}
-          savedLabel={t.settings.search.savedKey}
-          clearLabel={t.settings.search.clearKey}
         />
       </StackedRow>
 
       <Row
         label={t.settings.models.baseUrl}
-        hint={provider.needsBaseUrl ? t.settings.models.baseUrlRequired : t.settings.models.baseUrlHint}
+        {...(provider.needsBaseUrl ? { hint: t.settings.models.baseUrlRequired } : {})}
         htmlFor={urlId}
       >
         <input
@@ -211,4 +209,8 @@ function Favicon({ domain }: { domain: string }): ReactElement {
       onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
     />
   );
+}
+
+function isTypedKey(key: string | undefined): boolean {
+  return Boolean(key) && !isEnvRef(key ?? '');
 }

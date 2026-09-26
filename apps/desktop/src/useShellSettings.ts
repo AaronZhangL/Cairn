@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT, type ShellPrefs, type ShellSettings, type VoiceOption } from '@cairn/ui';
 import {
-  clearCache, dataDir, getSettings, inShell, modelStatus, previewVoice,
+  clearCache, dataDir, devBuild, getSettings, inShell, modelStatus, previewVoice,
   revealDataDir, setSettings,
 } from './bridge';
 import {
-  DEFAULT_SHELL_SETTINGS, EMPTY_PROFILE, REDACTED_SECRET, VOICES,
+  DEFAULT_SHELL_SETTINGS, defaultApiKey, EMPTY_PROFILE, VOICES,
   type ContentLocale, type ModelStatus, type ProviderId, type ProviderProfile,
   type ShellSettingsValues,
 } from './shared/settings';
@@ -29,6 +29,7 @@ export function useShellSettings(): ShellSettings | undefined {
   const t = useT();
   const [values, setValues] = useState<ShellSettingsValues>();
   const [dir, setDir] = useState('');
+  const [dev, setDev] = useState(false);
   const [model, setModel] = useState<ModelStatus>();
   const [previewing, setPreviewing] = useState<ContentLocale>();
 
@@ -40,12 +41,13 @@ export function useShellSettings(): ShellSettings | undefined {
     if (!inShell) return;
     let live = true;
     void (async () => {
-      const [stored, where, model] = await Promise.all([
-        getSettings(), dataDir(), modelStatus(),
+      const [stored, where, model, isDev] = await Promise.all([
+        getSettings(), dataDir(), modelStatus(), devBuild(),
       ]);
       if (!live) return;
       setValues(stored ?? DEFAULT_SHELL_SETTINGS);
       setDir(where);
+      setDev(isDev);
       setModel(model);
     })();
     return () => { live = false; };
@@ -96,7 +98,7 @@ export function useShellSettings(): ShellSettings | undefined {
     const id = rawId as ProviderId;
     setValues((current) => {
       if (!current) return current;
-      const merged = { ...EMPTY_PROFILE, ...current.providers[id], ...patch };
+      const merged = { ...EMPTY_PROFILE, apiKey: defaultApiKey(id), ...current.providers[id], ...patch };
       const providers = { ...current.providers, [id]: merged };
       void setSettings({ providers: { [id]: merged } })
         .then((stored) => {
@@ -158,7 +160,6 @@ export function useShellSettings(): ShellSettings | undefined {
     if (!inShell || !values) return undefined;
     return {
       prefs: values,
-      keptSecret: REDACTED_SECRET,
       setPref,
       setProvider,
       providers: OFFERED_PROVIDERS,
@@ -168,8 +169,9 @@ export function useShellSettings(): ShellSettings | undefined {
       previewVoice: audition,
       previewing,
       dataDir: dir,
+      devBuild: dev,
       revealDataDir: () => void revealDataDir(),
       clearCache,
     } satisfies ShellSettings;
-  }, [values, setPref, setProvider, voicesFor, recheckModel, model, audition, previewing, dir]);
+  }, [values, setPref, setProvider, voicesFor, recheckModel, model, audition, previewing, dir, dev]);
 }

@@ -15,7 +15,7 @@ import type { ProviderInfo, ShellSettings } from '../../src/settings/shell';
 const PROVIDERS: readonly ProviderInfo[] = [
   {
     id: 'openai', label: 'OpenAI', getKeyUrl: 'https://example.test', faviconDomain: 'openai.com',
-    baseUrl: 'https://api.openai.com/v1', needsBaseUrl: false,
+    baseUrl: 'https://api.openai.com/v1', needsBaseUrl: false, envKey: 'OPENAI_API_KEY',
     models: [
       { id: 'gpt-5.4-mini', name: 'GPT-5.4 mini', strict: true },
       { id: 'legacy', name: 'Legacy', strict: false },
@@ -37,10 +37,9 @@ function shellWith(overrides: Partial<ShellSettings['prefs']> = {}): ShellSettin
     prefs: {
       providers: {}, generationProvider: 'openai', chatProvider: 'inherit',
       narration: 'follow', voices: { en: 'en-US-AndrewNeural', zh: 'zh-CN-YunjianNeural' },
-      searchProvider: 'firecrawl', braveKey: '', firecrawlKey: '', tavilyKey: '', trace: false,
+      searchProvider: 'firecrawl', braveKey: '', firecrawlKey: '', tavilyKey: '', wereadKey: '', trace: false,
       ...overrides,
     },
-    keptSecret: '••••••••',
     setPref: () => {},
     setProvider: () => {},
     providers: PROVIDERS,
@@ -48,6 +47,7 @@ function shellWith(overrides: Partial<ShellSettings['prefs']> = {}): ShellSettin
     recheckModel: () => {},
     previewVoice: () => {},
     dataDir: '/tmp',
+    devBuild: false,
     revealDataDir: () => {},
     clearCache: async () => {},
   };
@@ -73,24 +73,16 @@ describe('ModelsPage', () => {
     expect(html.indexOf('>Legacy<')).toBeGreaterThan(html.indexOf('>GPT-5.4 mini<'));
   });
 
-  test('a stored key renders as the stand-in, never as itself', () => {
+  test('a stored key sits in the field, hidden until the eye is pressed', () => {
     const html = render(shellWith({
-      providers: { openai: { apiKey: '••••••••', baseUrl: '', model: '' } },
+      providers: { openai: { apiKey: 'sk-stored', baseUrl: '', model: '' } },
     }));
-    expect(html).not.toContain('sk-');
+    expect(html).toMatch(/type="password"[^>]*value="sk-stored"/);
+    expect(html).toContain('set-eye');
   });
 
-  /**
-   * The eye used to reveal the stand-in itself: the key never crosses the
-   * bridge, so there was nothing behind the dots to show.
-   */
-  test('a stored key offers clearing rather than revealing', () => {
-    const html = render(shellWith({
-      providers: { openai: { apiKey: '••••••••', baseUrl: '', model: '' } },
-    }));
-    expect(html).not.toContain('••••••••');
-    expect(html).not.toContain('set-eye');
-    expect(html).toContain('set-clear');
+  test('a vendor with no profile starts out reading its environment variable', () => {
+    expect(render(shellWith())).toMatch(/type="text"[^>]*value="\$OPENAI_API_KEY"/);
   });
 
   test('a custom endpoint takes a typed model id rather than a picker', () => {

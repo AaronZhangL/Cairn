@@ -36,6 +36,8 @@ export interface ProviderInfo {
   readonly getKeyUrl: string;
   readonly faviconDomain: string;
   readonly baseUrl: string;
+  /** The environment variable the key field starts out naming, as `$NAME`. */
+  readonly envKey?: string;
   /** Only a custom endpoint has none of its own. */
   readonly needsBaseUrl: boolean;
   readonly models: readonly ProviderModelInfo[];
@@ -69,6 +71,7 @@ export interface ShellPrefs {
   readonly braveKey: string;
   readonly firecrawlKey: string;
   readonly tavilyKey: string;
+  readonly wereadKey: string;
   readonly trace: boolean;
 }
 
@@ -80,8 +83,6 @@ export interface VoiceOption {
 
 export interface ShellSettings {
   readonly prefs: ShellPrefs;
-  /** What a stored secret reads as here: the key itself never crosses the bridge. */
-  readonly keptSecret: string;
   readonly setPref: <K extends keyof ShellPrefs>(key: K, value: ShellPrefs[K]) => void;
   /** Patch one provider's profile, leaving every other provider's key untouched. */
   readonly setProvider: (id: ProviderId, patch: Partial<ProviderProfile>) => void;
@@ -99,6 +100,8 @@ export interface ShellSettings {
   readonly previewVoice: (locale: Locale) => void;
   readonly previewing?: Locale;
   readonly dataDir: string;
+  /** Recording model calls is for debugging a prompt, so only a dev build offers it. */
+  readonly devBuild: boolean;
   readonly revealDataDir: () => void;
   readonly clearCache: () => Promise<void>;
 }

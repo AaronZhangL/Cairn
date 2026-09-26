@@ -1,55 +1,29 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SHELL_SETTINGS, REDACTED_SECRET } from '../../src/shared/settings';
+import { DEFAULT_SHELL_SETTINGS } from '../../src/shared/settings';
 import { createSettingsStore } from '../../src/main/settings-store';
-import { effectiveSearchKey } from '../../src/main/settings';
+import { effectiveSearchKey, effectiveWereadKey } from '../../src/main/settings';
 
 const dir = await mkdtemp(join(tmpdir(), 'cairn-settings-'));
-const { read: readSettings, readForRenderer: readSettingsForRenderer, write: writeSettings } = createSettingsStore(dir);
+const { read: readSettings, write: writeSettings } = createSettingsStore(dir);
 
 afterAll(async () => { await rm(dir, { recursive: true, force: true }); });
 
-test('persists provider profiles and secrets, but never returns secrets to the renderer', async () => {
+test('persists provider profiles and keys, and an empty field clears one', async () => {
   await writeSettings({
     generationProvider: 'openai',
     providers: { openai: { apiKey: 'secret-model', baseUrl: 'https://example.test/v1', model: 'gpt-5.4-mini' } },
     tavilyKey: 'secret-search',
-    braveKey: 'secret-brave',
-    firecrawlKey: 'secret-firecrawl',
-  });
-  const visible = await readSettingsForRenderer();
-  expect(visible.providers.openai?.apiKey).toBe(REDACTED_SECRET);
-  expect(visible.providers.openai?.model).toBe('gpt-5.4-mini');
-  expect(visible.tavilyKey).toBe(REDACTED_SECRET);
-  expect(visible.braveKey).toBe(REDACTED_SECRET);
-  expect(visible.firecrawlKey).toBe(REDACTED_SECRET);
-  expect(JSON.stringify(visible)).not.toContain('secret-');
-  expect((await readSettings()).providers.openai?.apiKey).toBe('secret-model');
-  expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).generationProvider).toBe('openai');
-});
-
-test('a redacted marker preserves a secret across unrelated edits; empty clears it', async () => {
-  const visible = await readSettingsForRenderer();
-  await writeSettings({
-    providers: { openai: { ...visible.providers.openai!, model: 'gpt-5.4-nano' } },
-    tavilyKey: REDACTED_SECRET, braveKey: REDACTED_SECRET, firecrawlKey: REDACTED_SECRET,
   });
   expect((await readSettings()).providers.openai?.apiKey).toBe('secret-model');
-  expect((await readSettings()).providers.openai?.model).toBe('gpt-5.4-nano');
   expect((await readSettings()).tavilyKey).toBe('secret-search');
-  expect((await readSettings()).braveKey).toBe('secret-brave');
-  expect((await readSettings()).firecrawlKey).toBe('secret-firecrawl');
+  expect(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')).generationProvider).toBe('openai');
 
-  await writeSettings({
-    providers: { openai: { ...visible.providers.openai!, apiKey: '' } },
-    tavilyKey: '', braveKey: '', firecrawlKey: '',
-  });
+  await writeSettings({ providers: { openai: { apiKey: '', baseUrl: '', model: '' } }, tavilyKey: '' });
   expect((await readSettings()).providers.openai?.apiKey).toBe('');
   expect((await readSettings()).tavilyKey).toBe('');
-  expect((await readSettings()).braveKey).toBe('');
-  expect((await readSettings()).firecrawlKey).toBe('');
 });
 
 /**
@@ -65,8 +39,6 @@ test('editing one provider leaves the others’ keys untouched', async () => {
     },
   });
 
-  const visible = await readSettingsForRenderer();
-  expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
 
   // A patch naming only OpenAI, as the panel sends when that field is edited
   await writeSettings({ providers: { openai: { apiKey: 'replaced', baseUrl: '', model: '' } } });
@@ -81,9 +53,6 @@ test('the Companion provider keeps its own key when generation changes', async (
     chatProvider: 'anthropic',
     providers: { anthropic: { apiKey: 'secret-companion', baseUrl: '', model: 'claude-haiku-4-5' } },
   });
-  const visible = await readSettingsForRenderer();
-  expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
-  expect(JSON.stringify(visible)).not.toContain('secret-companion');
 
   await writeSettings({ trace: true, generationProvider: 'openai' });
   expect((await readSettings()).providers.anthropic)
@@ -103,11 +72,36 @@ test('an existing environment Tavily key keeps Tavily as the search provider', a
   }
 });
 
-test('selected provider uses only its own saved or environment key', () => {
-  const env = { BRAVE_SEARCH_API_KEY: 'env-brave', FIRECRAWL_API_KEY: 'env-fire', TAVILY_API_KEY: 'env-tavily' };
-  const settings = { ...DEFAULT_SHELL_SETTINGS, braveKey: 'saved-brave', firecrawlKey: '' };
+test('a key field is a key, a $NAME to read, or empty for none', () => {
+  const env = { BRAVE_SEARCH_API_KEY: 'env-brave', FIRECRAWL_API_KEY: 'env-fire', TAVILY_API_KEY: 'env-tavily', MINE: 'mine' };
+  const settings = { ...DEFAULT_SHELL_SETTINGS, braveKey: 'saved-brave', tavilyKey: '$MINE' };
   expect(effectiveSearchKey({ ...settings, searchProvider: 'brave' }, env)).toBe('saved-brave');
   expect(effectiveSearchKey({ ...settings, searchProvider: 'firecrawl' }, env)).toBe('env-fire');
-  expect(effectiveSearchKey({ ...settings, searchProvider: 'tavily' }, env)).toBe('env-tavily');
+  expect(effectiveSearchKey({ ...settings, searchProvider: 'tavily' }, env)).toBe('mine');
   expect(effectiveSearchKey({ ...settings, searchProvider: 'firecrawl' }, {})).toBeUndefined();
+  // Cleared means no key, not "fall back to the environment" as it once did
+  expect(effectiveSearchKey({ ...settings, searchProvider: 'firecrawl', firecrawlKey: '' }, env)).toBeUndefined();
+});
+
+test('a $NAME in the WeChat Reading field reads the environment', async () => {
+  await writeSettings({ wereadKey: '$WEREAD_API_KEY' });
+  expect(effectiveWereadKey(await readSettings(), { WEREAD_API_KEY: 'from-env' })).toBe('from-env');
+  await writeSettings({ wereadKey: 'typed' });
+  expect(effectiveWereadKey(await readSettings(), { WEREAD_API_KEY: 'from-env' })).toBe('typed');
+});
+
+/** Before `$NAME`, an empty field meant "read the environment"; such a file must keep doing so. */
+test('a file from before $NAME keeps reading the environment; one written since keeps its empty', async () => {
+  const legacyDir = await mkdtemp(join(tmpdir(), 'cairn-legacy-'));
+  try {
+    await writeFile(join(legacyDir, 'settings.json'), JSON.stringify({ searchProvider: 'tavily', tavilyKey: '', braveKey: 'kept' }));
+    const legacy = createSettingsStore(legacyDir);
+    expect((await legacy.read()).tavilyKey).toBe('$TAVILY_API_KEY');
+    expect((await legacy.read()).braveKey).toBe('kept');
+
+    await legacy.write({ tavilyKey: '' });
+    expect((await createSettingsStore(legacyDir).read()).tavilyKey).toBe('');
+  } finally {
+    await rm(legacyDir, { recursive: true, force: true });
+  }
 });

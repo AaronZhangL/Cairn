@@ -5,7 +5,6 @@
  *
  * The renderer cannot spawn processes, so everything touching the model, the
  * file system or the network lives in this process and is reached over RPC.
- * That is also the security boundary: the webview never holds a key.
  */
 import { ApplicationMenu, BrowserView, BrowserWindow, Updater } from 'electrobun/main';
 import { createBookBuilder } from '@cairn/core/books/builder';
@@ -13,7 +12,8 @@ import { edgeTtsNarrator } from '@cairn/core/runtime';
 import { createHandlers } from './rpc';
 import { installMenu, OPEN_SETTINGS, OPEN_INSPECTOR } from './menu';
 import { providerFor } from './provider';
-import { readSettings } from './settings';
+import { effectiveWereadKey, readSettings, writeSettings } from './settings';
+import { createWeread } from './weread/service';
 import { library } from './store';
 import { voiceFor, type UiLocale } from '../shared/settings';
 import type { CairnRPC } from '../shared/schema';
@@ -22,6 +22,9 @@ const DEV_SERVER = 'http://localhost:5173';
 
 const devBuild = (await Updater.localInfo.channel()) === 'dev';
 const menu = (locale?: UiLocale): void => installMenu(locale, { inspector: devBuild });
+
+// The trace switch is shown in dev builds only; one left on from before would stay on unseen
+if (!devBuild && (await readSettings()).trace) await writeSettings({ trace: false });
 
 async function viewUrl(): Promise<string> {
   if (!devBuild) return 'views://mainview/index.html';
@@ -50,8 +53,15 @@ const books = createBookBuilder({
   onDeckStatus: (status) => send().deckStatus(status),
 });
 
+const weread = createWeread({
+  library,
+  keyOf: async () => effectiveWereadKey(await readSettings()),
+});
+
 const handlers = createHandlers({
   books,
+  weread,
+  devBuild,
   menu,
   emit: {
     progress: (p) => send().progress(p),

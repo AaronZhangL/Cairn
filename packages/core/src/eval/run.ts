@@ -48,10 +48,14 @@ export interface EvalBook {
   readonly notes: readonly ChapterNote[];
   /** Already-scored baselines (from an earlier run) are reused, not judged again. */
   readonly baselines: readonly (Typed | Scored)[];
+  /** Paths an earlier run made, judged again instead of generating new ones. */
+  readonly given?: readonly Typed[];
 }
 
 export interface BookEval {
   readonly bookId: string;
+  /** Scores are only comparable under one judge; a baseline judged by another is judged again. */
+  readonly judge: string;
   readonly title: string;
   readonly budgetId: string;
   readonly ideas: readonly string[];
@@ -59,6 +63,13 @@ export interface BookEval {
   readonly candidates: readonly (Scored | Failed)[];
   /** One per successful candidate, against the baseline at the same position (wrapping). */
   readonly comparisons: readonly Comparison[];
+}
+
+export interface EvalProviders {
+  readonly generate: LlmProvider;
+  readonly judge: LlmProvider;
+  /** The judge's model, recorded with the scores. */
+  readonly judgeName: string;
 }
 
 export interface EvalOptions {
@@ -70,27 +81,32 @@ export interface EvalOptions {
 export const isScored = (p: Typed | Scored | Failed): p is Scored => 'structural' in p;
 export const isFailed = (p: Scored | Failed): p is Failed => 'error' in p;
 
-export async function evaluateBook(book: EvalBook, provider: LlmProvider, options: EvalOptions): Promise<BookEval> {
+export async function evaluateBook(book: EvalBook, providers: EvalProviders, options: EvalOptions): Promise<BookEval> {
   const step = options.onStep ?? (() => undefined);
+  const { judge } = providers;
 
   step('ideas');
-  const ideas = await ideasFor(book, provider, options.ideasStore);
-  const score = (p: Typed, extra: Partial<Scored> = {}): Promise<Scored> => scorePath(book, ideas, p, provider, extra);
+  const ideas = await ideasFor(book, judge, options.ideasStore);
+  const score = (p: Typed, extra: Partial<Scored> = {}): Promise<Scored> => scorePath(book, ideas, p, judge, extra);
 
   step('baseline');
   const baselines = await Promise.all(book.baselines.map((b) => (isScored(b) ? b : score(b))));
 
   const candidates: (Scored | Failed)[] = [];
   const comparisons: Comparison[] = [];
-  for (let run = 0; run < options.runs; run += 1) {
-    step(`run ${run + 1}/${options.runs}`);
+  const runs = book.given?.length ?? options.runs;
+  for (let run = 0; run < runs; run += 1) {
+    step(`run ${run + 1}/${runs}`);
     try {
-      const candidate = await generate(book, provider).then(({ proposal, retries, dropped }) =>
-        score(proposal, { retries, dropped }));
+      const given = book.given?.[run];
+      const made = given
+        ? { proposal: given, retries: (given as Partial<Scored>).retries ?? 0, dropped: (given as Partial<Scored>).dropped ?? 0 }
+        : await generate(book, providers.generate);
+      const candidate = await score(made.proposal, { retries: made.retries, dropped: made.dropped });
       candidates.push(candidate);
       const against = baselines[run % Math.max(1, baselines.length)];
       if (against) {
-        comparisons.push(await comparePaths(book.notes, budgetLabel(book.budget), candidate, against, provider));
+        comparisons.push(await comparePaths(book.notes, budgetLabel(book.budget), candidate, against, judge));
       }
     } catch (error) {
       // One bad run must not throw away the others; the report shows it
@@ -98,7 +114,10 @@ export async function evaluateBook(book: EvalBook, provider: LlmProvider, option
     }
   }
 
-  return { bookId: book.id, title: book.title, budgetId: book.budget.id, ideas, baselines, candidates, comparisons };
+  return {
+    bookId: book.id, judge: providers.judgeName, title: book.title, budgetId: book.budget.id,
+    ideas, baselines, candidates, comparisons,
+  };
 }
 
 async function generate(

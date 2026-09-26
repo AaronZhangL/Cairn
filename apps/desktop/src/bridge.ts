@@ -8,7 +8,7 @@ import type {
   ContentLocale, ModelStatus, ShellSettingsValues, UiLocale,
 } from './shared/settings';
 import type { CairnRPC, RequestParams } from './shared/schema';
-import type { BookPreview, DeckStatus, Progress } from './shared/types';
+import type { BookMeta, BookPreview, DeckStatus, Progress } from './shared/types';
 
 /**
  * Renderer side of the bridge.
@@ -32,6 +32,7 @@ const NO_LIMIT: RequestOptions = { maxRequestTime: Infinity };
 const ANSWER_LIMIT: RequestOptions = { maxRequestTime: 5 * 60_000 };
 /** A poll that cannot answer within this is a poll worth dropping. */
 const POLL_LIMIT: RequestOptions = { maxRequestTime: 10_000 };
+const START_LIMIT: RequestOptions = { maxRequestTime: 4_000 };
 
 /**
  * The shell injects `__electrobun` (with the underscores) before the page runs.
@@ -164,6 +165,24 @@ export async function generateBook(filePaths: readonly string[], budgetId: Budge
   return (await connect()).request.generateBook({ filePaths, budgetId }, NO_LIMIT).catch(rethrow);
 }
 
+/** Every WeChat Reading call degrades to nothing: none of them is worth an error in the reader's face. */
+export async function wereadQuotes(title: string, author?: string): Promise<readonly string[]> {
+  if (!inShell) return [];
+  return (await connect()).request.wereadQuotes({ title, ...(author ? { author } : {}) }, POLL_LIMIT)
+    .catch(() => []);
+}
+
+export async function bookMeta(bookId: string): Promise<BookMeta | null> {
+  if (!inShell) return null;
+  return (await connect()).request.bookMeta({ bookId }, POLL_LIMIT).catch(() => null);
+}
+
+/** Bounded tightly: the first station waits on it. */
+export async function wereadStart(bookId: string): Promise<string | null> {
+  if (!inShell) return null;
+  return (await connect()).request.wereadStart({ bookId }, START_LIMIT).catch(() => null);
+}
+
 export async function markBookFinished(bookId: string, nodeId: string): Promise<boolean> {
   if (!inShell) return false;
   return (await connect()).request.markBookFinished({ bookId, nodeId }, POLL_LIMIT).catch(rethrow);
@@ -197,6 +216,11 @@ export async function setSettings(
 ): Promise<ShellSettingsValues> {
   if (!inShell) throw offline('offline_settings');
   return (await connect()).request.setSettings(patch, POLL_LIMIT).catch(rethrow);
+}
+
+export async function devBuild(): Promise<boolean> {
+  if (!inShell) return false;
+  return (await connect()).request.devBuild(undefined, POLL_LIMIT).catch(() => false);
 }
 
 export async function dataDir(): Promise<string> {

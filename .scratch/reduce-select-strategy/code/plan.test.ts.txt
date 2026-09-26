@@ -1,0 +1,109 @@
+import { describe, expect, test } from 'bun:test';
+import type { LlmProvider, LlmRequest } from '../../src/llm/types';
+import { budgetsFor } from '../../src/pipeline/budget';
+import { normalize, slices } from '../../src/pipeline/plan';
+import { reduceToPath } from '../../src/pipeline/reduce';
+import type { ChapterNote } from '../../src/types';
+
+const notes: readonly ChapterNote[] = Array.from({ length: 30 }, (_, idx) => ({
+  idx, title: `第${idx}章`, gist: `摘要${idx}`, keyPoints: [`要点${idx}`], quotes: [],
+}));
+const budget = budgetsFor({ totalWords: 100_000, chapterCount: 30 }).quick;
+
+/** Replies to each propose call with one candidate citing its slice's first chapter. */
+const planner = (arrange: (stations: string) => string, extra: Record<string, string> = {}):
+  LlmProvider & { seen: LlmRequest[] } => {
+  const seen: LlmRequest[] = [];
+  return {
+    seen, name: 'stub', suggestedConcurrency: 2, overheadTokens: 0,
+    async complete(r) {
+      seen.push(r);
+      const label = r.label ?? '';
+      if (label.startsWith('reduce.propose:')) {
+        const first = Number(label.split(':')[1]?.split('-')[0]);
+        return JSON.stringify({ candidates: [{
+          title: `候选${first}`, kind: 'concept', brief: 'b', estMinutes: 3, weight: 2,
+          keyPoints: [{ text: 'p', chapter: first }, { text: 'q', chapter: first + 1 }],
+        }] });
+      }
+      if (label === 'reduce.arrange') return arrange(r.prompt);
+      const reply = extra[label];
+      if (reply === undefined) throw new Error(`no reply for ${label}`);
+      return reply;
+    },
+  };
+};
+
+const allInOneStage = (prompt: string) =>
+  JSON.stringify({ stages: [{ title: '全部', ids: [...prompt.matchAll(/\[(s\d+)\]/g)].map((m) => m[1]) }] });
+
+describe('slices', () => {
+  test('按书的顺序均分，每片不超过 12 章', () => {
+    const parts = slices(notes);
+    expect(parts.map((p) => p.length)).toEqual([10, 10, 10]);
+    expect(parts.flat()).toEqual([...notes]);
+  });
+});
+
+describe('normalize', () => {
+  const part = notes.slice(0, 10);
+
+  test('要点只能引用本片的章，引了别处的要点被去掉', () => {
+    const { candidates } = normalize([{
+      title: '甲', kind: 'concept', brief: '', estMinutes: 3, weight: 3,
+      keyPoints: [{ text: '本片', chapter: 2 }, { text: '别处', chapter: 25 }],
+    }], part, 0, budget);
+    expect(candidates[0]?.points).toEqual([{ text: '本片', chapter: 2 }]);
+  });
+
+  test('一条可信要点都没有的候选被丢弃并计数', () => {
+    const r = normalize([{ title: '甲', keyPoints: [{ text: 'x', chapter: 99 }] }], part, 0, budget);
+    expect(r.candidates).toEqual([]);
+    expect(r.dropped).toBe(1);
+  });
+});
+
+describe('reduceToPath strategy: select', () => {
+  test('每片提案一次，来源章节由要点推出，路径跨越全书', async () => {
+    const provider = planner(allInOneStage);
+    const r = await reduceToPath(notes, 'knowledge', 100_000, provider, { budget, strategy: 'select' });
+    expect(provider.seen.filter((x) => x.label?.startsWith('reduce.propose'))).toHaveLength(3);
+    expect(r.nodes.map((n) => n.sourceChapters)).toEqual([[0, 1], [10, 11], [20, 21]]);
+    expect(r.stages.flatMap((s) => s.nodeIds)).toEqual(r.nodes.map((n) => n.id));
+  });
+
+  test('编排给出的顺序决定站的顺序', async () => {
+    const reversed = (prompt: string) =>
+      JSON.stringify({ stages: [{ title: '倒序', ids: [...prompt.matchAll(/\[(s\d+)\]/g)].map((m) => m[1]).reverse() }] });
+    const r = await reduceToPath(notes, 'knowledge', 100_000, planner(reversed), { budget, strategy: 'select' });
+    expect(r.nodes.map((n) => n.sourceChapters[0])).toEqual([20, 10, 0]);
+  });
+
+  test('refine 可以删掉重复的站，但不会删光', async () => {
+    const drop = (ids: string[]) => JSON.stringify({ problems: ['重复'], drop: ids, stages: [] });
+    const one = await reduceToPath(notes, 'knowledge', 100_000,
+      planner(allInOneStage, { 'reduce.refine': drop(['s1']) }), { budget, strategy: 'select', refine: true });
+    expect(one.nodes).toHaveLength(2);
+    const all = await reduceToPath(notes, 'knowledge', 100_000,
+      planner(allInOneStage, { 'reduce.refine': drop(['s0', 's1', 's2']) }), { budget, strategy: 'select', refine: true });
+    expect(all.nodes).toHaveLength(3);
+  });
+});
+
+describe('reduceToPath samples', () => {
+  test('多份草稿里留下铺得最开的一份', async () => {
+    let call = 0;
+    const drafts = [[0, 1, 2], [0, 15, 29]];
+    const provider: LlmProvider = {
+      name: 'stub', suggestedConcurrency: 1, overheadTokens: 0,
+      async complete() {
+        const chapters = drafts[call++ % 2] ?? [];
+        return JSON.stringify({ stages: [{ title: 'A', nodes: chapters.map((c) => ({
+          title: `站${c}`, kind: 'concept', brief: '', keyPoints: [], sourceChapters: [c], estMinutes: 3,
+        })) }] });
+      },
+    };
+    const r = await reduceToPath(notes, 'knowledge', 100_000, provider, { budget, samples: 2 });
+    expect(r.nodes.map((n) => n.sourceChapters[0])).toEqual([0, 15, 29]);
+  });
+});

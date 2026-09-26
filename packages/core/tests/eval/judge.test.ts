@@ -48,6 +48,14 @@ describe('comparePaths', () => {
     expect((await comparePaths(notes, '10 分钟', path, other, provider)).outcome).toBe('tie');
   });
 
+  test('盲比只给评审看结构，不给简介：评审曾偏向字多的一边', async () => {
+    const provider = byLabel({ 'eval:pairwise.cb': verdict('A'), 'eval:pairwise.bc': verdict('B') });
+    await comparePaths(notes, '10 分钟', path, other, provider);
+    const prompt = provider.seen[0]?.prompt ?? '';
+    expect(prompt).toContain('站n0');
+    expect(prompt).not.toContain('讲清n0');
+  });
+
   test('两次都选基线就是输', async () => {
     const provider = byLabel({ 'eval:pairwise.cb': verdict('B'), 'eval:pairwise.bc': verdict('A') });
     expect((await comparePaths(notes, '10 分钟', path, other, provider)).outcome).toBe('baseline');

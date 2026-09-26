@@ -1,0 +1,43 @@
+/** One slice of the book, asked for candidate stations. See `pipeline/plan.ts`. */
+export interface ProposeRequest {
+  /** Every chapter's number and title, so a slice knows where it sits in the whole. */
+  readonly outline: string;
+  /** This slice's notes, in full. */
+  readonly part: string;
+  readonly firstChapter: number;
+  readonly lastChapter: number;
+  readonly budgetLabel: string;
+  readonly count: number;
+  readonly minutesPerNode: readonly [number, number];
+}
+
+export interface ArrangeRequest {
+  /** The chosen stations, one per line with their id, chapters and brief. */
+  readonly stations: string;
+  readonly stageCount: number;
+}
+
+export interface RefineRequest {
+  readonly path: string;
+  readonly digest: string;
+  readonly stageCount: number;
+}
+
+
+// In Prompts:
+  /** The select strategy of reduce: propose per slice, choose in code, then arrange. */
+  readonly plan: {
+    readonly propose: {
+      readonly system: (type: BookType, coverage: string) => string;
+      readonly user: (request: ProposeRequest) => string;
+    };
+    readonly arrange: {
+      readonly system: (type: BookType) => string;
+      readonly user: (request: ArrangeRequest) => string;
+    };
+    readonly refine: {
+      readonly system: string;
+      readonly user: (request: RefineRequest) => string;
+    };
+  };
+

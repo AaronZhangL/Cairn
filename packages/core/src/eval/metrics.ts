@@ -16,6 +16,8 @@ export interface StructuralMetrics {
   readonly orderInversions: number;
   /** Stations citing exactly the chapters an earlier station cited. */
   readonly duplicateSources: number;
+  /** Characters of title, brief and key points: shown because judges favour the longer side. */
+  readonly textLength: number;
 }
 
 export function structuralMetrics(
@@ -35,6 +37,7 @@ export function structuralMetrics(
     positionSkew: skewOf(cited.map((c) => rank.get(c) ?? 0), notes.length),
     orderInversions: inversionsOf(nodes),
     duplicateSources: duplicatesOf(nodes),
+    textLength: nodes.reduce((sum, n) => sum + n.title.length + n.brief.length + n.keyPoints.join('').length, 0),
   };
 }
 

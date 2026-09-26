@@ -22,7 +22,7 @@ bun test packages/core/tests/fit.test.ts     # one file
 bun run typecheck                            # all four projects, strict
 bun run add-book <file>                      # the app's book builder, from the terminal
 bun run replay <bookId> [file]               # list recorded model calls, or re-send one
-bun run eval [--against <runId>]             # judge a pipeline change on the fixed book set
+bun run eval --judge deepseek-v4-pro         # judge a pipeline change against the accepted baseline
 
 cd apps/desktop
 bun run dev       # Vite only: the three panes, no model, no shell
@@ -42,13 +42,17 @@ answer pane rather than faking a reply.
 | `BRAVE_SEARCH_API_KEY` | Optional Brave Search key; required when Brave is selected |
 | `FIRECRAWL_API_KEY` | Optional Firecrawl key; without it, search uses Firecrawl's limited anonymous tier |
 | `TAVILY_API_KEY` | Optional Tavily search key. Read in the main process only |
+| `WEREAD_API_KEY` | Optional WeChat Reading key: popular highlights while a book builds, shelf covers, and a first station taken from the reader's WeChat Reading progress. Main process only |
 
 **The settings panel writes `settings.json` beside the library**, and both sources are honoured.
 The search-provider picker defaults to keyless Firecrawl. Existing Tavily keys keep Tavily selected
-on upgrade; a reader can switch providers explicitly. A key typed into the panel wins over
-that provider's environment variable; an empty field means "read the environment". Tracing is on if *either*
+on upgrade; a reader can switch providers explicitly. Every key field starts out as
+`$NAME` — `$BRAVE_SEARCH_API_KEY`, `$OPENAI_API_KEY` — and a value in that form reads the variable;
+anything else is the key, and empty is none. A file written before this, where empty meant "read
+the environment", is upgraded on read (`upgradeLegacyKeys`). Tracing is on if *either*
 `CAIRN_TRACE=1` or the stored switch says so — a machine
-configured the old way does not silently stop working. `main/settings.ts` folds the two into one
+configured the old way does not silently stop working. The switch is shown in dev builds only; a
+release build turns a stored one off at launch, since nothing there could turn it off again. `main/settings.ts` folds the two into one
 answer, so nothing downstream reads `process.env` for these.
 
 The reader's own preferences — interface language, theme, text size, default speed — never reach
@@ -195,15 +199,15 @@ it after any change to a prompt or to classify, reduce or recap, and put the ver
 message. Method and rationale: [`docs/EVAL.md`](docs/EVAL.md).
 
 - It re-runs classify + reduce on the library's frozen chapter notes for the books in
-  `scripts/eval-set.json`, then scores each path with code metrics and model judges and compares it
-  blind against a baseline.
-- **Compare like with like.** The shelf's paths were built by whatever model was configured then.
-  After switching models, run once without `--against` to make a new baseline, then judge code
-  changes with `--against <thatRunId>`. The current baseline is recorded in `docs/EVAL.md`.
-- **Read the per-book lines, not only the verdict.** A mean over three books hid Pro Git's paths
-  collapsing onto its first chapters; its position skew alone showed it.
-- A verdict needs at least three new paths, and a guard metric (faithfulness, coverage, budget)
-  that drops past the noise band overrides a pairwise win.
+  `scripts/eval-set.json`, scores each path with code metrics and model judges, and compares it
+  blind against the baseline accepted with `--accept`. Accept a run when its change is merged.
+- **Judge with a stronger model than the one generating** (`--judge`). A flash judge misread paths.
+  After switching the generating model, accept a fresh run as the baseline before judging code.
+- **Trust a verdict, not a record.** It needs a significant sign test and at least three new paths;
+  a guard (faithfulness, coverage, budget) dropping past the noise band makes it *worse* whatever
+  the record says. The unchanged pipeline once went 2–5 against itself.
+- **Read the per-book lines, and read "Tried and rejected" in `docs/EVAL.md` before a fix.** Three
+  attempts at Pro Git's front-loading failed there, and the front-loading turned out to cost little.
 
 ## Invariants
 
@@ -290,10 +294,13 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 
 ## Security
 
-- **No secret is hardcoded.** Optional `TAVILY_API_KEY` comes from the environment and is read in
-  the main process only; the webview never holds a key. The selected search service receives
-  model-written queries, which may contain brief book context, not whole chapters. That boundary
-  is why the RPC bridge exists.
+- **No secret is hardcoded.** Keys come from the environment or the settings panel. The
+  selected search service receives model-written queries, which may contain brief book context,
+  not whole chapters.
+- **With a WeChat Reading key, a book's title and author leave the machine.** They are sent to
+  `i.weread.qq.com` to match the book; its id then fetches highlights, progress and chapter
+  titles. Chapter text never goes. What comes back is kept in `books/<id>/weread.json` and
+  `cover.*`; without a key nothing is sent. Every call degrades to nothing on failure.
 - **The loopback server is scoped, not open.** `main/library-server.ts` binds `127.0.0.1` on a random
   port (because `<audio>` needs a range-requestable URL), answers GET and HEAD only, serves one
   directory, and requires a per-launch token as the first path segment. Traversal is rejected

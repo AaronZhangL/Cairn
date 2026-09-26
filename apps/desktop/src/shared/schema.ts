@@ -4,7 +4,7 @@ import type { LibraryEntry } from '@cairn/core/store/library';
 import type { ChatSession } from '@cairn/core/companion/types';
 import type { CompanionEvent } from './companion-events';
 import type { ContentLocale, ModelStatus, ShellSettingsValues, UiLocale } from './settings';
-import type { BookPreview, DeckStatus, Progress } from './types';
+import type { BookMeta, BookPreview, DeckStatus, Progress } from './types';
 
 /**
  * The bridge contract, shared by both sides so they cannot drift.
@@ -29,12 +29,18 @@ export type BunSchema = RPCSchema<{
     /** Pick a half-built book back up when it is opened. */
     resumeBook: { params: { bookId: string }; response: boolean };
     markBookFinished: { params: { bookId: string; nodeId: string }; response: boolean };
+    /* ---- WeChat Reading; each answers empty when no key is set ---- */
+    wereadQuotes: { params: { title: string; author?: string }; response: readonly string[] };
+    bookMeta: { params: { bookId: string }; response: BookMeta | null };
+    wereadStart: { params: { bookId: string }; response: string | null };
     /** Remove a book, its decks, its audio and its cache. Irreversible. */
     deleteBook: { params: { bookId: string }; response: boolean };
 
     /* ---- settings the main process owns; the renderer's own live in localStorage ---- */
     getSettings: { params: void; response: ShellSettingsValues };
     setSettings: { params: Partial<ShellSettingsValues>; response: ShellSettingsValues };
+    /** Whether this is a dev build, which shows the switches only a developer needs. */
+    devBuild: { params: void; response: boolean };
     /** The library path, for showing and for revealing in Finder. */
     dataDir: { params: void; response: string };
     /** Writes a sample under the library root and returns its relative path. */
@@ -74,4 +80,4 @@ export type CairnRPC = { bun: BunSchema; webview: WebviewSchema };
 
 /** One request's params, for the places that name them outside a call. */
 export type RequestParams<K extends keyof BunSchema['requests']> = BunSchema['requests'][K]['params'];
-export type { BookPreview, DeckStatus, Progress };
+export type { BookMeta, BookPreview, DeckStatus, Progress };

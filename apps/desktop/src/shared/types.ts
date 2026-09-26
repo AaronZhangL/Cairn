@@ -30,4 +30,12 @@ export interface BookPreview {
   }[];
 }
 
+/** What WeChat Reading adds to a shelf row. `cover` is relative to the library root. */
+export interface BookMeta {
+  readonly cover?: string;
+  readonly intro?: string;
+  /** WeChat Reading's recommendation score, 0–100. */
+  readonly rating?: number;
+}
+
 export type { DeckStatus, Progress } from '@cairn/core/books/progress';

@@ -49,7 +49,10 @@ function publicPlayerFile(parts: readonly string[]): boolean {
   if (parts.length === 1) return parts[0] === 'books.json';
   if (parts.length === 2 && parts[0] === '.preview') return VOICE_FILE.test(parts[1] ?? '');
   if (parts[0] !== 'books' || !isBookId(parts[1] ?? '')) return false;
-  if (parts.length === 3) return ['path.json', 'decks-ordered.json'].includes(parts[2] ?? '');
+  if (parts.length === 3) {
+    return ['path.json', 'decks-ordered.json'].includes(parts[2] ?? '')
+      || /^cover\.(jpg|png|webp)$/.test(parts[2] ?? '');
+  }
   if (parts.length !== 4 || !/^[A-Za-z0-9_-]+\.(json|mp3)$/.test(parts[3] ?? '')) return false;
   return (parts[2] === 'decks' && (parts[3] ?? '').endsWith('.json'))
     || (parts[2] === 'audio' && (parts[3] ?? '').endsWith('.mp3'));

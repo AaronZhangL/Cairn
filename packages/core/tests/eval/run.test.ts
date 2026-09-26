@@ -3,7 +3,10 @@ import { evaluateBook, type EvalBook, isFailed, type Scored } from '../../src/ev
 import { summarize } from '../../src/eval/summary';
 import { budgetsFor } from '../../src/pipeline/budget';
 import type { JobStore } from '../../src/pipeline/job';
+import type { LlmProvider } from '../../src/llm/types';
 import { byLabel, notes, station } from './fixtures';
+
+const both = (p: LlmProvider) => ({ generate: p, judge: p, judgeName: 'stub' });
 
 const memoryStore = (): JobStore<readonly string[]> => {
   const data = new Map<string, readonly string[]>();
@@ -40,30 +43,38 @@ const book = (): EvalBook => ({
 
 describe('evaluateBook', () => {
   test('每次生成都打分并和基线比一次', async () => {
-    const result = await evaluateBook(book(), byLabel(judged), { runs: 2, ideasStore: memoryStore() });
+    const result = await evaluateBook(book(), both(byLabel(judged)), { runs: 2, ideasStore: memoryStore() });
     expect(result.candidates).toHaveLength(2);
     expect(result.comparisons.map((c) => c.outcome)).toEqual(['candidate', 'candidate']);
   });
 
   test('观点清单只抽一次，两边用同一份', async () => {
     const provider = byLabel(judged);
-    await evaluateBook(book(), provider, { runs: 2, ideasStore: memoryStore() });
+    await evaluateBook(book(), both(provider), { runs: 2, ideasStore: memoryStore() });
     expect(provider.seen.filter((r) => r.label === 'eval:ideas')).toHaveLength(1);
   });
 
   test('一次生成失败不影响其余，并记入结果', async () => {
     const { reduce: _, ...rest } = judged;
-    const result = await evaluateBook(book(), byLabel(rest), { runs: 1, ideasStore: memoryStore() });
+    const result = await evaluateBook(book(), both(byLabel(rest)), { runs: 1, ideasStore: memoryStore() });
     expect(result.candidates.filter(isFailed)).toHaveLength(1);
     expect(result.baselines).toHaveLength(1);
     expect(summarize([result]).failedRuns).toBe(1);
   });
 
   test('已打过分的基线不再评审', async () => {
-    const first = await evaluateBook(book(), byLabel(judged), { runs: 1, ideasStore: memoryStore() });
+    const first = await evaluateBook(book(), both(byLabel(judged)), { runs: 1, ideasStore: memoryStore() });
     const provider = byLabel(judged);
     const scored = first.candidates.filter((c): c is Scored => !isFailed(c));
-    await evaluateBook({ ...book(), baselines: scored }, provider, { runs: 1, ideasStore: memoryStore() });
+    await evaluateBook({ ...book(), baselines: scored }, both(provider), { runs: 1, ideasStore: memoryStore() });
     expect(provider.seen.filter((r) => r.label === 'eval:coverage')).toHaveLength(1);
+  });
+
+  test('给定已有的 path 时只评审、不生成', async () => {
+    const { reduce: _r, classify: _c, ...judgeOnly } = judged;
+    const given = [{ type: 'knowledge' as const, nodes: [station('n0', [1])], stages: [{ title: '甲', nodeIds: ['n0'] }] }];
+    const result = await evaluateBook({ ...book(), given }, both(byLabel(judgeOnly)), { runs: 3, ideasStore: memoryStore() });
+    expect(result.candidates.filter(isFailed)).toHaveLength(0);
+    expect(result.candidates).toHaveLength(1);
   });
 });

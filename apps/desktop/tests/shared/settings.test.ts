@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  DEFAULT_SHELL_SETTINGS, parseSettings, redactSettings, REDACTED_SECRET, VOICES, voiceFor,
+  DEFAULT_SHELL_SETTINGS, parseSettings, VOICES, voiceFor,
 } from '../../src/shared/settings';
 
 describe('parseSettings', () => {
@@ -29,6 +29,7 @@ describe('parseSettings', () => {
       braveKey: 'brave-x',
       firecrawlKey: 'fire-x',
       tavilyKey: 'tvly-x',
+      wereadKey: 'wrk-x',
       trace: true,
     };
     expect(parseSettings(stored)).toEqual(stored);
@@ -74,30 +75,6 @@ describe('parseSettings', () => {
     expect(parseSettings({ searchProvider: 'keenable', tavilyKey: 'old-key' }).searchProvider).toBe('firecrawl');
     expect(parseSettings({ searchProvider: 'keenable' }, { ...DEFAULT_SHELL_SETTINGS, searchProvider: 'tavily' }).searchProvider)
       .toBe('firecrawl');
-  });
-
-  test('redacts stored credentials before settings reach the renderer', () => {
-    const stored = parseSettings({
-      providers: {
-        openai: { apiKey: 'private-model-key', baseUrl: '', model: '' },
-        anthropic: { apiKey: 'private-chat-key', baseUrl: '', model: '' },
-      },
-      tavilyKey: 'private-search-key',
-      braveKey: 'private-brave-key',
-      firecrawlKey: 'private-firecrawl-key',
-    });
-    const visible = redactSettings(stored);
-    expect(visible.providers.openai?.apiKey).toBe(REDACTED_SECRET);
-    expect(visible.providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
-    expect(visible.tavilyKey).toBe(REDACTED_SECRET);
-    expect(visible.braveKey).toBe(REDACTED_SECRET);
-    expect(visible.firecrawlKey).toBe(REDACTED_SECRET);
-    expect(JSON.stringify(visible)).not.toContain('private-');
-  });
-
-  test('redaction leaves an unset key empty rather than showing dots', () => {
-    const stored = parseSettings({ providers: { openai: { apiKey: '', baseUrl: '', model: '' } } });
-    expect(redactSettings(stored).providers.openai?.apiKey).toBe('');
   });
 
   test('a providers block that is not an object falls back whole', () => {
@@ -209,15 +186,6 @@ describe('parseSettings — migration from the pre-registry shape', () => {
     // and generation is untouched by it
     expect(parsed.providers.openai?.apiKey).toBe('generation-key');
     expect(parsed.generationProvider).toBe('openai');
-  });
-
-  test('both keys survive redaction as separate secrets', () => {
-    const parsed = parseSettings({
-      model: { source: 'key', apiKey: 'generation-key', baseUrl: '', model: '' },
-      chatModel: { source: 'anthropic', apiKey: 'chat-key', model: '' },
-    });
-    expect(JSON.stringify(redactSettings(parsed))).not.toContain('-key');
-    expect(redactSettings(parsed).providers.anthropic?.apiKey).toBe(REDACTED_SECRET);
   });
 
   test('a Companion vendor this build dropped does not become a provider', () => {

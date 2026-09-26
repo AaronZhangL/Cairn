@@ -13,6 +13,7 @@ import { Home } from './Home';
 import {
   chatCancel, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
   listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, setMenuLocale,
+  wereadStart,
 } from './bridge';
 import { useBundle } from './useBundle';
 import { useShellSettings } from './useShellSettings';
@@ -109,11 +110,25 @@ export function App(): ReactElement {
     () => (prefs.resume && path ? resume.placeFor(path.bookId) : undefined),
     [prefs.resume, path, resume],
   );
+  /** A book never played here starts where the reader stopped in WeChat Reading. */
+  const [wereadAt, setWereadAt] = useState<{ readonly bookId: string; readonly nodeId?: string }>();
+  const askWeread = prefs.resume && path !== undefined && place === undefined;
+  useEffect(() => {
+    if (!askWeread || !path) return;
+    let live = true;
+    void wereadStart(path.bookId).then((nodeId) => {
+      if (live) setWereadAt({ bookId: path.bookId, ...(nodeId ? { nodeId } : {}) });
+    });
+    return () => { live = false; };
+  }, [askWeread, path?.bookId]);
+  const lookingUp = askWeread && inShell && wereadAt?.bookId !== path?.bookId;
+  const fromWeread = wereadAt?.bookId === path?.bookId ? wereadAt?.nodeId : undefined;
+
   // The stored station is the fallback, not an effect that sets state afterwards:
   // setting it later would render — and start playing — the first station first.
   const node = useMemo(
-    () => path?.nodes.find((n) => n.id === (currentId ?? place?.nodeId)) ?? path?.nodes[0],
-    [path, currentId, place],
+    () => path?.nodes.find((n) => n.id === (currentId ?? place?.nodeId ?? fromWeread)) ?? path?.nodes[0],
+    [path, currentId, place, fromWeread],
   );
 
   const step = useCallback((delta: number) => {
@@ -218,6 +233,7 @@ export function App(): ReactElement {
       <div className="shell empty">
         <Home
           books={books}
+          {...(base ? { base } : {})}
           onAdd={() => setAdding(true)}
           onOpen={openBook}
           onSettings={() => setSettingsOpen(true)}
@@ -228,7 +244,7 @@ export function App(): ReactElement {
     );
   }
 
-  if (!bundle || !path || !node) {
+  if (!bundle || !path || !node || lookingUp) {
     return (
       <div className="shell empty">
         <div className="deck-empty">

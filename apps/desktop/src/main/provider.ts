@@ -23,7 +23,9 @@ import { join } from 'node:path';
 import { tracingProvider } from '@cairn/core/llm';
 import type { LlmProvider } from '@cairn/core/llm';
 import { codexCliProvider, traceDirSink } from '@cairn/core/runtime';
-import { modelOf, type ModelStatus, type ShellSettingsValues } from '../shared/settings';
+import {
+  defaultApiKey, modelOf, resolveSecret, type ModelStatus, type ShellSettingsValues,
+} from '../shared/settings';
 import { piLlmProvider } from './pi-provider';
 import { readSettings, tracingOn } from './settings';
 import { DATA_DIR } from './store';
@@ -46,7 +48,7 @@ export async function resolveProvider(
   const id = stored.generationProvider;
   const profile = stored.providers[id];
   const model = modelOf(stored, id);
-  const apiKey = profile?.apiKey.trim() ?? '';
+  const apiKey = resolveSecret(profile?.apiKey ?? defaultApiKey(id), process.env) ?? '';
   const baseUrl = profile?.baseUrl.trim() ?? '';
 
   // No key is not an error yet — the reader may be halfway through typing one.

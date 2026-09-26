@@ -155,18 +155,14 @@ export function Switch({
   );
 }
 
-/**
- * A secret, hidden by default with a reveal toggle.
- *
- * A stored key never crosses the bridge — the shell hands back `keepValue`
- * instead — so the field cannot show one and the eye has nothing to reveal.
- * What it shows is an empty box over the word "saved"; typing replaces the key,
- * and only the clear button erases it. Sending `keepValue` back on an empty box
- * is what makes an untouched field a no-op rather than a deletion.
- */
+/** `$NAME` names an environment variable; it is no secret, so it is shown as typed. */
+export function isEnvRef(value: string): boolean {
+  return /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(value.trim());
+}
+
+/** A key, hidden until the eye is pressed. A `$NAME` reference is no secret and shows as typed. */
 export function SecretField({
   id, value, onChange, showLabel, hideLabel, invalid = false, describedBy,
-  keepValue, savedLabel, clearLabel,
 }: {
   id: string;
   value: string;
@@ -175,44 +171,31 @@ export function SecretField({
   hideLabel: string;
   invalid?: boolean;
   describedBy?: string;
-  /** What the shell sends in place of a stored secret. */
-  keepValue?: string;
-  savedLabel?: string;
-  clearLabel?: string;
 }): ReactElement {
   const fallbackId = useId();
   const [shown, setShown] = useState(false);
-  const saved = keepValue !== undefined && value === keepValue;
-  const typed = saved ? '' : value;
 
   return (
     <span className="set-secret">
       <input
         id={id || fallbackId}
         className={invalid ? 'set-input bad' : 'set-input'}
-        type={shown ? 'text' : 'password'}
-        value={typed}
-        placeholder={saved ? savedLabel : undefined}
+        type={shown || isEnvRef(value) ? 'text' : 'password'}
+        value={value}
         spellCheck={false}
         autoComplete="off"
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
-        onChange={(e) => onChange(saved && e.target.value === '' ? value : e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
       />
-      {saved ? (
-        <button type="button" className="set-clear" onClick={() => onChange('')}>
-          {clearLabel}
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="set-eye"
-          aria-label={shown ? hideLabel : showLabel}
-          onClick={() => setShown((v) => !v)}
-        >
-          <EyeMark off={shown} />
-        </button>
-      )}
+      <button
+        type="button"
+        className="set-eye"
+        aria-label={shown ? hideLabel : showLabel}
+        onClick={() => setShown((v) => !v)}
+      >
+        <EyeMark off={shown} />
+      </button>
     </span>
   );
 }

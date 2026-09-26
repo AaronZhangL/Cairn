@@ -4,6 +4,12 @@ import {
 } from '../../src/shared/providers';
 
 describe('provider registry', () => {
+  test('every vendor but `custom` names the environment variable its key field starts out reading', () => {
+    for (const id of PROVIDER_IDS) {
+      expect(providerById(id)?.envKey === undefined).toBe(id === 'custom');
+    }
+  });
+
   test('every id resolves, and only `custom` ships without models', () => {
     for (const id of PROVIDER_IDS) {
       const provider = providerById(id);

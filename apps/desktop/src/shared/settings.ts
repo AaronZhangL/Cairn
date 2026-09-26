@@ -10,7 +10,7 @@
  * holds them.
  */
 import { DEFAULT_VOICES } from '@cairn/core/pipeline/voice';
-import { defaultModelOf, PROVIDER_IDS, type ProviderId } from './providers';
+import { defaultModelOf, PROVIDER_IDS, providerById, type ProviderId } from './providers';
 
 export { PROVIDER_IDS, type ProviderId } from './providers';
 
@@ -83,6 +83,42 @@ export type ProviderProfiles = Readonly<Partial<Record<ProviderId, ProviderProfi
 
 export const EMPTY_PROFILE: ProviderProfile = { apiKey: '', baseUrl: '', model: '' };
 
+/**
+ * A key field holding `$NAME` reads that environment variable; anything else is
+ * the key itself, and empty is no key. The fields start out as `$NAME`, so the
+ * default is visible in the field rather than explained beside it.
+ */
+const ENV_REF = /^\$([A-Za-z_][A-Za-z0-9_]*)$/;
+
+export const envRef = (name: string): string => `$${name}`;
+
+export function envNameOf(value: string): string | undefined {
+  return ENV_REF.exec(value.trim())?.[1];
+}
+
+export function resolveSecret(
+  value: string, env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const name = envNameOf(value);
+  return (name ? env[name]?.trim() : value.trim()) || undefined;
+}
+
+/** A vendor's key before the reader has typed one: its environment variable, if pi-ai names one. */
+export function defaultApiKey(id: ProviderId): string {
+  const name = providerById(id)?.envKey;
+  return name ? envRef(name) : '';
+}
+
+export const KEY_ENV = {
+  braveKey: 'BRAVE_SEARCH_API_KEY',
+  firecrawlKey: 'FIRECRAWL_API_KEY',
+  tavilyKey: 'TAVILY_API_KEY',
+  wereadKey: 'WEREAD_API_KEY',
+} as const;
+
+type KeyField = keyof typeof KEY_ENV;
+const KEY_FIELDS = Object.keys(KEY_ENV) as KeyField[];
+
 /** `inherit` puts the companion on whatever generation uses. */
 export type ChatProvider = ProviderId | 'inherit';
 
@@ -102,17 +138,15 @@ export interface ShellSettingsValues {
   readonly narration: NarrationLanguage;
   readonly voices: Readonly<Record<ContentLocale, string>>;
   readonly searchProvider: 'brave' | 'firecrawl' | 'tavily';
+  /** Each is a key, a `$NAME` reference, or empty for none. See `resolveSecret`. */
   readonly braveKey: string;
   readonly firecrawlKey: string;
-  /** Empty means "read `TAVILY_API_KEY` from the environment instead". */
   readonly tavilyKey: string;
+  readonly wereadKey: string;
   readonly trace: boolean;
 }
 
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
-
-/** A display-only stand-in; persisted credentials never cross the renderer bridge. */
-export const REDACTED_SECRET = '••••••••';
 
 export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
   // Nothing configured. `resolveProvider` falls back to the codex CLI and reports
@@ -125,9 +159,10 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettingsValues = {
   // settings file and falls back to those, and two lists would drift.
   voices: { en: DEFAULT_VOICES.en, zh: DEFAULT_VOICES.zh },
   searchProvider: 'firecrawl',
-  braveKey: '',
-  firecrawlKey: '',
-  tavilyKey: '',
+  braveKey: envRef(KEY_ENV.braveKey),
+  firecrawlKey: envRef(KEY_ENV.firecrawlKey),
+  tavilyKey: envRef(KEY_ENV.tavilyKey),
+  wereadKey: envRef(KEY_ENV.wereadKey),
   trace: false,
 };
 
@@ -250,27 +285,27 @@ export function parseSettings(
     },
     searchProvider: raw.searchProvider === 'brave' || raw.searchProvider === 'firecrawl' || raw.searchProvider === 'tavily'
       ? raw.searchProvider : raw.searchProvider === 'keenable' ? 'firecrawl'
-        : typeof raw.tavilyKey === 'string' && raw.tavilyKey.trim() ? 'tavily' : fallback.searchProvider,
+        : typeof raw.tavilyKey === 'string' && raw.tavilyKey.trim() && !envNameOf(raw.tavilyKey)
+          ? 'tavily' : fallback.searchProvider,
     braveKey: str(raw.braveKey, fallback.braveKey),
     firecrawlKey: str(raw.firecrawlKey, fallback.firecrawlKey),
     tavilyKey: str(raw.tavilyKey, fallback.tavilyKey),
+    wereadKey: str(raw.wereadKey, fallback.wereadKey),
     trace: typeof raw.trace === 'boolean' ? raw.trace : fallback.trace,
   };
 }
 
-/** Every stored key becomes a stand-in; the real ones never cross the bridge. */
-export function redactSettings(settings: ShellSettingsValues): ShellSettingsValues {
-  const providers: Partial<Record<ProviderId, ProviderProfile>> = {};
-  for (const [id, profile] of Object.entries(settings.providers) as [ProviderId, ProviderProfile][]) {
-    providers[id] = { ...profile, apiKey: profile.apiKey ? REDACTED_SECRET : '' };
+/**
+ * Written before `$NAME` references existed, when an empty key field meant
+ * "read the environment". Read once off disk, so a machine configured that way
+ * keeps working; an empty field saved since means no key.
+ */
+export function upgradeLegacyKeys(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+  for (const field of KEY_FIELDS) {
+    if (typeof raw[field] !== 'string' || !(raw[field] as string).trim()) out[field] = envRef(KEY_ENV[field]);
   }
-  return {
-    ...settings,
-    providers,
-    tavilyKey: settings.tavilyKey ? REDACTED_SECRET : '',
-    braveKey: settings.braveKey ? REDACTED_SECRET : '',
-    firecrawlKey: settings.firecrawlKey ? REDACTED_SECRET : '',
-  };
+  return out;
 }
 
 /** The model a provider will actually be called with. */
