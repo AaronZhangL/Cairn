@@ -13,8 +13,6 @@ English | [中文](./README.zh-CN.md)
 
 <!-- VIDEO: drag the .mp4 into GitHub's web editor for this file; replace this whole comment with the https://github.com/user-attachments/assets/... line it inserts. -->
 
-Turn an ebook you already own into a path you can walk to the end.
-
 Cairn reads a book once and lays out a **path**: short **stations** of narrated slides, grouped
 into stages and closed by a recap. You choose how long the walk should take, and the number of
 stations follows from that. Every station is built from the book's own text and records which
