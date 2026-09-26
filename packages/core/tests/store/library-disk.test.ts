@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Chapter, ChapterNote, NodeDeck, Path } from '../../src/types';
 import type { LibraryEntry } from '../../src/store/library';
-import { type Library, openLibrary } from '../../src/store/library-disk';
+import { defaultLibraryDir, type Library, openLibrary } from '../../src/store/library-disk';
 
 let DIR = '';
 let lib: Library;
@@ -225,5 +225,22 @@ describe('the pieces the app and add-book both rely on', () => {
     expect((await lib.loadChapter('b1', 0))?.text).toBe('正文');
     expect(await lib.loadChapter('b1', 9)).toBeUndefined();
     expect(await lib.loadChapter('missing', 0)).toBeUndefined();
+  });
+});
+
+describe('defaultLibraryDir', () => {
+  test('lives in the platform user data directory', () => {
+    expect(defaultLibraryDir('darwin', {}, '/Users/r')).toBe(join('/Users/r', 'Library', 'Application Support', 'Cairn'));
+    expect(defaultLibraryDir('win32', { APPDATA: 'C:/Users/r/AppData/Roaming' }, 'C:/Users/r'))
+      .toBe(join('C:/Users/r/AppData/Roaming', 'Cairn'));
+    expect(defaultLibraryDir('linux', {}, '/home/r')).toBe(join('/home/r', '.local', 'share', 'cairn'));
+  });
+
+  test('falls back to the roaming profile when APPDATA is unset', () => {
+    expect(defaultLibraryDir('win32', {}, 'C:/Users/r')).toBe(join('C:/Users/r', 'AppData', 'Roaming', 'Cairn'));
+  });
+
+  test('CAIRN_DATA_DIR wins on every platform', () => {
+    expect(defaultLibraryDir('win32', { CAIRN_DATA_DIR: '/x', APPDATA: '/y' }, '/h')).toBe('/x');
   });
 });

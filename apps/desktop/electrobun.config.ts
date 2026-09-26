@@ -18,5 +18,6 @@ export default {
     // `icons` is the default path, named here because it is generated:
     // scripts/make-iconset.py rebuilds it from icon.src.png.
     mac: { bundleCEF: false, icons: 'icon.iconset' },
+    win: { icon: 'icon.iconset/icon_256x256.png' },
   },
 } satisfies ElectrobunConfig;

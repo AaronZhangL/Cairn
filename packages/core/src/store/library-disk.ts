@@ -42,18 +42,26 @@ export interface Library {
 const APP_DIR = 'Cairn';
 
 /**
- * `~/Library/Application Support/Cairn` on macOS, XDG elsewhere. Never
- * cwd-derived: the app starts inside its own bundle, which the next build wipes.
+ * `~/Library/Application Support/Cairn` on macOS, `%APPDATA%\Cairn` on Windows,
+ * XDG elsewhere. Never cwd-derived: the app starts inside its own bundle, which
+ * the next build wipes.
  */
-export function defaultLibraryDir(): string {
-  const override = process.env.CAIRN_DATA_DIR;
+export function defaultLibraryDir(
+  platform: NodeJS.Platform = process.platform,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home: string = homedir(),
+): string {
+  const override = env.CAIRN_DATA_DIR;
   if (override) return override;
 
-  if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', APP_DIR);
+  if (platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', APP_DIR);
   }
-  const xdg = process.env.XDG_DATA_HOME;
-  return xdg ? join(xdg, APP_DIR) : join(homedir(), '.local', 'share', 'cairn');
+  if (platform === 'win32') {
+    return join(env.APPDATA ?? join(home, 'AppData', 'Roaming'), APP_DIR);
+  }
+  const xdg = env.XDG_DATA_HOME;
+  return xdg ? join(xdg, APP_DIR) : join(home, '.local', 'share', 'cairn');
 }
 
 /**
