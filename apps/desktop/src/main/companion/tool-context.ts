@@ -34,7 +34,7 @@ export function compactToolContext(messages: AgentMessage[], maxTokens: number):
     ids.push(...group.ids);
     const notice: AgentMessage = {
       role: 'user',
-      content: `<evicted_tool_results>${ids.map((id) => `<id>${escapeXml(id)}</id>`).join('')}<instruction>These earlier tool results left the working context. Fetch again before using their text or citing them.</instruction></evicted_tool_results>`,
+      content: `<evicted_tool_results>${ids.map((id) => `<id>${escapeXml(id)}</id>`).join('')}<instruction>These earlier tool results left the working context. Fetch again before using their text.</instruction></evicted_tool_results>`,
       timestamp: Date.now(),
     };
     const reduced = messages.flatMap((message, index) => index === group.start ? [notice]

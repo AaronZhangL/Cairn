@@ -226,9 +226,9 @@ Load-bearing. Breaking one silently undoes a decision that took real work to rea
 3. **Every station carries `sourceChapters`.** The cheapest hedge against hallucination: any
    claim can be traced back to the text it came from.
 
-4. **Claims attributed to a source must be checkable.** The companion uses inline citations for
-   claims about the current book, fetched web pages, and completed books; general explanation
-   can be uncited. See [`docs/PRD.md`](docs/PRD.md) §6.2.
+4. **A quotation of the book must be real.** The companion's prompt asks for no citation
+   markers — they cluttered the pane — so `verifyBookQuotes` checks every quotation attributed
+   to the book against the chapter text fetched that turn instead. See [`docs/PRD.md`](docs/PRD.md) §6.2.
 
 5. **The pipeline reads the full text exactly once.** Map produces per-chapter notes — prose
    plus the structured material the chart layouts need (`figures`, `contrasts`, `sequences`,

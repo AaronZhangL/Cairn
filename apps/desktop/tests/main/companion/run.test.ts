@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { EvidenceRecord } from '@cairn/core/companion/types';
-import { availableEvidence, chapterExcerpts, citationMarkers, CompanionRunError, makeClarification, shouldRetryOverflow, verifyBookQuotes } from '../../../src/main/companion/run';
+import { availableEvidence, chapterExcerpts, citationMarkers, CompanionRunError, makeClarification, shouldRetryOverflow, verifyBookQuotes, visibleDraft } from '../../../src/main/companion/run';
 
 const evidence: EvidenceRecord[] = [
   { resultId: 'book-1', source: 'book', refs: [{ chapter: 2, title: 'Second' }] },
@@ -15,6 +15,23 @@ describe('citationMarkers', () => {
       { span: [11, 27], source: 'book', resultId: 'book-1', ref: { chapter: 2, title: 'Second' } },
       { span: [29, 48], source: 'web', resultId: 'web-1', ref: { url: 'https://example.com', title: 'Example' } },
     ]);
+  });
+
+  // DeepSeek writes single brackets; they reached the pane raw and the answer carried no citations
+  test('reads a marker written with single brackets', () => {
+    const answer = citationMarkers('The book says so [cite:book-1:0].', evidence);
+    expect(answer.text).toBe('The book says so.');
+    expect(answer.citations[0]?.resultId).toBe('book-1');
+  });
+
+  test('never passes a marker through as text', () => {
+    expect(() => citationMarkers('Claim (cite:book-1:0)', evidence)).toThrow(CompanionRunError);
+  });
+
+  test('a streaming draft shows no marker, whole or half-written', () => {
+    expect(visibleDraft('It says so [[cite:book-1:0]]. More')).toBe('It says so. More');
+    expect(visibleDraft('It says so [cite:book-1')).toBe('It says so');
+    expect(visibleDraft('It says so [[ci')).toBe('It says so');
   });
 
   test('does not accept an invented result or reference', () => {
@@ -55,7 +72,12 @@ describe('verifyBookQuotes', () => {
     expect(() => verifyBookQuotes(answer.text, answer.citations, new Map([['book-1', fetched]]))).toThrow(CompanionRunError);
   });
 
-  test('rejects a quotation attributed to the book without a book citation', () => {
+  // The prompt no longer asks for markers, so an uncited quote is the normal case
+  test('accepts an uncited quotation that a chapter fetched this turn contains', () => {
+    expect(() => verifyBookQuotes('The book says “A thought.”', [], chapters)).not.toThrow();
+  });
+
+  test('rejects an uncited quotation attributed to the book that no fetched chapter contains', () => {
     expect(() => verifyBookQuotes('The book says “A fabricated sentence.”', [], chapters)).toThrow(CompanionRunError);
     expect(() => verifyBookQuotes('A term like “agent loop” is useful.', [], chapters)).not.toThrow();
     expect(() => verifyBookQuotes('The book is complex. A term like “agent loop” is useful.', [], chapters)).not.toThrow();
