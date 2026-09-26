@@ -33,7 +33,7 @@ Cairn 把一本书变成一组带朗读的短片，短片的时长由你希望�
 xattr -dr com.apple.quarantine /Applications/Cairn.app
 ```
 
-**Windows（未经测试）。** 每个 Release 也附带 Windows x64 安装包 `Cairn-<版本>-x64-Setup.zip`：解压后运行 `Cairn-Setup.exe`，旁边的 `.installer` 文件夹要一起保留。它由 CI 自动构建，还没有在真实的 Windows 机器上运行过，可能会有问题：菜单栏仍是 macOS 的样式；安装包没有签名，SmartScreen 会拦截，需要点"更多信息 → 仍要运行"。书库存放在 `%APPDATA%\Cairn`。遇到问题欢迎[提 issue](https://github.com/jiehaoZ/Cairn/issues)。
+**Windows（未经测试）。** 每个 Release 也附带 Windows x64 安装包 `Cairn-<版本>-x64-Setup.zip`：解压后运行 `Cairn-Setup.exe`，旁边的 `.installer` 文件夹要一起保留。它由 CI 自动构建，还没有在真实的 Windows 机器上运行过，可能会有问题。安装包没有签名，SmartScreen 会拦截，需要点"更多信息 → 仍要运行"。书库存放在 `%APPDATA%\Cairn`。遇到问题欢迎[提 issue](https://github.com/jiehaoZ/Cairn/issues)。
 
 第一次打开时，在**设置**里选择模型服务商，见 [支持的模型](#支持的模型)。
 
