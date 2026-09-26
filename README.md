@@ -1,7 +1,7 @@
 English | [中文](./README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/jiehaoZ/Cairn?label=release)](https://github.com/jiehaoZ/Cairn/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey?logo=apple)](#download)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%28untested%29-lightgrey)](#download)
 [![Bun](https://img.shields.io/badge/Bun-1.3+-000000?logo=bun&logoColor=white)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](./package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
@@ -35,6 +35,12 @@ moving it to Applications:
 ```bash
 xattr -dr com.apple.quarantine /Applications/Cairn.app
 ```
+
+**Windows (untested).** Each release also carries a Windows x64 installer, `Cairn-<version>-x64-Setup.zip`:
+unzip it and run `Cairn-Setup.exe`, keeping the `.installer` folder beside it. It is built by CI and has never been run on a real Windows machine, so expect rough edges: the menu
+bar still uses macOS labels, and the installer is unsigned, so SmartScreen will ask you to confirm
+with **More info → Run anyway**. Books are stored in `%APPDATA%\Cairn`. If something breaks, please
+[open an issue](https://github.com/jiehaoZ/Cairn/issues).
 
 On first launch, open **Settings** and pick a model provider. See [Supported models](#supported-models).
 
