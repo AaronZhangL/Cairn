@@ -32,6 +32,8 @@ export interface BookBuilderDeps {
   /** The voice a new book in this language gets, from the current settings. */
   readonly voiceFor: (language: ContentLocale) => Promise<string>;
   readonly onDeckStatus?: (status: DeckStatus) => void;
+  /** The scheduler only counts a failure; this is where its cause can be logged. */
+  readonly onDeckFailed?: (bookId: string, nodeId: string, error: Error) => void;
 }
 
 export interface GeneratedBook {
@@ -47,11 +49,20 @@ export interface BookBuilder {
   ): Promise<GeneratedBook>;
   /** Pick a half-built book back up. False when there is nothing to resume. */
   resume(bookId: string): Promise<boolean>;
+  /** Build every failed station again, even in a book already marked complete. */
+  retry(bookId: string): Promise<boolean>;
   /** Stop its build first, so an in-flight deck cannot land in a deleted directory. */
   remove(bookId: string): Promise<boolean>;
   schedulerFor(bookId: string): DeckScheduler | undefined;
   /** Hold every background build — a reader's question is the foreground — and return the release. */
   pauseAll(): () => void;
+}
+
+interface Handle {
+  readonly scheduler: DeckScheduler;
+  readonly settled: Promise<LibraryEntry | undefined>;
+  /** False once the run is over. */
+  readonly retryFailed: () => boolean;
 }
 
 /** Stable across runs for the same file, so a re-run finds its own cache. */
@@ -60,7 +71,7 @@ export const bookIdFor = (book: ParsedBook, sourcePath: string): string =>
 
 export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
   const { library, narrator } = deps;
-  const running = new Map<string, { scheduler: DeckScheduler; settled: Promise<LibraryEntry | undefined> }>();
+  const running = new Map<string, Handle>();
 
   /**
    * A book built before voices were recorded used `DEFAULT_VOICE`, not today's
@@ -82,7 +93,7 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
     kind: SourceKind,
     provider: LlmProvider,
     store: Parameters<typeof startDeckScheduler>[0]['store'],
-  ): { scheduler: DeckScheduler; settled: Promise<LibraryEntry | undefined> } {
+  ): Handle {
     const existing = running.get(path.bookId);
     if (existing) return existing;
 
@@ -116,8 +127,9 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
         ready.push(deck.nodeId);
         await publish(progress);
       },
-      onFailed: (nodeId, _error, progress) => {
+      onFailed: (nodeId, error, progress) => {
         failed.push(nodeId);
+        deps.onDeckFailed?.(path.bookId, nodeId, error);
         void publish(progress);
       },
     });
@@ -135,7 +147,15 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
         if (running.get(path.bookId)?.scheduler === scheduler) running.delete(path.bookId);
       });
 
-    const handle = { scheduler, settled };
+    const retryFailed = (): boolean => {
+      const ids = scheduler.retryFailed();
+      if (ids === undefined) return false;
+      failed.splice(0, failed.length, ...failed.filter((id) => !ids.includes(id)));
+      void publish(scheduler.progress);
+      return true;
+    };
+
+    const handle = { scheduler, settled, retryFailed };
     running.set(path.bookId, handle);
     return handle;
   }
@@ -252,6 +272,21 @@ export function createBookBuilder(deps: BookBuilderDeps): BookBuilder {
         await deps.providerFor(bookId), await deckStore(bookId, budgetId),
       );
       return true;
+    },
+
+    async retry(bookId) {
+      const handle = running.get(bookId);
+      if (handle?.retryFailed()) return true;
+      // Its run is over, or winding down: a finished book is not resumed, so un-finish it
+      await handle?.settled;
+      const index = await library.readDeckIndex(bookId);
+      if (!index || index.failed.length === 0) return false;
+      await library.writeDeckIndex(bookId, { ...index, failed: [], complete: false });
+      await library.patchEntry(bookId, { complete: false });
+      deps.onDeckStatus?.({
+        bookId, total: index.total, ready: index.ready.length, failed: 0, complete: false,
+      });
+      return this.resume(bookId);
     },
 
     async remove(bookId) {

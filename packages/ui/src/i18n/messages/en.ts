@@ -94,6 +94,7 @@ export const en = {
     stageHint: 'Click the slide to pause or resume',
     pending: 'This chapter is still being built — one moment',
     failed: 'This chapter could not be built',
+    retry: 'Try again',
     mute: 'Mute',
     unmute: 'Unmute',
     volume: 'Volume',

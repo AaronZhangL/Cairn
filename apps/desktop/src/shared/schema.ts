@@ -28,6 +28,8 @@ export type BunSchema = RPCSchema<{
     focusStation: { params: { bookId: string; nodeId: string }; response: null };
     /** Pick a half-built book back up when it is opened. */
     resumeBook: { params: { bookId: string }; response: boolean };
+    /** Build the book's failed stations again. */
+    retryBook: { params: { bookId: string }; response: boolean };
     markBookFinished: { params: { bookId: string; nodeId: string }; response: boolean };
     /* ---- WeChat Reading; each answers empty when no key is set ---- */
     wereadQuotes: { params: { title: string; author?: string }; response: readonly string[] };

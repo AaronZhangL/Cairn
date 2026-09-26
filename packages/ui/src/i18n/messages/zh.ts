@@ -84,6 +84,7 @@ export const zh: Messages = {
     stageHint: '点击画面暂停 / 播放',
     pending: '这一章还在生成，稍等一下',
     failed: '这一章没能生成',
+    retry: '重试',
     mute: '静音',
     unmute: '取消静音',
     volume: '音量',

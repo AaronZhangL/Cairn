@@ -21,12 +21,14 @@ const CLOCK_MS = 32;
 
 export function DeckPane({
   node, deck, audioSrc, stageTitle, resumeAt, onSelect, onEnded, onProgress,
-  build = 'pending',
+  build = 'pending', onRetry,
 }: {
   node: PathNode;
   deck: NodeDeck | undefined;
   /** Why there is no deck: still being built, or it never will be. */
   build?: 'pending' | 'failed';
+  /** Offered on a failed station. Absent outside the shell, where nothing can rebuild it. */
+  onRetry?: () => Promise<void>;
   audioSrc: string;
   /** The path's own stage, shown in the slide's frame. Absent is fine. */
   stageTitle?: string;
@@ -50,6 +52,7 @@ export function DeckPane({
   const [rateOpen, setRateOpen] = useState(false);
   const [full, setFull] = useState(false);
   const chrome = useAutoHide();
+  const [retrying, setRetrying] = useState(false);
 
   // The frame goes fullscreen through its centring wrapper, so the stage keeps
   // its 16:9 and letterboxes instead of stretching to the display's shape.
@@ -137,6 +140,19 @@ export function DeckPane({
       <main className="pane deck-pane">
         <div className="deck-empty">
           {build === 'failed' ? t.deck.failed : t.deck.pending}
+          {build === 'failed' && onRetry && (
+            <button
+              type="button"
+              className="ghost"
+              disabled={retrying}
+              onClick={() => {
+                setRetrying(true);
+                void onRetry().finally(() => setRetrying(false));
+              }}
+            >
+              {t.deck.retry}
+            </button>
+          )}
         </div>
       </main>
     );

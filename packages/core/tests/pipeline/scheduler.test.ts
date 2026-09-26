@@ -183,6 +183,35 @@ describe('startDeckScheduler', () => {
     expect(s.progress.failed).toBe(1);
   });
 
+  test('retryFailed puts a failed station back in the queue while others still build', async () => {
+    const g = gated();
+    const s = startDeckScheduler({
+      nodes: nodes(2), store: memoryStore<NodeDeck>(), lookahead: 2, maxAttempts: 1, build: g.build,
+    });
+    s.focus('n1');
+    await g.waitStart(2);
+    g.release('n0', new Error('broke'));
+    await tick();
+    expect(s.progress.failed).toBe(1);
+
+    expect(s.retryFailed()).toEqual(['n0']);
+    expect(s.progress.failed).toBe(0);
+    await g.waitStart(3);
+    g.release('n0');
+    g.release('n1');
+    await s.done;
+    expect([...s.ready()].sort()).toEqual(['n0', 'n1']);
+  });
+
+  test('retryFailed refuses once the run is over, so the caller starts a new one', async () => {
+    const s = startDeckScheduler({
+      nodes: nodes(1), store: memoryStore<NodeDeck>(), lookahead: 1, maxAttempts: 1,
+      build: async () => { throw new Error('broke'); },
+    });
+    await s.done;
+    expect(s.retryFailed()).toBeUndefined();
+  });
+
   test('失败会重试，但有上限', async () => {
     let attempts = 0;
     const s = startDeckScheduler({

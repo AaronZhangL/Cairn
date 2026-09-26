@@ -12,7 +12,7 @@ import { AddBook } from './AddBook';
 import { Home } from './Home';
 import {
   chatCancel, chatHistory, chatSend, deleteBook, focusStation, inShell, libraryBase,
-  listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, setMenuLocale,
+  listBooks, onCompanionEvent, onDeckStatus, onOpenSettings, markBookFinished, resumeBook, retryBook, setMenuLocale,
   wereadStart,
 } from './bridge';
 import { useBundle } from './useBundle';
@@ -306,6 +306,10 @@ export function App(): ReactElement {
         node={node}
         deck={bundle.decks.get(node.id)}
         build={bundle.failed.has(node.id) ? 'failed' : 'pending'}
+        {...(inShell ? {
+          onRetry: () => retryBook(path.bookId).then(() => undefined)
+            .catch((cause: unknown) => console.error('retryBook', cause)),
+        } : {})}
         audioSrc={`${base ?? '.'}/${audioFile(path.bookId, node.id)}`}
         stageTitle={path.stages.find((st) => st.nodeIds.includes(node.id))?.title}
         resumeAt={place}

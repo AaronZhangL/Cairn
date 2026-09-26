@@ -51,6 +51,7 @@ const books = createBookBuilder({
   voiceFor: async (language) => voiceFor(await readSettings(), language).voice,
   // Stations keep arriving after the progress modal has closed
   onDeckStatus: (status) => send().deckStatus(status),
+  onDeckFailed: (bookId, nodeId, error) => console.error('deck failed', bookId, nodeId, error),
 });
 
 const weread = createWeread({

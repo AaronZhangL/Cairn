@@ -335,7 +335,7 @@ body {
 .deck-head { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .deck-kicker { font-size: calc(10px * var(--text-scale, 1)); font-weight: 620; color: var(--accent); letter-spacing: .075em; }
 .deck-title { font-size: calc(15px * var(--text-scale, 1)); font-weight: 640; letter-spacing: -.011em; color: var(--ink); }
-.deck-empty { margin: auto; color: var(--dim); }
+.deck-empty { margin: auto; color: var(--dim); display: flex; flex-direction: column; gap: 12px; align-items: center; }
 
 /* The slide takes whatever room is left. The caption lives inside the frame
    (see slide.css), so nothing below it moves as lines change length. */

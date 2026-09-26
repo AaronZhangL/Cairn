@@ -110,6 +110,11 @@ export function createHandlers({ books, weread, devBuild, menu, emit }: HandlerD
       return books.resume(params.bookId).catch(() => false);
     },
 
+    async retryBook(params: { bookId: string }): Promise<boolean> {
+      if (!isBookId(params.bookId)) throw new Error('invalid_book_id');
+      return books.retry(params.bookId);
+    },
+
     /* ---- WeChat Reading: an extra, so a failure is logged and reads as nothing ---- */
 
     async wereadQuotes(params: { title: string; author?: string }): Promise<readonly string[]> {

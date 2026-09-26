@@ -88,6 +88,8 @@ export interface DeckScheduler {
    * prefetch is not, and both go through the same provider.
    */
   pause(): () => void;
+  /** Queue every failed station again, first. Undefined once the run is over: start a new one. */
+  retryFailed(): readonly string[] | undefined;
   /** Resolves when nothing is left to build, or after `stop`. */
   readonly done: Promise<void>;
   stop(): void;
@@ -116,6 +118,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
   /** The furthest station the reader has asked for, which is what grows the lanes. */
   let reached = 0;
   let stopped = false;
+  let finished = false;
   let holds = 0;
   let resumeGate: (() => void) | undefined;
 
@@ -228,6 +231,7 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
       awaited = inFlight.length;
       await Promise.all(inFlight);
     }
+    finished = true;
     // Anything still waiting will never arrive once the lanes are gone
     for (const nodeId of [...waiters.keys()]) {
       settle(nodeId, decks.get(nodeId), failed.get(nodeId) ?? new CairnError('generation_stopped'));
@@ -275,6 +279,16 @@ export function startDeckScheduler(options: DeckSchedulerOptions): DeckScheduler
           resumeGate = undefined;
         }
       };
+    },
+
+    retryFailed() {
+      if (finished || stopped) return undefined;
+      const ids = [...failed.keys()];
+      for (const id of ids) failed.delete(id);
+      pending = [...ids, ...pending];
+      // The lanes that failed them may have run dry and exited
+      if (ids.length > 0) lanes.push(lane());
+      return ids;
     },
 
     done,

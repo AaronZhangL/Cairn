@@ -202,3 +202,38 @@ describe('resume', () => {
     expect(voices).toEqual(['zh-CN-XiaoxiaoNeural']);
   });
 });
+
+describe('retry', () => {
+  test('rebuilds a station that failed in a finished book, and reports why it failed', async () => {
+    let broken = true;
+    const errors: string[] = [];
+    const n = narrator();
+    const flaky: Narrator = {
+      ...n,
+      async speak(draft, audioPath, options) {
+        if (broken && draft.nodeId === 'n1') throw new Error('narration dropped');
+        return n.speak(draft, audioPath, options);
+      },
+    };
+    const b = createBookBuilder({
+      library, narrator: flaky, providerFor: async () => model(), voiceFor: async () => 'zh-CN-XiaoxiaoNeural',
+      onDeckFailed: (_bookId, nodeId, error) => errors.push(`${nodeId}: ${error.message}`),
+    });
+    const { entry, settled } = await b.generate(book, '/books/a.txt', 'brief');
+    await settled;
+    expect((await library.readDeckIndex(entry.id))?.failed).toEqual(['n1']);
+    expect(errors).toEqual(['n1: narration dropped']);
+
+    broken = false;
+    expect(await b.retry(entry.id)).toBe(true);
+    await b.schedulerFor(entry.id)?.done;
+    const index = await library.readDeckIndex(entry.id);
+    expect(index?.failed).toEqual([]);
+    expect(index?.ready).toContain('n1');
+    expect(index?.complete).toBe(true);
+  });
+
+  test('nothing to retry for an unknown book', async () => {
+    expect(await builder.retry('missing-abc123')).toBe(false);
+  });
+});
