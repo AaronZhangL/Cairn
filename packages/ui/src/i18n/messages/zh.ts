@@ -139,7 +139,7 @@ export const zh: Messages = {
   home: {
     tagline: '把一本你已经有的电子书，变成一条可以走到头的路。',
     dropTitle: '放一本电子书进来',
-    dropSub: (formats: string) => `支持 ${formats} · 书不会离开这台机器`,
+    dropSub: (formats: string) => `支持 ${formats}`,
     dropCta: '选择文件…',
     devCta: '开发模式下不能选文件，用 `bun run start` 启动桌面应用',
     shelf: '书架',
@@ -157,7 +157,7 @@ export const zh: Messages = {
   add: {
     title: '添加一本书',
     parsing: '正在读这本书…',
-    supported: '支持 EPUB / PDF / MOBI / AZW3 / TXT。书不会离开这台机器。',
+    supported: '支持 EPUB / PDF / MOBI / AZW3 / TXT。',
     pick: '选择文件…',
     picking: '读取中…',
     howLong: '想花多久走完？',

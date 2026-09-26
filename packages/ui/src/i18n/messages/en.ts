@@ -150,7 +150,7 @@ export const en = {
   home: {
     tagline: 'Turn an ebook you already own into a path you can walk to the end.',
     dropTitle: 'Drop an ebook in',
-    dropSub: (formats: string) => `${formats} · the book never leaves this machine`,
+    dropSub: (formats: string) => formats,
     dropCta: 'Choose a file…',
     devCta: 'File picking needs the desktop shell — run `bun run start`',
     shelf: 'Shelf',
@@ -169,7 +169,7 @@ export const en = {
   add: {
     title: 'Add a book',
     parsing: 'Reading this book…',
-    supported: 'EPUB, PDF, MOBI, AZW3 or TXT. The book never leaves this machine.',
+    supported: 'EPUB, PDF, MOBI, AZW3 or TXT.',
     pick: 'Choose a file…',
     picking: 'Reading…',
     howLong: 'How long do you want to spend?',
