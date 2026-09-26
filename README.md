@@ -10,7 +10,7 @@ English | [中文](./README.zh-CN.md)
 
 ![Cairn](./docs/images/screenshot.jpg)
 
-https://github.com/user-attachments/assets/6ca31192-dd04-4142-8f65-e5f59b4724d3
+https://github.com/user-attachments/assets/cd272d51-46c1-4838-aa74-ab6e3c69cc6f
 
 Cairn turns a book into a series of short narrated clips. How long they run depends on how
 deeply you want to know the book.
